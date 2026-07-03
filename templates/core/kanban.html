@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Kanban - Dcode Management{% endblock %}
+{% block heading %}Kanban{% endblock %}
+{% block eyebrow %}{% if project %}{{ project.name }}{% else %}Brak projektu{% endif %}{% endblock %}
+{% block top_actions %}
+  {% if project %}<a class="ghost-btn" href="#new-task">Dodaj zadanie</a>{% endif %}
+{% endblock %}
+{% block content %}
+{% if not project %}
+  <section class="panel"><p class="empty">Brak projektów dostępnych dla Twojej roli.</p></section>
+{% else %}
+<div class="tabs">
+  {% for item in projects %}<a class="{% if item.id == project.id %}active{% endif %}" href="{% url 'kanban_project' item.id %}">{{ item.name }}</a>{% endfor %}
+</div>
+<section class="kanban-board">
+  {% for column in columns %}
+    <div class="kanban-column" data-column="{{ column.id }}">
+      <header><span>{{ column.name }}</span><small>{{ column.tasks.all|length }}</small></header>
+      <div class="kanban-dropzone">
+        {% for task in column.tasks.all %}
+          <article class="kanban-card" draggable="{% if can_move_tasks %}true{% else %}false{% endif %}" data-task="{{ task.id }}" data-move-url="{% url 'move_task' task.id %}">
+            <div class="card-top"><span class="priority {{ task.priority }}"></span><strong>{{ task.title }}</strong></div>
+            <p>{{ task.description|truncatechars:110 }}</p>
+            <div class="tag-row">{% for label in task.labels_list %}<span>{{ label }}</span>{% endfor %}</div>
+            <footer>
+              <small>
+                {% if task.assignee %}
+                  {% if task.assignee.get_full_name %}{{ task.assignee.get_full_name }}{% else %}{{ task.assignee.username }}{% endif %}
+                {% else %}
+                  Nieprzypisane
+                {% endif %}
+              </small>
+              <small>{{ task.total_hours|floatformat:2 }}h</small>
+            </footer>
+          </article>
+        {% empty %}
+          <p class="empty small">Upuść tu zadanie.</p>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+</section>
+<section class="panel" id="new-task">
+  <div class="panel-head"><div><h2>Nowe zadanie</h2><p>Karta trafia na wybraną kolumnę tablicy.</p></div></div>
+  <form method="post" class="grid-form">{% csrf_token %}{{ form.as_p }}<button class="primary-btn">Dodaj zadanie</button></form>
+</section>
+{% endif %}
+{% endblock %}

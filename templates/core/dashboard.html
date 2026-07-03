@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Pulpit - Dcode Management{% endblock %}
+{% block heading %}Pulpit{% endblock %}
+{% block eyebrow %}Bieżący miesiąc{% endblock %}
+{% block top_actions %}
+  {% if role == 'management' %}
+    <a class="primary-btn" href="{% url 'employees' %}">Pracownicy</a>
+  {% elif role == 'client' %}
+    <a class="primary-btn" href="{% url 'reports' %}">Raport projektów</a>
+  {% else %}
+    <a class="primary-btn" href="{% url 'kanban' %}">Otwórz Kanban</a>
+  {% endif %}
+{% endblock %}
+{% block content %}
+
+{% if role == 'client' %}
+<section class="metrics-grid">
+  <article class="metric"><span>Twoje projekty</span><strong>{{ client_project_rows|length }}</strong><small>przypisane do Twojej firmy</small></article>
+  <article class="metric"><span>Praca zespołu</span><strong>{{ task_hours|floatformat:2 }}h</strong><small>godziny widoczne dla klienta</small></article>
+  <article class="metric"><span>Zadania</span><strong>{{ client_task_count }}</strong><small>w Twoich projektach</small></article>
+  <article class="metric"><span>Zakończone</span><strong>{{ client_done_count }}</strong><small>zadania w kolumnie końcowej</small></article>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div><h2>Projekty klienta</h2><p>Podsumowanie prac widocznych dla Ciebie. Kwoty, stawki i prywatny czas pracowników nie są tutaj pokazywane.</p></div>
+    <a class="ghost-btn" href="{% url 'reports' %}">Pełny raport</a>
+  </div>
+  <div class="client-project-list">
+    {% for row in client_project_rows %}
+      <article class="client-project-row">
+        <div>
+          <strong>{{ row.project.name }}</strong>
+          <small>{{ row.project.get_status_display }} / {{ row.task_count }} zadań</small>
+        </div>
+        <div class="client-progress">
+          <span style="width: {% if row.task_count %}{% widthratio row.done_count row.task_count 100 %}{% else %}0{% endif %}%"></span>
+        </div>
+        <div class="client-project-stats">
+          <strong>{{ row.hours|floatformat:2 }}h</strong>
+          <small>{{ row.done_count }} zakończone</small>
+        </div>
+        <div class="client-project-actions">
+          <a class="ghost-btn small-btn" href="{% url 'kanban_project' row.project.id %}">Zadania</a>
+          <a class="ghost-btn small-btn" href="{% url 'reports' %}">Raport</a>
+        </div>
+      </article>
+    {% empty %}
+      <p class="empty">Nie masz jeszcze przypisanych projektów.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><div><h2>Ostatnie zadania</h2><p>Zadania z projektów przypisanych do klienta.</p></div></div>
+  <div class="task-list">
+    {% for task in tasks %}
+      <a href="{% url 'kanban_project' task.project_id %}" class="task-row">
+        <span class="priority {{ task.priority }}"></span>
+        <div><strong>{{ task.title }}</strong><small>{{ task.project.name }} / {{ task.column.name }}</small></div>
+        <em>{{ task.client_hours|floatformat:2 }}h</em>
+      </a>
+    {% empty %}
+      <p class="empty">Brak zadań do pokazania.</p>
+    {% endfor %}
+  </div>
+</section>
+
+{% else %}
+<section class="metrics-grid">
+  {% if role == 'management' %}
+    <article class="metric"><span>Pracownicy</span><strong>{{ team_count }}</strong><small>aktywni w systemie</small></article>
+    <article class="metric"><span>Czas zespołu</span><strong>{{ team_hours|floatformat:2 }}h</strong><small>w bieżącym miesiącu</small></article>
+    <article class="metric"><span>Worklogi zadań</span><strong>{{ task_hours|floatformat:2 }}h</strong><small>wpisy pracowników</small></article>
+    <article class="metric"><span>Projekty</span><strong>{{ projects|length }}</strong><small>widoczne dla managementu</small></article>
+  {% else %}
+    <article class="metric"><span>Czas z licznika</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>w bieżącym miesiącu</small></article>
+    <article class="metric"><span>Worklogi zadań</span><strong>{{ task_hours|floatformat:2 }}h</strong><small>zgodnie z rolą</small></article>
+    <article class="metric"><span>Projekty</span><strong>{{ projects|length }}</strong><small>widoczne dla Ciebie</small></article>
+    <article class="metric"><span>Wynagrodzenie</span><strong>{% if payroll != None %}{{ payroll }} PLN{% else %}-{% endif %}</strong><small>{% if current_rate %}stawka {{ current_rate.amount }} {{ current_rate.currency }}{% else %}brak stawki{% endif %}</small></article>
+  {% endif %}
+</section>
+
+{% if role == 'management' %}
+<section class="panel">
+  <div class="panel-head">
+    <div><h2>Pracownicy</h2><p>Miesięczny czas pracy. Szczegóły rozliczeń są w profilu pracownika.</p></div>
+    <a class="ghost-btn" href="{% url 'employees' %}">Pełna lista</a>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pracownik</th><th>Godziny</th><th>Wpisy</th><th>Akcja</th></tr></thead>
+      <tbody>
+        {% for row in employee_summaries %}
+          <tr>
+            <td>{{ row.user.get_full_name|default:row.user.username }}</td>
+            <td>{{ row.hours|floatformat:2 }}h</td>
+            <td>{{ row.entries_count }}</td>
+            <td><a class="ghost-btn small-btn" href="{% url 'employee_detail' row.user.id %}{% if request.GET.month %}?month={{ request.GET.month }}{% endif %}">Szczegóły</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4">Brak pracowników.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% else %}
+<section class="workspace-grid">
+  <article class="panel timer-panel" data-timer-root data-started-at="{% if active_session %}{{ active_session.started_at|date:'c' }}{% endif %}" data-state="{% if active_session %}{{ active_session.state }}{% endif %}">
+    <div class="panel-head">
+      <div><h2>Licznik pracy</h2><p>Start, pauza i zapis sesji do historii czasu.</p></div>
+      <span class="status-pill {% if active_session %}ok{% endif %}">{% if active_session %}{{ active_session.get_state_display }}{% else %}Nieaktywny{% endif %}</span>
+    </div>
+    <div class="timer-readout" data-timer-readout>00:00:00</div>
+    <form method="post" action="{% if active_session %}{% url 'stop_timer' %}{% else %}{% url 'start_timer' %}{% endif %}" class="inline-form">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.path }}">
+      <input type="hidden" name="inactive_minutes" data-inactive-field value="0">
+      {% if not active_session %}
+        <select name="project"><option value="">Bez projektu</option>{% for project in projects %}<option value="{{ project.id }}">{{ project.name }}</option>{% endfor %}</select>
+        <button class="primary-btn">Start</button>
+      {% else %}
+        <button class="danger-btn">Zakończ i zapisz</button>
+      {% endif %}
+    </form>
+    {% if active_session and active_session.state == 'running' %}
+      <form method="post" action="{% url 'pause_timer' %}" class="inline-form">
+        {% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><input type="hidden" name="inactive_minutes" data-inactive-field value="0">
+        <button class="ghost-btn">Pauza</button>
+      </form>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <div class="panel-head"><div><h2>Ostatnie zadania</h2><p>Twoje zadania i zadania z dostępnych projektów.</p></div></div>
+    <div class="task-list">
+      {% for task in tasks %}
+        <a href="{% url 'kanban_project' task.project_id %}" class="task-row">
+          <span class="priority {{ task.priority }}"></span>
+          <div><strong>{{ task.title }}</strong><small>{{ task.project.name }} / {{ task.column.name }}</small></div>
+          <em>{{ task.total_hours|floatformat:2 }}h</em>
+        </a>
+      {% empty %}
+        <p class="empty">Brak zadań do pokazania.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-head"><div><h2>Projekty</h2><p>Zakres widoczny zgodnie z rolą.</p></div><a class="ghost-btn" href="{% url 'projects' %}">Zobacz wszystkie</a></div>
+  <div class="project-strip">
+    {% for project in projects %}
+      <a class="project-tile" href="{% url 'kanban_project' project.id %}">
+        <strong>{{ project.name }}</strong>
+        <span>{{ project.get_status_display }}</span>
+        <small>{{ project.visible_hours|floatformat:2 }}h widoczne dla klienta</small>
+      </a>
+    {% empty %}<p class="empty">Nie masz jeszcze przypisanych projektów.</p>{% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

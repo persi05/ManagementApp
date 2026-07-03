@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>Raport {{ month }}</title>
+  <style>
+    body{font-family:Arial,sans-serif;color:#1f2933;margin:32px}
+    h1{font-size:24px;margin:0 0 18px}
+    h2{font-size:18px;margin:28px 0 10px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{border:1px solid #d7dde3;padding:8px;text-align:left;vertical-align:top}
+    th{background:#f2f5f7}
+    .summary{border:1px solid #b8c2cc;padding:16px;margin:18px 0;background:#f8fafb}
+    .summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .summary-grid div{border:1px solid #d7dde3;padding:10px;background:#fff}
+    .muted{color:#647281}
+    @media print{button{display:none}}
+  </style>
+</head>
+<body>
+  <button onclick="window.print()">Drukuj / zapisz jako PDF</button>
+
+  {% if is_client_summary %}
+    <h1>Raport projektu - {{ month }}</h1>
+    <div class="summary summary-grid">
+      <div><strong>Godziny łącznie</strong><br>{{ total_hours|floatformat:2 }}h</div>
+      <div><strong>Zakres</strong><br>godziny widoczne dla klienta</div>
+      <div><strong>Okres</strong><br>{{ month }}</div>
+    </div>
+
+    <h2>Podsumowanie projektów</h2>
+    <table>
+      <thead><tr><th>Projekt</th><th>Godziny</th></tr></thead>
+      <tbody>
+        {% for row in by_project %}
+          <tr><td>{{ row.project.name }}</td><td>{{ row.hours|floatformat:2 }}h</td></tr>
+        {% empty %}
+          <tr><td colspan="2">Brak godzin widocznych dla klienta.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Wpisy zadań</h2>
+    <table>
+      <thead><tr><th>Data</th><th>Godziny</th><th>Projekt</th><th>Zadanie</th><th>Komentarz</th></tr></thead>
+      <tbody>
+        {% for worklog in worklogs %}
+          <tr>
+            <td>{{ worklog.date }}</td>
+            <td>{{ worklog.hours|floatformat:2 }}</td>
+            <td>{{ worklog.task.project.name }}</td>
+            <td>{{ worklog.task.title }}</td>
+            <td>{{ worklog.comment|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">Brak wpisów czasu w tym okresie.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% elif is_management_summary %}
+    <h1>Zbiorczy raport czasu pracy - {{ month }}</h1>
+    <div class="summary summary-grid">
+      <div><strong>Pracownicy</strong><br>{{ employees|length }}</div>
+      <div><strong>Godziny łącznie</strong><br>{{ total_hours|floatformat:2 }}h</div>
+      <div><strong>Wynagrodzenia łącznie</strong><br>{{ total_payroll }} PLN</div>
+    </div>
+
+    <h2>Podsumowanie pracowników</h2>
+    <table>
+      <thead><tr><th>Pracownik</th><th>Godziny</th><th>Wpisy</th><th>Konto do przelewu</th><th>Kwota</th></tr></thead>
+      <tbody>
+        {% for row in employees %}
+          <tr>
+            <td>{% if row.user.get_full_name %}{{ row.user.get_full_name }}{% else %}{{ row.user.username }}{% endif %}</td>
+            <td>{{ row.hours|floatformat:2 }}h</td>
+            <td>{{ row.entries_count }}</td>
+            <td>{{ row.bank_account|default:"brak danych" }}</td>
+            <td>{{ row.payroll }} PLN</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">Brak pracowników w raporcie.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Wpisy źródłowe</h2>
+    <table>
+      <thead><tr><th>Pracownik</th><th>Data</th><th>Od</th><th>Do</th><th>Godziny</th><th>Projekt</th><th>Zadanie</th></tr></thead>
+      <tbody>
+        {% for entry in entries %}
+          <tr>
+            <td>{% if entry.user.get_full_name %}{{ entry.user.get_full_name }}{% else %}{{ entry.user.username }}{% endif %}</td>
+            <td>{{ entry.start|date:"Y-m-d" }}</td>
+            <td>{{ entry.start|time:"H:i" }}</td>
+            <td>{{ entry.end|time:"H:i" }}</td>
+            <td>{{ entry.hours|floatformat:2 }}</td>
+            <td>{{ entry.project.name|default:"-" }}</td>
+            <td>{{ entry.task.title|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7">Brak wpisów czasu w tym okresie.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <h1>Raport czasu pracy - {{ month }}</h1>
+    <div class="summary">
+      <strong>{% if employee.get_full_name %}{{ employee.get_full_name }}{% else %}{{ employee.username }}{% endif %}</strong><br>
+      Konto do przelewu: {{ bank_account|default:"brak danych" }}<br>
+      Kwota wynagrodzenia: {{ payroll }} PLN
+    </div>
+    <table>
+      <thead><tr><th>Data</th><th>Od</th><th>Do</th><th>Godziny</th><th>Projekt</th><th>Zadanie</th></tr></thead>
+      <tbody>
+        {% for entry in entries %}
+          <tr>
+            <td>{{ entry.start|date:"Y-m-d" }}</td>
+            <td>{{ entry.start|time:"H:i" }}</td>
+            <td>{{ entry.end|time:"H:i" }}</td>
+            <td>{{ entry.hours|floatformat:2 }}</td>
+            <td>{{ entry.project.name|default:"-" }}</td>
+            <td>{{ entry.task.title|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6">Brak wpisów czasu w tym okresie.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Moje konto - Dcode Management{% endblock %}
+{% block heading %}Moje konto{% endblock %}
+{% block eyebrow %}Dane i hasło{% endblock %}
+{% block content %}
+<section class="content-split">
+  <form method="post" class="form-card compact">
+    {% csrf_token %}
+    <input type="hidden" name="form" value="profile">
+    <h2>Dane konta</h2>
+    {{ account_form.as_p }}
+    <button class="primary-btn full">Zapisz dane</button>
+  </form>
+  <form method="post" class="form-card compact">
+    {% csrf_token %}
+    <input type="hidden" name="form" value="password">
+    <h2>Zmień hasło</h2>
+    {{ password_form.as_p }}
+    <button class="primary-btn full">Zmień hasło</button>
+  </form>
+</section>
+{% endblock %}

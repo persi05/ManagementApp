@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Raporty - Dcode Management{% endblock %}
+{% block heading %}Raporty{% endblock %}
+{% block eyebrow %}Miesięczne zestawienie{% endblock %}
+{% block top_actions %}
+  <a class="ghost-btn" href="{% url 'export_csv' %}?month={{ month }}">CSV</a>
+  <a class="primary-btn" href="{% url 'export_pdf' %}?month={{ month }}{% if selected_user %}&user={{ selected_user }}{% endif %}" target="_blank">PDF / druk</a>
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <form class="filter-bar">
+    <input type="month" name="month" value="{{ month }}">
+    {% if can_manage %}<select name="user"><option value="">Wszyscy pracownicy</option>{% for employee in employees %}<option value="{{ employee.id }}" {% if selected_user == employee.id|stringformat:"s" %}selected{% endif %}>{% if employee.get_full_name %}{{ employee.get_full_name }}{% else %}{{ employee.username }}{% endif %}</option>{% endfor %}</select>{% endif %}
+    <button class="ghost-btn">Filtruj</button>
+  </form>
+</section>
+
+<section class="metrics-grid">
+  {% if is_client_report %}
+    {% for row in by_project %}
+      <article class="metric"><span>{{ row.project.name }}</span><strong>{{ row.hours|floatformat:2 }}h</strong><small>godziny widoczne dla klienta</small></article>
+    {% empty %}
+      <article class="metric"><span>Brak danych</span><strong>0h</strong><small>dla wybranego miesiąca</small></article>
+    {% endfor %}
+  {% else %}
+    {% for row in by_user %}
+      <article class="metric"><span>{% if row.user.get_full_name %}{{ row.user.get_full_name }}{% else %}{{ row.user.username }}{% endif %}</span><strong>{{ row.hours|floatformat:2 }}h</strong><small>{{ row.payroll }} PLN / {{ row.bank_account|default:"brak konta" }}</small></article>
+    {% endfor %}
+  {% endif %}
+</section>
+
+<section class="workspace-grid">
+  <div class="panel">
+    <div class="panel-head"><div><h2>Projekty</h2><p>Podział czasu według projektu.</p></div></div>
+    {% for row in by_project %}<div class="bar-row"><span>{{ row.project.name }}</span><div><i style="width: {% widthratio row.hours 160 100 %}%"></i></div><strong>{{ row.hours|floatformat:2 }}h</strong></div>{% empty %}<p class="empty">Brak danych projektowych.</p>{% endfor %}
+  </div>
+  <div class="panel">
+    <div class="panel-head"><div><h2>Wpisy źródłowe</h2><p>Ostatnie 100 rekordów dla wybranego okresu.</p></div></div>
+    {% if is_client_report %}
+      <div class="table-wrap"><table><thead><tr><th>Data</th><th>Godziny</th><th>Projekt</th><th>Zadanie</th></tr></thead><tbody>{% for worklog in client_worklogs %}<tr><td>{{ worklog.date }}</td><td>{{ worklog.hours|floatformat:2 }}</td><td>{{ worklog.task.project.name }}</td><td>{{ worklog.task.title }}</td></tr>{% empty %}<tr><td colspan="4">Brak wpisów.</td></tr>{% endfor %}</tbody></table></div>
+    {% else %}
+      <div class="table-wrap"><table><thead><tr><th>Pracownik</th><th>Data</th><th>Godziny</th><th>Projekt</th></tr></thead><tbody>{% for entry in entries %}<tr><td>{% if entry.user.get_full_name %}{{ entry.user.get_full_name }}{% else %}{{ entry.user.username }}{% endif %}</td><td>{{ entry.start|date:"Y-m-d" }}</td><td>{{ entry.hours|floatformat:2 }}</td><td>{{ entry.project.name|default:"-" }}</td></tr>{% empty %}<tr><td colspan="4">Brak wpisów.</td></tr>{% endfor %}</tbody></table></div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Użytkownik - Dcode Management{% endblock %}
+{% block heading %}{% if employee.get_full_name %}{{ employee.get_full_name }}{% else %}{{ employee.username }}{% endif %}{% endblock %}
+{% block eyebrow %}Szczegóły pracownika{% endblock %}
+{% block top_actions %}
+  <a class="ghost-btn" href="{% url 'employees' %}?month={{ month }}">Powrót</a>
+  <a class="primary-btn" href="{% url 'export_pdf' %}?month={{ month }}&user={{ employee.id }}" target="_blank">PDF</a>
+{% endblock %}
+{% block content %}
+<section class="metrics-grid">
+  <article class="metric"><span>Rola</span><strong>{{ employee.profile.get_role_display }}</strong><small>{% if employee.profile.is_blocked %}konto zablokowane{% else %}konto aktywne{% endif %}</small></article>
+  <article class="metric"><span>Wynagrodzenie</span><strong>{{ payroll }} PLN</strong><small>według historii stawek</small></article>
+  <article class="metric"><span>Konto</span><strong class="metric-small">{{ employee.profile.bank_account|default:"-" }}</strong><small>dane do przelewu</small></article>
+  <article class="metric"><span>Godziny</span><strong>{{ hours|floatformat:2 }}h</strong><small>{{ entries|length }} wpisów</small></article>
+</section>
+
+<section class="content-split">
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Wpisy czasu</h2><p>Historia pracy za wybrany miesiąc.</p></div>
+      <form class="filter-bar"><input type="month" name="month" value="{{ month }}"><button class="ghost-btn">Filtruj</button></form>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Od</th><th>Do</th><th>Godziny</th><th>Projekt</th><th>Zadanie</th></tr></thead>
+        <tbody>
+          {% for entry in entries %}
+            <tr>
+              <td>{{ entry.start|date:"Y-m-d" }}</td>
+              <td>{{ entry.start|time:"H:i" }}</td>
+              <td>{{ entry.end|time:"H:i" }}</td>
+              <td>{{ entry.hours|floatformat:2 }}</td>
+              <td>{{ entry.project.name|default:"-" }}</td>
+              <td>{{ entry.task.title|default:"-" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">Brak wpisów.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="stack">
+    <form method="post" class="form-card compact">
+      {% csrf_token %}
+      <input type="hidden" name="form" value="role">
+      <h2>Rola i dostęp</h2>
+      {{ role_form.as_p }}
+      <button class="primary-btn full">Zapisz rolę</button>
+    </form>
+
+    <form method="post" class="form-card compact">
+      {% csrf_token %}
+      <input type="hidden" name="form" value="profile">
+      <h2>Dane rozliczeniowe</h2>
+      {{ profile_form.as_p }}
+      <button class="primary-btn full">Zapisz</button>
+    </form>
+
+    <form method="post" class="form-card compact">
+      {% csrf_token %}
+      <input type="hidden" name="form" value="rate">
+      <h2>Dodaj stawkę</h2>
+      {{ rate_form.as_p }}
+      <button class="primary-btn full">Dodaj stawkę</button>
+    </form>
+
+    <div class="panel">
+      <div class="panel-head"><div><h2>Historia stawek</h2></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Od</th><th>Do</th><th>Stawka</th></tr></thead>
+          <tbody>
+            {% for rate in rates %}
+              <tr><td>{{ rate.valid_from }}</td><td>{{ rate.valid_to|default:"czas nieokreślony" }}</td><td>{{ rate.amount }} {{ rate.currency }}</td></tr>
+            {% empty %}
+              <tr><td colspan="3">Brak stawek.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

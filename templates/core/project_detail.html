@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Projekt - Dcode Management{% endblock %}
+{% block heading %}{{ project.name }}{% endblock %}
+{% block eyebrow %}Szczegóły projektu{% endblock %}
+{% block top_actions %}
+  <a class="ghost-btn" href="{% url 'projects' %}">Powrót</a>
+  <a class="primary-btn" href="{% url 'kanban_project' project.id %}">Kanban</a>
+{% endblock %}
+{% block content %}
+<section class="workspace-grid">
+  <div class="panel">
+    <div class="panel-head"><div><h2>Przypisane osoby</h2><p>Klienci i pracownicy przypisani do projektu.</p></div></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Osoba</th><th>Rola systemowa</th><th>Rola w projekcie</th><th></th></tr></thead>
+        <tbody>
+          {% for assignment in assignments %}
+            <tr>
+              <td>{% if assignment.user.get_full_name %}{{ assignment.user.get_full_name }}{% else %}{{ assignment.user.username }}{% endif %}</td>
+              <td>{{ assignment.user.profile.get_role_display }}</td>
+              <td>{{ assignment.get_project_role_display }}</td>
+              <td>
+                {% if can_manage %}
+                  <form method="post" action="{% url 'remove_project_assignment' assignment.id %}">
+                    {% csrf_token %}
+                    <button class="ghost-btn small-btn">Usuń</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">Brak przypisanych osób.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% if can_manage %}
+    <form method="post" class="form-card compact">
+      {% csrf_token %}
+      <h2>Przypisz osobę</h2>
+      {{ assignment_form.as_p }}
+      <button class="primary-btn full">Zapisz przypisanie</button>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}

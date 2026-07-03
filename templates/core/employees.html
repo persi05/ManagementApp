@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Użytkownicy - Dcode Management{% endblock %}
+{% block heading %}Użytkownicy{% endblock %}
+{% block eyebrow %}Management{% endblock %}
+{% block content %}
+<section class="metrics-grid">
+  <article class="metric"><span>Zarejestrowani</span><strong>{{ registered_users|length }}</strong><small>wszyscy użytkownicy</small></article>
+  <article class="metric"><span>Czas łącznie</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>{{ month }}</small></article>
+  <article class="metric"><span>Wynagrodzenia</span><strong>{{ total_payroll }} PLN</strong><small>według stawek</small></article>
+  <article class="metric"><span>Okres</span><strong>{{ month }}</strong><small>raport miesięczny</small></article>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div><h2>Lista użytkowników</h2><p>Management nadaje role po rejestracji. Rozliczenia dotyczą użytkowników z rolą pracownik.</p></div>
+    <form class="filter-bar"><input type="month" name="month" value="{{ month }}"><button class="ghost-btn">Filtruj</button></form>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Użytkownik</th><th>Rola</th><th>Status</th><th>Akcja</th></tr></thead>
+      <tbody>
+        {% for person in registered_users %}
+          <tr>
+            <td>{% if person.get_full_name %}{{ person.get_full_name }}{% else %}{{ person.username }}{% endif %}</td>
+            <td>{{ person.profile.get_role_display }}</td>
+            <td>{% if person.profile.is_blocked %}zablokowany{% else %}aktywny{% endif %}</td>
+            <td><a class="ghost-btn small-btn" href="{% url 'employee_detail' person.id %}?month={{ month }}">Szczegóły</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4">Brak użytkowników.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

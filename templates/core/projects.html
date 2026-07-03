@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Projekty - Dcode Management{% endblock %}
+{% block heading %}Projekty{% endblock %}
+{% block eyebrow %}Zakres pracy{% endblock %}
+{% block content %}
+<section class="content-split">
+  <div class="panel">
+    <div class="panel-head"><div><h2>Lista projektów</h2><p>Management widzi wszystkie projekty, klient i pracownik tylko przypisane.</p></div></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Nazwa</th><th>Klient</th><th>Status</th><th>Godziny klienta</th><th>Akcje</th></tr></thead>
+        <tbody>
+        {% for project in projects %}
+          <tr>
+            <td>{{ project.name }}</td>
+            <td>{% if project.client %}{{ project.client.get_full_name|default:project.client.username }}{% else %}-{% endif %}</td>
+            <td>{{ project.get_status_display }}</td>
+            <td>{{ project.visible_hours|floatformat:2 }}h</td>
+            <td>
+              <a class="ghost-btn small-btn" href="{% url 'project_detail' project.id %}">Szczegóły</a>
+              <a class="ghost-btn small-btn" href="{% url 'kanban_project' project.id %}">Kanban</a>
+            </td>
+          </tr>
+        {% empty %}<tr><td colspan="5">Brak projektów.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% if can_manage %}
+    <form method="post" class="form-card compact">{% csrf_token %}<h2>Nowy projekt</h2>{{ form.as_p }}<button class="primary-btn full">Dodaj projekt</button></form>
+  {% endif %}
+</section>
+{% endblock %}
