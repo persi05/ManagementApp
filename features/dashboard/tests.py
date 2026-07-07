@@ -301,6 +301,55 @@ class CalendarTests(TestCase):
         self.assertNotContains(response, 'Wyślij wniosek')
         self.assertNotContains(response, 'Moje wnioski')
 
+    def test_employee_can_mark_rejected_leave_as_read_and_hide_it_from_calendar(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        reviewer = User.objects.create_user(username='manager', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        reviewer.profile.role = UserProfile.Role.MANAGEMENT
+        reviewer.profile.save()
+        leave_request = LeaveRequest.objects.create(
+            user=user,
+            start_date=date(2026, 7, 20),
+            end_date=date(2026, 7, 22),
+            status=LeaveRequest.Status.REJECTED,
+            reviewed_by=reviewer,
+            reviewed_at=timezone.now(),
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('calendar'), {'month': '2026-07'})
+        self.assertContains(response, 'Oznacz jako przeczytane')
+
+        mark_response = self.client.post(reverse('mark_leave_as_read', args=[leave_request.id]), {
+            'next': f"{reverse('calendar')}?month=2026-07",
+        })
+
+        self.assertEqual(mark_response.status_code, 302)
+        leave_request.refresh_from_db()
+        self.assertIsNotNone(leave_request.read_at)
+
+        refreshed = self.client.get(reverse('calendar'), {'month': '2026-07'})
+        self.assertContains(refreshed, '20 lipca 2026 - 22 lipca 2026')
+        self.assertContains(refreshed, 'Odrzucony')
+        self.assertNotContains(refreshed, 'Oznacz jako przeczytane')
+
+    def test_leave_requests_are_sorted_future_first_then_past(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        LeaveRequest.objects.create(user=user, start_date=date(2026, 7, 15), end_date=date(2026, 7, 15))
+        LeaveRequest.objects.create(user=user, start_date=date(2026, 7, 5), end_date=date(2026, 7, 5))
+        LeaveRequest.objects.create(user=user, start_date=date(2026, 7, 10), end_date=date(2026, 7, 10))
+
+        self.client.force_login(user)
+        with patch('features.planner.views.timezone.localdate', return_value=date(2026, 7, 10)):
+            response = self.client.get(reverse('calendar'), {'month': '2026-07'})
+
+        content = response.content.decode('utf-8')
+        self.assertLess(content.index('10 lipca 2026 - 10 lipca 2026'), content.index('15 lipca 2026 - 15 lipca 2026'))
+        self.assertLess(content.index('15 lipca 2026 - 15 lipca 2026'), content.index('5 lipca 2026 - 5 lipca 2026'))
+
 
 class EmployeeProfileFormTests(TestCase):
     def test_polish_bank_account_requires_26_digits(self):

@@ -60,7 +60,7 @@ def calendar_view(request):
         'weekdays': ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'],
         'weeks': build_calendar_days(request.user, month_date, start_date, end_date),
         'leave_form': form,
-        'leave_requests': leave_request_queryset(request.user, start_date, end_date),
+        'leave_requests': sorted_leave_requests(leave_request_list_queryset(request.user, start_date, end_date)),
         'can_request_leave': user_role(request.user) != UserProfile.Role.CLIENT,
         'can_review_leave': is_management(request.user),
         'is_management_view': is_management(request.user),
@@ -82,6 +82,18 @@ def update_leave_status(request, leave_id):
     leave_request = get_object_or_404(LeaveRequest, pk=leave_id)
     leave_request.set_status(status, request.user)
     messages.success(request, 'Status wniosku został zaktualizowany.')
+    return redirect(request.POST.get('next') or 'calendar')
+
+
+@login_required
+@require_POST
+def mark_leave_as_read(request, leave_id):
+    leave_request = get_object_or_404(LeaveRequest, pk=leave_id, user=request.user)
+    if leave_request.status != LeaveRequest.Status.REJECTED:
+        return redirect(request.POST.get('next') or 'calendar')
+
+    leave_request.mark_as_read()
+    messages.success(request, 'Wniosek został oznaczony jako przeczytany.')
     return redirect(request.POST.get('next') or 'calendar')
 
 
@@ -169,7 +181,7 @@ def tasks_due_by_day(user, start_date, end_date):
 
 
 def leave_by_day_for_user(user, start_date, end_date):
-    requests = leave_request_queryset(user, start_date, end_date)
+    requests = leave_request_calendar_queryset(user, start_date, end_date)
     leave_by_day = defaultdict(list)
     for leave_request in requests:
         current = max(leave_request.start_date, start_date)
@@ -180,11 +192,36 @@ def leave_by_day_for_user(user, start_date, end_date):
     return leave_by_day
 
 
-def leave_request_queryset(user, start_date, end_date):
-    qs = LeaveRequest.objects.select_related('user', 'reviewed_by').filter(
+def leave_request_base_queryset(start_date, end_date):
+    return LeaveRequest.objects.select_related('user', 'reviewed_by').filter(
         start_date__lt=end_date,
         end_date__gte=start_date,
     )
+
+
+def leave_request_calendar_queryset(user, start_date, end_date):
+    qs = leave_request_base_queryset(start_date, end_date)
+    if is_management(user):
+        return qs
+    return qs.filter(user=user).exclude(
+        status=LeaveRequest.Status.REJECTED,
+        read_at__isnull=False,
+    )
+
+
+def leave_request_list_queryset(user, start_date, end_date):
+    qs = leave_request_base_queryset(start_date, end_date)
     if is_management(user):
         return qs
     return qs.filter(user=user)
+
+
+def sorted_leave_requests(requests):
+    today = timezone.localdate()
+    return sorted(
+        requests,
+        key=lambda leave_request: (
+            leave_request.start_date < today,
+            leave_request.start_date if leave_request.start_date >= today else -leave_request.start_date.toordinal(),
+        ),
+    )

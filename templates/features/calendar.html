@@ -101,7 +101,7 @@
 
             {% if day.leaves %}
               {% for leave in day.leaves|slice:":2" %}
-                <span class="note-card note-leave {{ leave.status }}">
+                <span class="note-card note-leave {{ leave.status }} {% if leave.is_past %}past{% endif %}">
                   <b>{{ leave.get_status_display }}</b>
                   {{ leave.user.get_full_name|default:leave.user.username }}
                 </span>
@@ -140,7 +140,7 @@
       </div>
       <div class="leave-list">
         {% for leave in leave_requests %}
-          <div class="leave-row {{ leave.status }}">
+          <div class="leave-row {{ leave.status }} {% if leave.is_past %}past{% endif %}">
             <div>
               <strong>{{ leave.user.get_full_name|default:leave.user.username }}</strong>
               <small>{{ leave.start_date }} - {{ leave.end_date }} / {{ leave.get_status_display }}</small>
@@ -152,6 +152,12 @@
                 <input type="hidden" name="next" value="{{ request.get_full_path }}">
                 <button class="ghost-btn small-btn" name="status" value="approved">Akceptuj</button>
                 <button class="danger-btn small-btn" name="status" value="rejected">Odrzuć</button>
+              </form>
+            {% elif not can_review_leave and leave.status == 'rejected' and not leave.read_at %}
+              <form method="post" action="{% url 'mark_leave_as_read' leave.id %}" class="inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button class="ghost-btn small-btn">Oznacz jako przeczytane</button>
               </form>
             {% endif %}
           </div>
