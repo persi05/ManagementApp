@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
+from django.db.models import Max
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -8,7 +9,7 @@ from django.views.decorators.http import require_POST
 from features.accounts.models import UserProfile, is_management, user_role
 from features.accounts.permissions import optional_pk, worker_required
 from features.projects.selectors import visible_projects
-from features.tasks.forms import TaskEditForm, TaskForm, WorklogForm
+from features.tasks.forms import BoardColumnForm, TaskEditForm, TaskForm, WorklogForm
 from features.tasks.models import BoardColumn, Notification, TaskEditNote, TaskWorklog
 from features.tasks.selectors import visible_tasks
 from features.tasks.services import can_delete_task, can_edit_task, can_move_task_to_column, ensure_default_columns, task_move_limit
@@ -23,26 +24,42 @@ def kanban(request, project_id=None):
     ensure_default_columns(project)
     selected_project = project
     if request.method == 'POST':
-        selected_project_id = optional_pk(request.POST.get('project')) or project.id
-        selected_project = get_object_or_404(projects_qs, pk=selected_project_id)
-        ensure_default_columns(selected_project)
-        form = TaskForm(request.POST, user=request.user, project=selected_project, projects_queryset=projects_qs)
-        if 'assignee' in form.fields:
-            form.fields['assignee'].queryset = User.objects.filter(
-                projectassignment__project_id=selected_project.id,
-                profile__role=UserProfile.Role.EMPLOYEE,
-            ).distinct()
-        if form.is_valid():
-            task = form.save(commit=False)
-            if 'column' not in form.fields:
-                task.column = selected_project.columns.order_by('position').first()
-            task.created_by = request.user
-            task.save()
-            messages.success(request, 'Zadanie zostało dodane.')
-            return redirect('kanban_project', project_id=task.project_id)
-        project = selected_project
+        if request.POST.get('form') == 'board_column':
+            if not is_management(request.user):
+                return HttpResponseForbidden('Brak uprawnień do dodania kolumny.')
+            column_form = BoardColumnForm(request.POST)
+            if column_form.is_valid():
+                column = column_form.save(commit=False)
+                column.project = project
+                max_position = project.columns.aggregate(max_position=Max('position'))['max_position']
+                column.position = 0 if max_position is None else max_position + 1
+                column.save()
+                messages.success(request, 'Kolumna została dodana.')
+                return redirect('kanban_project', project_id=project.id)
+            form = TaskForm(initial={'project': project}, user=request.user, project=project, projects_queryset=projects_qs)
+        else:
+            selected_project_id = optional_pk(request.POST.get('project')) or project.id
+            selected_project = get_object_or_404(projects_qs, pk=selected_project_id)
+            ensure_default_columns(selected_project)
+            form = TaskForm(request.POST, user=request.user, project=selected_project, projects_queryset=projects_qs)
+            column_form = BoardColumnForm()
+            if 'assignee' in form.fields:
+                form.fields['assignee'].queryset = User.objects.filter(
+                    projectassignment__project_id=selected_project.id,
+                    profile__role=UserProfile.Role.EMPLOYEE,
+                ).distinct()
+            if form.is_valid():
+                task = form.save(commit=False)
+                if 'column' not in form.fields:
+                    task.column = selected_project.columns.order_by('position').first()
+                task.created_by = request.user
+                task.save()
+                messages.success(request, 'Zadanie zostało dodane.')
+                return redirect('kanban_project', project_id=task.project_id)
+            project = selected_project
     else:
         form = TaskForm(initial={'project': project}, user=request.user, project=project, projects_queryset=projects_qs)
+        column_form = BoardColumnForm()
         if 'assignee' in form.fields:
             form.fields['assignee'].queryset = User.objects.filter(
                 projectassignment__project=project,
@@ -53,13 +70,13 @@ def kanban(request, project_id=None):
     for column in columns:
         for task in column.tasks.all():
             task.can_edit = can_edit_task(request.user, task)
-            task.can_move_prev = board_move_limit is not None and task.column.position > 0
-            task.can_move_next = board_move_limit is not None and task.column.position < board_move_limit
     return render(request, 'features/kanban.html', {
         'project': project,
         'projects': projects_qs,
         'columns': columns,
         'form': form,
+        'column_form': column_form,
+        'can_manage_board': is_management(request.user),
         'can_move_tasks': board_move_limit is not None,
         'board_move_limit': board_move_limit,
         'is_client_view': user_role(request.user) == UserProfile.Role.CLIENT,

@@ -46,22 +46,4 @@
       await moveCard(card, column);
     });
   });
-
-  document.querySelectorAll('.kanban-shift-btn').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const card = button.closest('.kanban-card');
-      const column = card?.closest('.kanban-column');
-      if (!card || !column || !board) return;
-
-      const currentPosition = Number(column.dataset.columnPosition);
-      const direction = button.dataset.direction;
-      const targetPosition = direction === 'prev' ? currentPosition - 1 : currentPosition + 1;
-      if (Number.isFinite(maxMovePosition) && targetPosition > maxMovePosition) {
-        return;
-      }
-      const targetColumn = board.querySelector(`.kanban-column[data-column-position="${targetPosition}"]`);
-      if (!targetColumn) return;
-      await moveCard(card, targetColumn);
-    });
-  });
 })();

@@ -8,6 +8,15 @@ textarea {
   min-width: 0;
 }
 
+input:disabled,
+select:disabled,
+textarea:disabled,
+.readonly-field {
+  background: #eef1f4;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
 textarea {
   min-height: 90px;
 }

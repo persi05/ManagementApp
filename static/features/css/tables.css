@@ -30,3 +30,13 @@ td form {
   color: var(--accent);
   font-weight: 800;
 }
+
+.projects-table th,
+.projects-table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.projects-table td:last-child {
+  white-space: nowrap;
+}

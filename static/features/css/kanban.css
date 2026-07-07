@@ -23,7 +23,6 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(260px, 1fr));
   gap: 14px;
-  overflow: auto;
   padding-bottom: 10px;
   margin-bottom: 16px;
 }
@@ -69,6 +68,22 @@
 
 .kanban-card p {
   font-size: 13px;
+}
+
+.tag-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.tag-row span {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent2);
+  background: #e5edf9;
+  border-radius: 7px;
+  padding: 3px 7px;
 }
 
 .kanban-card footer {

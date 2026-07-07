@@ -13,7 +13,7 @@ class BoardColumnAdmin(admin.ModelAdmin):
 class TaskAdmin(admin.ModelAdmin):
     list_display = ('title', 'project', 'column', 'assignee', 'priority', 'due_date')
     list_filter = ('project', 'priority', 'column')
-    search_fields = ('title', 'description')
+    search_fields = ('title', 'description', 'labels')
 
 
 @admin.register(TaskWorklog)

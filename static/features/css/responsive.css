@@ -19,7 +19,7 @@
   }
 
   .kanban-board {
-    grid-template-columns: repeat(4, 280px);
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
   }
 
   .month-board {
