@@ -4,9 +4,12 @@
 
   const readout = timerRoot.querySelector('[data-timer-readout]');
   const startedAt = new Date(timerRoot.dataset.startedAt).getTime();
+  const pausedAt = timerRoot.dataset.pausedAt ? new Date(timerRoot.dataset.pausedAt).getTime() : null;
   const isRunning = timerRoot.dataset.state === 'running';
+  const isPaused = timerRoot.dataset.state === 'paused';
   const inactiveFields = document.querySelectorAll('[data-inactive-field]');
-  let inactiveMinutes = 0;
+  const savedInactiveMinutes = Number(timerRoot.dataset.inactiveMinutes || 0);
+  let newInactiveMinutes = 0;
   let lastActivity = Date.now();
   let warned = false;
   let modalShown = false;
@@ -19,7 +22,7 @@
   };
 
   const setInactive = () => inactiveFields.forEach((field) => {
-    field.value = inactiveMinutes;
+    field.value = newInactiveMinutes;
   });
 
   const markActive = () => {
@@ -56,7 +59,8 @@
 
   setInterval(() => {
     if (readout) {
-      const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000) - inactiveMinutes * 60);
+      const endAt = isPaused && pausedAt ? pausedAt : Date.now();
+      const elapsed = Math.max(0, Math.floor((endAt - startedAt) / 1000) - (savedInactiveMinutes + newInactiveMinutes) * 60);
       readout.textContent = format(elapsed);
     }
 
@@ -69,7 +73,7 @@
     }
 
     if (idleMs > 35 * 60 * 1000) {
-      inactiveMinutes += 5;
+      newInactiveMinutes += 5;
       setInactive();
       showModal();
       lastActivity = Date.now();

@@ -107,7 +107,7 @@
 </section>
 {% else %}
 <section class="workspace-grid">
-  <article class="panel timer-panel" data-timer-root data-started-at="{% if active_session %}{{ active_session.started_at|date:'c' }}{% endif %}" data-state="{% if active_session %}{{ active_session.state }}{% endif %}">
+  <article class="panel timer-panel" data-timer-root data-started-at="{% if active_session %}{{ active_session.started_at|date:'c' }}{% endif %}" data-paused-at="{% if active_session.paused_at %}{{ active_session.paused_at|date:'c' }}{% endif %}" data-inactive-minutes="{% if active_session %}{{ active_session.inactive_minutes }}{% else %}0{% endif %}" data-state="{% if active_session %}{{ active_session.state }}{% endif %}">
     <div class="panel-head">
       <div><h2>Licznik pracy</h2><p>Start, pauza i zapis sesji do historii czasu.</p></div>
       <span class="status-pill {% if active_session %}ok{% endif %}">{% if active_session %}{{ active_session.get_state_display }}{% else %}Nieaktywny{% endif %}</span>
@@ -128,6 +128,11 @@
       <form method="post" action="{% url 'pause_timer' %}" class="inline-form">
         {% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><input type="hidden" name="inactive_minutes" data-inactive-field value="0">
         <button class="ghost-btn">Pauza</button>
+      </form>
+    {% elif active_session and active_session.state == 'paused' %}
+      <form method="post" action="{% url 'resume_timer' %}" class="inline-form">
+        {% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}">
+        <button class="primary-btn">Wznów</button>
       </form>
     {% endif %}
   </article>

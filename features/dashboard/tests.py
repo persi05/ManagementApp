@@ -107,6 +107,56 @@ class TimerTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_paused_timer_renders_resume_action(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        WorkSession.objects.create(user=user, state=WorkSession.State.PAUSED, paused_at=timezone.now())
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('dashboard'))
+
+        self.assertContains(response, 'Wznów')
+        self.assertContains(response, reverse('resume_timer'))
+
+    def test_resume_timer_excludes_pause_from_work_time(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        session = WorkSession.objects.create(
+            user=user,
+            state=WorkSession.State.PAUSED,
+            started_at=timezone.now() - timedelta(minutes=30),
+            paused_at=timezone.now() - timedelta(minutes=10),
+        )
+
+        self.client.force_login(user)
+        response = self.client.post(reverse('resume_timer'), {'next': '/'})
+
+        self.assertEqual(response.status_code, 302)
+        session.refresh_from_db()
+        self.assertEqual(session.state, WorkSession.State.RUNNING)
+        self.assertIsNone(session.paused_at)
+        self.assertGreaterEqual(session.inactive_minutes, 9)
+
+    def test_stop_paused_timer_excludes_pause_duration(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        WorkSession.objects.create(
+            user=user,
+            state=WorkSession.State.PAUSED,
+            started_at=timezone.now() - timedelta(minutes=60),
+            paused_at=timezone.now() - timedelta(minutes=30),
+        )
+
+        self.client.force_login(user)
+        response = self.client.post(reverse('stop_timer'), {'next': '/'})
+
+        self.assertEqual(response.status_code, 302)
+        entry = TimeEntry.objects.get(user=user)
+        self.assertLessEqual(entry.duration_minutes, 31)
+
 
 class ExportPdfTests(TestCase):
     def test_management_export_without_user_is_team_report(self):
