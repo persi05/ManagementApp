@@ -42,18 +42,18 @@ class Command(BaseCommand):
         review = atlas.columns.get(name='Review')
         done = atlas.columns.get(name='Zakończone')
         tasks = [
-            (atlas, todo, 'Dodać widok rozliczeń klienta', employee, 'high', 'backend,raporty'),
-            (atlas, doing, 'Implementacja timera z pauzą', employee, 'high', 'frontend,time-tracker'),
-            (atlas, review, 'Test eksportu CSV', employee2, 'medium', 'qa,export'),
-            (atlas, done, 'Makieta tablicy Kanban', employee2, 'low', 'ux'),
-            (orbit, orbit.columns.get(name='W trakcie'), 'PDF z danymi do przelewu', employee, 'medium', 'pdf,payroll'),
+            (atlas, todo, 'Dodać widok rozliczeń klienta', employee, 'high'),
+            (atlas, doing, 'Implementacja timera z pauzą', employee, 'high'),
+            (atlas, review, 'Test eksportu CSV', employee2, 'medium'),
+            (atlas, done, 'Makieta tablicy Kanban', employee2, 'low'),
+            (orbit, orbit.columns.get(name='W trakcie'), 'PDF z danymi do przelewu', employee, 'medium'),
         ]
         created_tasks = []
-        for project, column, title, assignee, priority, labels in tasks:
+        for project, column, title, assignee, priority in tasks:
             task, _ = Task.objects.get_or_create(
                 project=project,
                 title=title,
-                defaults={'column': column, 'assignee': assignee, 'priority': priority, 'labels': labels, 'created_by': manager, 'description': 'Zadanie demonstracyjne z wymaganiami MVP.'},
+                defaults={'column': column, 'assignee': assignee, 'priority': priority, 'created_by': manager, 'description': 'Zadanie demonstracyjne z wymaganiami MVP.'},
             )
             created_tasks.append(task)
             ChecklistItem.objects.get_or_create(task=task, text='Analiza wymagań', defaults={'is_done': True})

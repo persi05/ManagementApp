@@ -2,6 +2,10 @@
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content
     || document.cookie.split('; ').find((row) => row.startsWith('csrftoken='))?.split('=')[1]
     || '';
+  const board = document.querySelector('.kanban-board');
+  const maxMovePosition = board?.dataset?.maxMovePosition === undefined || board?.dataset?.maxMovePosition === ''
+    ? null
+    : Number(board.dataset.maxMovePosition);
 
   document.querySelectorAll('.kanban-card').forEach((card) => {
     card.addEventListener('dragstart', (event) => {
@@ -15,6 +19,10 @@
     column.addEventListener('dragover', (event) => event.preventDefault());
     column.addEventListener('drop', async (event) => {
       event.preventDefault();
+      const targetPosition = Number(column.dataset.columnPosition);
+      if (Number.isFinite(maxMovePosition) && targetPosition > maxMovePosition) {
+        return;
+      }
       const card = document.querySelector(`.kanban-card[data-task="${event.dataTransfer.getData('text/plain')}"]`);
       if (!card) return;
 

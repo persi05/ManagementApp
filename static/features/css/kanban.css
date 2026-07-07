@@ -71,21 +71,6 @@
   font-size: 13px;
 }
 
-.tag-row {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.tag-row span {
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--accent2);
-  background: #e5edf9;
-  border-radius: 7px;
-  padding: 3px 7px;
-}
-
 .kanban-card footer {
   display: flex;
   justify-content: space-between;

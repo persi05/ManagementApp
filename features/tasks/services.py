@@ -1,3 +1,6 @@
+from features.accounts.models import UserProfile, is_management, user_role
+from features.projects.models import ProjectAssignment
+
 from .models import BoardColumn
 
 
@@ -11,3 +14,32 @@ def ensure_default_columns(project):
             name=name,
             defaults={'position': position},
         )
+
+
+def project_role_for(user, project):
+    if is_management(user):
+        return UserProfile.Role.MANAGEMENT
+    assignment = ProjectAssignment.objects.filter(project=project, user=user).only('project_role').first()
+    if assignment:
+        return assignment.project_role
+    return user_role(user)
+
+
+def task_move_limit(user, project):
+    role = project_role_for(user, project)
+    if role == UserProfile.Role.CLIENT:
+        return None
+    if role == ProjectAssignment.ProjectRole.LEAD:
+        return 3
+    if role == UserProfile.Role.EMPLOYEE:
+        return 2
+    return 3
+
+
+def can_move_task_to_column(user, task, column):
+    if not user.is_authenticated or task.project_id != column.project_id:
+        return False
+    limit = task_move_limit(user, task.project)
+    if limit is None:
+        return False
+    return column.position <= limit

@@ -299,6 +299,7 @@ class CalendarTests(TestCase):
         response = self.client.get(reverse('calendar'))
 
         self.assertNotContains(response, 'Wyślij wniosek')
+        self.assertNotContains(response, 'Moje wnioski')
 
 
 class EmployeeProfileFormTests(TestCase):
@@ -407,6 +408,105 @@ class KanbanRenderingTests(TestCase):
         response = self.client.get(reverse('kanban_project', args=[project.id]))
 
         self.assertContains(response, 'Nieprzypisane')
+
+    def test_client_task_creation_defaults_to_todo_without_assignee(self):
+        client = User.objects.create_user(username='client', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Client project', client=client)
+        todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+
+        self.client.force_login(client)
+        response = self.client.post(reverse('kanban_project', args=[project.id]), {
+            'project': project.id,
+            'title': 'Nowe zadanie klienta',
+            'description': 'Opis',
+            'due_date': '',
+            'priority': 'medium',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        task = Task.objects.get(title='Nowe zadanie klienta')
+        self.assertEqual(task.column, todo)
+        self.assertIsNone(task.assignee)
+
+    def test_employee_cannot_move_task_to_done(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Employee project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        done = BoardColumn.objects.create(project=project, name='Zakończone', position=3)
+        task = Task.objects.create(project=project, column=todo, title='Task for employee')
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('move_task', args=[task.id]), {'column': done.id})
+
+        self.assertEqual(response.status_code, 403)
+        task.refresh_from_db()
+        self.assertEqual(task.column, todo)
+
+    def test_employee_cannot_choose_done_column_in_task_form(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Employee project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        BoardColumn.objects.create(project=project, name='W trakcie', position=1)
+        BoardColumn.objects.create(project=project, name='Review', position=2)
+        done = BoardColumn.objects.create(project=project, name='Zakończone', position=3)
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('kanban_project', args=[project.id]), {
+            'project': project.id,
+            'column': done.id,
+            'title': 'Task for employee',
+            'description': 'Opis',
+            'due_date': '',
+            'priority': 'medium',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Task.objects.filter(title='Task for employee').exists())
+        self.assertContains(response, 'Wybierz poprawną wartość')
+
+    def test_employee_does_not_see_drop_hint_in_done_column(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Employee project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        doing = BoardColumn.objects.create(project=project, name='W trakcie', position=1)
+        review = BoardColumn.objects.create(project=project, name='Review', position=2)
+        done = BoardColumn.objects.create(project=project, name='Zakończone', position=3)
+        Task.objects.create(project=project, column=todo, title='Task todo')
+        Task.objects.create(project=project, column=doing, title='Task doing')
+        Task.objects.create(project=project, column=review, title='Task review')
+
+        self.client.force_login(employee)
+        response = self.client.get(reverse('kanban_project', args=[project.id]))
+
+        self.assertNotContains(response, 'Upuść tu zadanie.')
+
+    def test_lead_can_move_task_to_done(self):
+        lead = User.objects.create_user(username='lead', password='pass')
+        lead.profile.role = UserProfile.Role.EMPLOYEE
+        lead.profile.save()
+        project = Project.objects.create(name='Lead project')
+        ProjectAssignment.objects.create(project=project, user=lead, project_role=ProjectAssignment.ProjectRole.LEAD)
+        todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        done = BoardColumn.objects.create(project=project, name='Zakończone', position=3)
+        task = Task.objects.create(project=project, column=todo, title='Task for lead')
+
+        self.client.force_login(lead)
+        response = self.client.post(reverse('move_task', args=[task.id]), {'column': done.id})
+
+        self.assertEqual(response.status_code, 200)
+        task.refresh_from_db()
+        self.assertEqual(task.column, done)
 
     def test_client_cannot_move_task_between_columns(self):
         client = User.objects.create_user(username='client', password='pass')

@@ -11,7 +11,7 @@ from features.projects.selectors import visible_projects
 from features.tasks.forms import TaskForm, WorklogForm
 from features.tasks.models import BoardColumn, Notification, TaskWorklog
 from features.tasks.selectors import visible_tasks
-from features.tasks.services import ensure_default_columns
+from features.tasks.services import can_move_task_to_column, ensure_default_columns, task_move_limit
 
 
 @login_required
@@ -21,37 +21,43 @@ def kanban(request, project_id=None):
     if not project:
         return render(request, 'features/kanban.html', {'project': None, 'projects': projects_qs})
     ensure_default_columns(project)
+    selected_project = project
     if request.method == 'POST':
-        form = TaskForm(request.POST)
-        form.fields['project'].queryset = projects_qs
-        form.fields['column'].queryset = BoardColumn.objects.filter(project__in=projects_qs)
-        selected_project_id = optional_pk(request.POST.get('project'))
-        if selected_project_id:
+        selected_project_id = optional_pk(request.POST.get('project')) or project.id
+        selected_project = get_object_or_404(projects_qs, pk=selected_project_id)
+        ensure_default_columns(selected_project)
+        form = TaskForm(request.POST, user=request.user, project=selected_project, projects_queryset=projects_qs)
+        if 'assignee' in form.fields:
             form.fields['assignee'].queryset = User.objects.filter(
-                projectassignment__project_id=selected_project_id,
+                projectassignment__project_id=selected_project.id,
                 profile__role=UserProfile.Role.EMPLOYEE,
             ).distinct()
         if form.is_valid():
             task = form.save(commit=False)
+            if 'column' not in form.fields:
+                task.column = selected_project.columns.order_by('position').first()
             task.created_by = request.user
             task.save()
             messages.success(request, 'Zadanie zostało dodane.')
             return redirect('kanban_project', project_id=task.project_id)
+        project = selected_project
     else:
-        form = TaskForm(initial={'project': project})
-        form.fields['project'].queryset = projects_qs
-        form.fields['column'].queryset = BoardColumn.objects.filter(project=project)
-        form.fields['assignee'].queryset = User.objects.filter(
-            projectassignment__project=project,
-            profile__role=UserProfile.Role.EMPLOYEE,
-        ).distinct()
+        form = TaskForm(initial={'project': project}, user=request.user, project=project, projects_queryset=projects_qs)
+        if 'assignee' in form.fields:
+            form.fields['assignee'].queryset = User.objects.filter(
+                projectassignment__project=project,
+                profile__role=UserProfile.Role.EMPLOYEE,
+            ).distinct()
     columns = project.columns.prefetch_related('tasks__assignee', 'tasks__worklogs', 'tasks__checklist')
+    board_move_limit = task_move_limit(request.user, project)
     return render(request, 'features/kanban.html', {
         'project': project,
         'projects': projects_qs,
         'columns': columns,
         'form': form,
-        'can_move_tasks': user_role(request.user) != UserProfile.Role.CLIENT,
+        'can_move_tasks': board_move_limit is not None,
+        'board_move_limit': board_move_limit,
+        'is_client_view': user_role(request.user) == UserProfile.Role.CLIENT,
     })
 
 
@@ -63,6 +69,8 @@ def move_task(request, task_id):
 
     task = get_object_or_404(visible_tasks(request.user), pk=task_id)
     column = get_object_or_404(BoardColumn, pk=request.POST.get('column'), project=task.project)
+    if not can_move_task_to_column(request.user, task, column):
+        return HttpResponseForbidden('Brak uprawnień do zmiany statusu zadania.')
     task.column = column
     task.save(update_fields=['column', 'updated_at'])
     Notification.objects.create(user=task.assignee or request.user, content=f'Zmieniono status zadania: {task.title}', kind='task')
