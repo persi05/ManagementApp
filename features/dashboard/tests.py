@@ -15,7 +15,7 @@ from features.projects.forms import ProjectAssignmentForm
 from features.projects.models import Project, ProjectAssignment
 from features.projects.selectors import visible_projects
 from features.planner.models import LeaveRequest
-from features.tasks.models import BoardColumn, Task, TaskWorklog
+from features.tasks.models import BoardColumn, Task, TaskEditNote, TaskWorklog
 from features.time_tracking.models import TimeEntry, WorkSession
 
 
@@ -524,3 +524,95 @@ class KanbanRenderingTests(TestCase):
         self.assertEqual(response.status_code, 403)
         task.refresh_from_db()
         self.assertEqual(task.column, todo)
+
+    def test_client_can_edit_only_todo_tasks_and_leave_note(self):
+        client = User.objects.create_user(username='client', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Client project', client=client)
+        todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        task = Task.objects.create(project=project, column=todo, title='Initial title')
+
+        self.client.force_login(client)
+        response = self.client.post(reverse('edit_task', args=[task.id]), {
+            'title': 'Updated title',
+            'description': 'Updated description',
+            'due_date': '',
+            'priority': 'medium',
+            'change_note': 'Korekta opisu',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        task.refresh_from_db()
+        self.assertEqual(task.title, 'Updated title')
+        self.assertTrue(TaskEditNote.objects.filter(task=task, user=client, content='Korekta opisu').exists())
+
+    def test_employee_can_edit_in_progress_task_with_note(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Employee project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        doing = BoardColumn.objects.create(project=project, name='W trakcie', position=1)
+        task = Task.objects.create(project=project, column=doing, title='Initial title')
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('edit_task', args=[task.id]), {
+            'title': 'Updated title',
+            'description': 'Updated description',
+            'due_date': '',
+            'priority': 'high',
+            'change_note': 'Zmieniono treść',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        task.refresh_from_db()
+        self.assertEqual(task.priority, 'high')
+        self.assertTrue(TaskEditNote.objects.filter(task=task, user=employee, content='Zmieniono treść').exists())
+
+    def test_employee_cannot_edit_review_task(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Employee project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        review = BoardColumn.objects.create(project=project, name='Review', position=2)
+        task = Task.objects.create(project=project, column=review, title='Review task')
+
+        self.client.force_login(employee)
+        response = self.client.get(reverse('edit_task', args=[task.id]))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_lead_can_edit_review_task_and_manager_can_delete_done_task(self):
+        lead = User.objects.create_user(username='lead', password='pass')
+        lead.profile.role = UserProfile.Role.EMPLOYEE
+        lead.profile.save()
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        ProjectAssignment.objects.create(project=project, user=lead, project_role=ProjectAssignment.ProjectRole.LEAD)
+        review = BoardColumn.objects.create(project=project, name='Review', position=2)
+        done = BoardColumn.objects.create(project=project, name='Zakończone', position=3)
+        review_task = Task.objects.create(project=project, column=review, title='Review task')
+        done_task = Task.objects.create(project=project, column=done, title='Done task')
+
+        self.client.force_login(lead)
+        response = self.client.post(reverse('edit_task', args=[review_task.id]), {
+            'title': 'Review task updated',
+            'description': 'Opis',
+            'due_date': '',
+            'priority': 'medium',
+            'change_note': 'Lead poprawił review',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        review_task.refresh_from_db()
+        self.assertEqual(review_task.title, 'Review task updated')
+
+        self.client.force_login(manager)
+        delete_response = self.client.post(reverse('delete_task', args=[done_task.id]))
+
+        self.assertEqual(delete_response.status_code, 302)
+        self.assertFalse(Task.objects.filter(pk=done_task.pk).exists())

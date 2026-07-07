@@ -43,3 +43,23 @@ def can_move_task_to_column(user, task, column):
     if limit is None:
         return False
     return column.position <= limit
+
+
+def can_edit_task(user, task):
+    if not user.is_authenticated:
+        return False
+    if is_management(user):
+        return True
+
+    role = project_role_for(user, task.project)
+    if role == UserProfile.Role.CLIENT:
+        return task.column.position == 0
+    if role == UserProfile.Role.EMPLOYEE:
+        return task.column.position == 1
+    if role == ProjectAssignment.ProjectRole.LEAD:
+        return task.column.position == 2
+    return False
+
+
+def can_delete_task(user, task):
+    return can_edit_task(user, task)

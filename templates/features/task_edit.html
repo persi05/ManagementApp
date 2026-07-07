@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Edycja zadania - Dcode Management{% endblock %}
+{% block heading %}Edycja zadania{% endblock %}
+{% block eyebrow %}{{ task.project.name }} / {{ task.title }}{% endblock %}
+{% block top_actions %}
+  <a class="ghost-btn" href="{% url 'kanban_project' task.project_id %}">Wróć do Kanban</a>
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>{{ task.title }}</h2>
+      <p>Edytuj dane zadania i dopisz notatkę zmiany, jeśli trzeba.</p>
+    </div>
+  </div>
+  <form method="post" class="grid-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary-btn">Zapisz zmiany</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Historia zmian</h2>
+      <p>Każda notatka jest zapisywana z autorem i datą.</p>
+    </div>
+  </div>
+  <div class="history-list">
+    {% for item in history %}
+      <article class="history-row">
+        <strong>{{ item.user.get_full_name|default:item.user.username }}</strong>
+        <small>{{ item.created_at|date:"Y-m-d H:i" }}</small>
+        <p>{{ item.content }}</p>
+      </article>
+    {% empty %}
+      <p class="empty">Brak notatek zmian.</p>
+    {% endfor %}
+  </div>
+</section>
+
+{% if can_delete_task %}
+  <section class="panel danger-panel">
+    <div class="panel-head">
+      <div>
+        <h2>Usuń zadanie</h2>
+        <p>Ta operacja usuwa kartę z tablicy.</p>
+      </div>
+    </div>
+    <form method="post" action="{% url 'delete_task' task.id %}">
+      {% csrf_token %}
+      <button class="danger-btn">Usuń zadanie</button>
+    </form>
+  </section>
+{% endif %}
+{% endblock %}

@@ -77,3 +77,10 @@
   color: var(--muted);
   margin-top: 12px;
 }
+
+.card-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
