@@ -16,6 +16,13 @@ def ensure_default_columns(project):
         )
 
 
+def normalize_column_positions(project):
+    for position, column in enumerate(project.columns.order_by('position', 'id')):
+        if column.position != position:
+            column.position = position
+            column.save(update_fields=['position'])
+
+
 def project_role_for(user, project):
     if is_management(user):
         return UserProfile.Role.MANAGEMENT
