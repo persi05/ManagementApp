@@ -1,0 +1,48 @@
+.status-pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.status-pill.ok {
+  background: #e8f7ee;
+  color: var(--ok);
+  border-color: #b9dfc9;
+}
+
+.timer-readout {
+  font: 800 40px/1.1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  margin: 22px 0;
+}
+
+.idle-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  background: #12212a;
+  color: #fff;
+  border-radius: 8px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+
+.idle-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 18, 24, .58);
+  display: grid;
+  place-items: center;
+  z-index: 30;
+}
+
+.idle-modal > div {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 22px;
+  width: min(420px, 92vw);
+  box-shadow: var(--shadow);
+}
