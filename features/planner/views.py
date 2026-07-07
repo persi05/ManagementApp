@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -37,6 +38,8 @@ POLISH_MONTHS = {
 def calendar_view(request):
     month_date = selected_month(request)
     start_date, end_date = month_range(month_date)
+    leave_start_date, leave_end_date, leave_end_exclusive = selected_leave_range(request, start_date, end_date)
+    leave_summary = leave_days_summary(request.user, leave_start_date, leave_end_exclusive)
 
     if request.method == 'POST' and request.POST.get('form') == 'leave_request':
         if user_role(request.user) == UserProfile.Role.CLIENT:
@@ -58,9 +61,14 @@ def calendar_view(request):
         'previous_month': add_months(month_date, -1).strftime('%Y-%m'),
         'next_month': add_months(month_date, 1).strftime('%Y-%m'),
         'weekdays': ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'],
+        'today': timezone.localdate(),
         'weeks': build_calendar_days(request.user, month_date, start_date, end_date),
         'leave_form': form,
-        'leave_requests': sorted_leave_requests(leave_request_list_queryset(request.user, start_date, end_date)),
+        'leave_requests': sorted_leave_requests(leave_request_list_queryset(request.user, leave_start_date, leave_end_exclusive)),
+        'leave_summary': leave_summary,
+        'leave_date_from': leave_start_date.isoformat(),
+        'leave_date_to': leave_end_date.isoformat(),
+        'leave_period_label': f'{leave_start_date:%Y-%m-%d} - {leave_end_date:%Y-%m-%d}',
         'can_request_leave': user_role(request.user) != UserProfile.Role.CLIENT,
         'can_review_leave': is_management(request.user),
         'is_management_view': is_management(request.user),
@@ -114,6 +122,28 @@ def month_range(month_date):
     return start_date, end_date
 
 
+def selected_leave_range(request, default_start, default_end):
+    start_date = default_start
+    end_date = default_end - timedelta(days=1)
+
+    raw_start = request.GET.get('date_from')
+    raw_end = request.GET.get('date_to')
+    if raw_start:
+        try:
+            start_date = date.fromisoformat(raw_start)
+        except ValueError:
+            pass
+    if raw_end:
+        try:
+            parsed_end = date.fromisoformat(raw_end)
+            if parsed_end >= start_date:
+                end_date = parsed_end
+        except ValueError:
+            pass
+
+    return start_date, end_date, end_date + timedelta(days=1)
+
+
 def add_months(value, months):
     month_index = value.month - 1 + months
     year = value.year + month_index // 12
@@ -146,6 +176,7 @@ def build_calendar_days(user, month_date, start_date, end_date):
                 'has_work': bool(hours),
                 'has_tasks': bool(day_tasks),
                 'has_leave': bool(day_leaves),
+                'has_approved_leave': any(leave.status == LeaveRequest.Status.APPROVED and leave.user_id == user.id for leave in day_leaves),
             })
         weeks.append(week_days)
 
@@ -217,6 +248,50 @@ def leave_request_list_queryset(user, start_date, end_date):
         status=LeaveRequest.Status.REJECTED,
         read_at__isnull=False,
     )
+
+
+def leave_days_summary(user, month_start, month_end):
+    qs = leave_request_base_queryset(month_start, month_end).filter(status=LeaveRequest.Status.APPROVED)
+    if not is_management(user):
+        qs = qs.filter(user=user)
+
+    requests = list(qs)
+    summary = {
+        'month_days': working_days_count(requests, month_start, month_end),
+        'is_management': is_management(user),
+        'employees': [],
+    }
+
+    if is_management(user):
+        employees = User.objects.filter(profile__role=UserProfile.Role.EMPLOYEE).order_by('first_name', 'last_name', 'username')
+        for employee in employees:
+            employee_requests = [item for item in requests if item.user_id == employee.id]
+            month_days = working_days_count(employee_requests, month_start, month_end)
+            if month_days:
+                summary['employees'].append({
+                    'user': employee,
+                    'month_days': month_days,
+                })
+
+    return summary
+
+
+def working_days_count(leave_requests, period_start, period_end):
+    dates = set()
+    for leave_request in leave_requests:
+        dates.update(working_days_in_range(leave_request, period_start, period_end))
+    return len(dates)
+
+
+def working_days_in_range(leave_request, period_start, period_end):
+    current = max(leave_request.start_date, period_start)
+    last_day = min(leave_request.end_date, period_end - timedelta(days=1))
+    dates = set()
+    while current <= last_day:
+        if current.weekday() < 5:
+            dates.add(current)
+        current += timedelta(days=1)
+    return dates
 
 
 def sorted_leave_requests(requests):

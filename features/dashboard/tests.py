@@ -132,6 +132,18 @@ class TimerTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_management_dashboard_renders_timer_panel(self):
+        user = User.objects.create_user(username='manager', password='pass')
+        user.profile.role = UserProfile.Role.MANAGEMENT
+        user.profile.save()
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('dashboard'))
+
+        self.assertContains(response, 'data-timer-root')
+        self.assertContains(response, reverse('timer_status'))
+        self.assertContains(response, reverse('start_timer'))
+
     def test_paused_timer_renders_resume_action(self):
         user = User.objects.create_user(username='employee', password='pass')
         user.profile.role = UserProfile.Role.EMPLOYEE
@@ -407,15 +419,15 @@ class TimeAccountingTests(TestCase):
         worklog_response = self.client.get(reverse('worklogs'))
 
         self.assertEqual(time_response.status_code, 200)
-        self.assertContains(time_response, 'Czas pracy')
-        self.assertContains(time_response, 'Czas zadan / Czas dla klienta')
+        self.assertContains(time_response, 'Mój czas pracy')
+        self.assertContains(time_response, 'Czas zadań projektowych')
         self.assertEqual(worklog_response.status_code, 200)
-        self.assertContains(worklog_response, 'Czas zadan / Czas dla klienta')
+        self.assertContains(worklog_response, 'Czas zadań projektowych')
         self.assertContains(worklog_response, 'nie wchodzi do wynagrodzenia')
 
 
 class ExportPdfTests(TestCase):
-    def test_management_export_without_user_is_team_report(self):
+    def test_management_export_without_user_is_project_report(self):
         manager = User.objects.create_user(username='manager', password='pass')
         manager.profile.role = UserProfile.Role.MANAGEMENT
         manager.profile.save()
@@ -434,9 +446,8 @@ class ExportPdfTests(TestCase):
         self.client.force_login(manager)
         response = self.client.get(reverse('export_pdf'), {'month': start.strftime('%Y-%m')})
 
-        self.assertContains(response, 'Zbiorczy raport czasu pracy')
-        self.assertContains(response, 'Jan Kowalski')
-        self.assertContains(response, '8,00h')
+        self.assertContains(response, 'Raport projektu')
+        self.assertContains(response, 'Podsumowanie projekt')
 
     def test_client_report_uses_visible_project_worklogs(self):
         client = User.objects.create_user(username='client', password='pass')
@@ -457,6 +468,36 @@ class ExportPdfTests(TestCase):
 
         self.assertContains(response, 'Client project')
         self.assertContains(response, '3,50h')
+
+
+class EmployeePayrollRangeTests(TestCase):
+    def test_management_can_filter_payroll_by_custom_date_range(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        save_hourly_rate(employee, {
+            'amount': Decimal('100.00'),
+            'currency': 'PLN',
+            'valid_from': date(2026, 7, 1),
+            'valid_to': None,
+        }, manager)
+        first_start = timezone.make_aware(datetime(2026, 7, 1, 9, 0))
+        second_start = timezone.make_aware(datetime(2026, 7, 20, 9, 0))
+        TimeEntry.objects.create(user=employee, start=first_start, end=first_start + timedelta(hours=2), editable_until=first_start)
+        TimeEntry.objects.create(user=employee, start=second_start, end=second_start + timedelta(hours=3), editable_until=second_start)
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('employees'), {
+            'date_from': '2026-07-01',
+            'date_to': '2026-07-15',
+        })
+
+        self.assertContains(response, '2026-07-01 - 2026-07-15')
+        self.assertContains(response, '2,00h')
+        self.assertContains(response, '200,00 PLN')
 
 
 class CalendarTests(TestCase):
@@ -499,6 +540,75 @@ class CalendarTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(LeaveRequest.objects.filter(user=user, status=LeaveRequest.Status.PENDING).exists())
+
+    def test_employee_cannot_request_leave_in_the_past(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        yesterday = timezone.localdate() - timedelta(days=1)
+
+        self.client.force_login(user)
+        response = self.client.post(reverse('calendar'), {
+            'form': 'leave_request',
+            'start_date': yesterday.isoformat(),
+            'end_date': yesterday.isoformat(),
+            'reason': 'Urlop',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(LeaveRequest.objects.filter(user=user).exists())
+        self.assertContains(response, 'Nie mozna brac wolnego w przeszlosci.')
+
+    def test_calendar_shows_leave_days_summary_without_weekends(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        LeaveRequest.objects.create(
+            user=user,
+            start_date=date(2026, 7, 13),
+            end_date=date(2026, 7, 20),
+            status=LeaveRequest.Status.APPROVED,
+        )
+        LeaveRequest.objects.create(
+            user=user,
+            start_date=date(2026, 7, 21),
+            end_date=date(2026, 7, 21),
+            status=LeaveRequest.Status.REJECTED,
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('calendar'), {'month': '2026-07'})
+
+        self.assertContains(response, 'Wolne: 6 dni roboczych')
+
+    def test_calendar_leave_summary_counts_only_unique_approved_workdays(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        LeaveRequest.objects.create(
+            user=user,
+            start_date=date(2026, 7, 13),
+            end_date=date(2026, 7, 15),
+            status=LeaveRequest.Status.APPROVED,
+        )
+        LeaveRequest.objects.create(
+            user=user,
+            start_date=date(2026, 7, 14),
+            end_date=date(2026, 7, 16),
+            status=LeaveRequest.Status.APPROVED,
+        )
+        LeaveRequest.objects.create(
+            user=user,
+            start_date=date(2026, 7, 17),
+            end_date=date(2026, 7, 17),
+            status=LeaveRequest.Status.PENDING,
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('calendar'), {'month': '2026-07'})
+
+        self.assertContains(response, 'Wolne: 4 dni roboczych')
+        self.assertContains(response, 'data-approved-leave="1"')
 
     def test_management_calendar_shows_employee_presence(self):
         manager = User.objects.create_user(username='manager', password='pass')

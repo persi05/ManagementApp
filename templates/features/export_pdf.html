@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
   <meta charset="utf-8">
-  <title>Raport {{ month }}</title>
+  <title>Raport {{ period_label|default:month }}</title>
   <style>
     body{font-family:Arial,sans-serif;color:#1f2933;margin:32px}
     h1{font-size:24px;margin:0 0 18px}
@@ -21,11 +21,11 @@
   <button onclick="window.print()">Drukuj / zapisz jako PDF</button>
 
   {% if is_client_summary %}
-    <h1>Raport projektu - {{ month }}</h1>
+    <h1>Raport projektu - {{ period_label|default:month }}</h1>
     <div class="summary summary-grid">
       <div><strong>Godziny łącznie</strong><br>{{ total_hours|floatformat:2 }}h</div>
       <div><strong>Zakres</strong><br>godziny widoczne dla klienta</div>
-      <div><strong>Okres</strong><br>{{ month }}</div>
+      <div><strong>Okres</strong><br>{{ period_label|default:month }}</div>
     </div>
 
     <h2>Podsumowanie projektów</h2>
@@ -58,7 +58,7 @@
       </tbody>
     </table>
   {% elif is_management_summary %}
-    <h1>Zbiorczy raport czasu pracy - {{ month }}</h1>
+    <h1>Zbiorczy raport czasu pracy - {{ period_label|default:month }}</h1>
     <div class="summary summary-grid">
       <div><strong>Pracownicy</strong><br>{{ employees|length }}</div>
       <div><strong>Godziny łącznie</strong><br>{{ total_hours|floatformat:2 }}h</div>
@@ -103,7 +103,7 @@
       </tbody>
     </table>
   {% else %}
-    <h1>Raport czasu pracy - {{ month }}</h1>
+    <h1>Raport czasu pracy - {{ period_label|default:month }}</h1>
     <div class="summary">
       <strong>{% if employee.get_full_name %}{{ employee.get_full_name }}{% else %}{{ employee.username }}{% endif %}</strong><br>
       Konto do przelewu: {{ bank_account|default:"brak danych" }}<br>

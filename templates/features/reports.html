@@ -1,46 +1,117 @@
 {% extends "base.html" %}
-{% block title %}Raporty - Dcode Management{% endblock %}
-{% block heading %}Raporty{% endblock %}
-{% block eyebrow %}Miesięczne zestawienie{% endblock %}
+{% block title %}Raporty projektow - Dcode Management{% endblock %}
+{% block heading %}Raporty projektow{% endblock %}
+{% block eyebrow %}Zestawienie projektow{% endblock %}
 {% block top_actions %}
-  <a class="ghost-btn" href="{% url 'export_csv' %}?month={{ month }}">CSV</a>
-  <a class="primary-btn" href="{% url 'export_pdf' %}?month={{ month }}{% if selected_user %}&user={{ selected_user }}{% endif %}" target="_blank">PDF / druk</a>
+  <a class="ghost-btn" href="{% url 'export_csv' %}?date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}">CSV</a>
+  <a class="primary-btn" href="{% url 'export_pdf' %}?date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}" target="_blank">PDF / druk</a>
 {% endblock %}
 {% block content %}
 <section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Filtry raportu</h2>
+      <p>Raport bazuje na czasie zadan projektowych, czyli godzinach wpisanych do zadan.</p>
+    </div>
+  </div>
   <form class="filter-bar">
-    <input type="month" name="month" value="{{ month }}">
-    {% if can_manage %}<select name="user"><option value="">Wszyscy pracownicy</option>{% for employee in employees %}<option value="{{ employee.id }}" {% if selected_user == employee.id|stringformat:"s" %}selected{% endif %}>{% if employee.get_full_name %}{{ employee.get_full_name }}{% else %}{{ employee.username }}{% endif %}</option>{% endfor %}</select>{% endif %}
+    <input type="date" name="date_from" value="{{ date_from }}">
+    <input type="date" name="date_to" value="{{ date_to }}">
+    {% if can_manage %}
+      <select name="client">
+        <option value="">Wszyscy klienci</option>
+        {% for client in clients %}
+          <option value="{{ client.id }}" {% if selected_client == client.id|stringformat:"s" %}selected{% endif %}>{% if client.get_full_name %}{{ client.get_full_name }}{% else %}{{ client.username }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    {% endif %}
+    <select name="project">
+      <option value="">Wszystkie projekty</option>
+      {% for project in projects %}
+        <option value="{{ project.id }}" {% if selected_project == project.id|stringformat:"s" %}selected{% endif %}>{{ project.name }}</option>
+      {% endfor %}
+    </select>
+    {% if can_manage %}
+      <select name="employee">
+        <option value="">Wszyscy pracownicy</option>
+        {% for employee in employees %}
+          <option value="{{ employee.id }}" {% if selected_employee == employee.id|stringformat:"s" %}selected{% endif %}>{% if employee.get_full_name %}{{ employee.get_full_name }}{% else %}{{ employee.username }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    {% endif %}
     <button class="ghost-btn">Filtruj</button>
   </form>
 </section>
 
 <section class="metrics-grid">
-  {% if is_client_report %}
-    {% for row in by_project %}
-      <article class="metric"><span>{{ row.project.name }}</span><strong>{{ row.hours|floatformat:2 }}h</strong><small>godziny widoczne dla klienta</small></article>
-    {% empty %}
-      <article class="metric"><span>Brak danych</span><strong>0h</strong><small>dla wybranego miesiąca</small></article>
-    {% endfor %}
-  {% else %}
-    {% for row in by_user %}
-      <article class="metric"><span>{% if row.user.get_full_name %}{{ row.user.get_full_name }}{% else %}{{ row.user.username }}{% endif %}</span><strong>{{ row.hours|floatformat:2 }}h</strong><small>{{ row.payroll }} PLN / {{ row.bank_account|default:"brak konta" }}</small></article>
-    {% endfor %}
-  {% endif %}
+  <article class="metric"><span>Okres</span><strong class="metric-small">{{ period_label }}</strong><small>zakres raportu</small></article>
+  <article class="metric"><span>Projekty</span><strong>{{ by_project|length }}</strong><small>z godzinami w zakresie</small></article>
+  <article class="metric"><span>Godziny projektowe</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>z worklogow zadan</small></article>
+  <article class="metric"><span>Pracownicy</span><strong>{{ by_user|length }}</strong><small>z wpisami w zakresie</small></article>
 </section>
 
 <section class="workspace-grid">
   <div class="panel">
-    <div class="panel-head"><div><h2>Projekty</h2><p>Podział czasu według projektu.</p></div></div>
-    {% for row in by_project %}<div class="bar-row"><span>{{ row.project.name }}</span><div><i style="width: {% widthratio row.hours 160 100 %}%"></i></div><strong>{{ row.hours|floatformat:2 }}h</strong></div>{% empty %}<p class="empty">Brak danych projektowych.</p>{% endfor %}
+    <div class="panel-head"><div><h2>Zestawienie projektow</h2><p>Godziny wpisane do zadan, z mozliwoscia filtrowania po kliencie i projekcie.</p></div></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Projekt</th><th>Klient</th><th>Godziny</th><th>Wpisy</th></tr></thead>
+        <tbody>
+          {% for row in by_project %}
+            <tr>
+              <td>{{ row.project.name }}</td>
+              <td>{% if row.client %}{% if row.client.get_full_name %}{{ row.client.get_full_name }}{% else %}{{ row.client.username }}{% endif %}{% else %}-{% endif %}</td>
+              <td>{{ row.hours|floatformat:2 }}h</td>
+              <td>{{ row.entries_count }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">Brak danych projektowych.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
+
   <div class="panel">
-    <div class="panel-head"><div><h2>Wpisy źródłowe</h2><p>Ostatnie 100 rekordów dla wybranego okresu.</p></div></div>
-    {% if is_client_report %}
-      <div class="table-wrap"><table><thead><tr><th>Data</th><th>Godziny</th><th>Projekt</th><th>Zadanie</th></tr></thead><tbody>{% for worklog in client_worklogs %}<tr><td>{{ worklog.date }}</td><td>{{ worklog.hours|floatformat:2 }}</td><td>{{ worklog.task.project.name }}</td><td>{{ worklog.task.title }}</td></tr>{% empty %}<tr><td colspan="4">Brak wpisów.</td></tr>{% endfor %}</tbody></table></div>
-    {% else %}
-      <div class="table-wrap"><table><thead><tr><th>Pracownik</th><th>Data</th><th>Godziny</th><th>Projekt</th></tr></thead><tbody>{% for entry in entries %}<tr><td>{% if entry.user.get_full_name %}{{ entry.user.get_full_name }}{% else %}{{ entry.user.username }}{% endif %}</td><td>{{ entry.start|date:"Y-m-d" }}</td><td>{{ entry.hours|floatformat:2 }}</td><td>{{ entry.project.name|default:"-" }}</td></tr>{% empty %}<tr><td colspan="4">Brak wpisów.</td></tr>{% endfor %}</tbody></table></div>
-    {% endif %}
+    <div class="panel-head"><div><h2>Podzial pracownikow</h2><p>Ile dany pracownik wpisal godzin w wybranym raporcie.</p></div></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Pracownik</th><th>Godziny</th></tr></thead>
+        <tbody>
+          {% for row in by_user %}
+            <tr>
+              <td>{% if row.user.get_full_name %}{{ row.user.get_full_name }}{% else %}{{ row.user.username }}{% endif %}</td>
+              <td>{{ row.hours|floatformat:2 }}h</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="2">Brak godzin pracownikow.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><div><h2>Wpisy zadan</h2><p>Ostatnie 100 worklogow dla wybranego zakresu.</p></div></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Data</th><th>Pracownik</th><th>Projekt</th><th>Zadanie</th><th>Godziny</th><th>Klient</th></tr></thead>
+      <tbody>
+        {% for worklog in client_worklogs %}
+          <tr>
+            <td>{{ worklog.date }}</td>
+            <td>{% if worklog.user.get_full_name %}{{ worklog.user.get_full_name }}{% else %}{{ worklog.user.username }}{% endif %}</td>
+            <td>{{ worklog.task.project.name }}</td>
+            <td>{{ worklog.task.title }}</td>
+            <td>{{ worklog.hours|floatformat:2 }}</td>
+            <td>{% if worklog.visible_to_client %}widzi{% else %}ukryte{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6">Brak wpisow.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </section>
 {% endblock %}

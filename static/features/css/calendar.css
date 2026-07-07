@@ -59,6 +59,16 @@
   letter-spacing: .08em;
 }
 
+.month-leave-summary {
+  color: #1f6b45;
+  background: #edf8f2;
+  border: 1px solid #9ed4bb;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
 .calendar-help {
   background: #ecfff4;
   border: 1px solid #98f5bd;
@@ -174,6 +184,8 @@
 
 .day-card.selectable-day {
   cursor: pointer;
+  user-select: none;
+  touch-action: none;
 }
 
 .day-card.selectable-day:hover {
@@ -326,9 +338,92 @@
   display: none;
 }
 
+.leave-card .primary-btn.full {
+  margin-top: 10px;
+}
+
+.calendar-day-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.calendar-day-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 27, 34, .44);
+}
+
+.calendar-day-modal-card {
+  position: relative;
+  z-index: 1;
+  width: min(440px, 100%);
+  max-height: min(680px, 92vh);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 22px 70px rgba(17, 27, 34, .28);
+}
+
+.calendar-day-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.calendar-day-modal-content {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+
+.calendar-day-modal-content .day-notes {
+  gap: 8px;
+}
+
+.calendar-day-modal-note {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #e7b3b3;
+  border-radius: 8px;
+  background: #fff6f6;
+  color: var(--bad);
+  font-weight: 800;
+}
+
 .leave-list {
   display: grid;
   gap: 8px;
+}
+
+.leave-range-panel {
+  grid-column: 1 / -1;
+}
+
+.leave-range-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(260px, .8fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.subsection-head {
+  margin-bottom: 10px;
+}
+
+.subsection-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.subsection-head p {
+  margin: 3px 0 0;
+  color: var(--muted);
 }
 
 .leave-row {

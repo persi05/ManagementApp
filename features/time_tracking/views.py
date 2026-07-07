@@ -85,9 +85,7 @@ def time_entries(request):
         form = TimeEntryForm()
         form.fields['project'].queryset = visible_projects(request.user)
 
-    qs = TimeEntry.objects.select_related('project', 'task', 'user').filter(start__gte=start_dt, start__lt=end_dt)
-    if not is_management(request.user):
-        qs = qs.filter(user=request.user)
+    qs = TimeEntry.objects.select_related('project', 'task', 'user').filter(user=request.user, start__gte=start_dt, start__lt=end_dt)
     entries = list(qs)
     total_hours = sum((entry.hours for entry in entries), Decimal('0'))
     for entry in entries:

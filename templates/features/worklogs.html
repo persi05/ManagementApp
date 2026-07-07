@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Czas zadan - Dcode Management{% endblock %}
-{% block heading %}Czas zadan / Czas dla klienta{% endblock %}
+{% block title %}Czas zadań projektowych - Dcode Management{% endblock %}
+{% block heading %}Czas zadań projektowych{% endblock %}
 {% block eyebrow %}Czas przypisany do kart, bez rozliczania pracownika{% endblock %}
 {% block content %}
 <div class="tabs">
-  <a href="{% url 'time_entries' %}">Czas pracy</a>
-  <a class="active" href="{% url 'worklogs' %}">Czas zadan / Czas dla klienta</a>
+  <a href="{% url 'time_entries' %}">Mój czas pracy</a>
+  <a class="active" href="{% url 'worklogs' %}">Czas zadań projektowych</a>
 </div>
 <div class="tabs">
   {% for project in projects %}

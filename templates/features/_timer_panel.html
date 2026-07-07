@@ -1,0 +1,29 @@
+<article class="panel timer-panel" data-timer-root data-status-url="{% url 'timer_status' %}" data-active-seconds="{{ active_session_seconds|default:0 }}" data-started-at="{% if active_session %}{{ active_session.started_at|date:'c' }}{% endif %}" data-paused-at="{% if active_session.paused_at %}{{ active_session.paused_at|date:'c' }}{% endif %}" data-inactive-seconds="{% if active_session %}{{ active_session.total_inactive_seconds }}{% else %}0{% endif %}" data-state="{% if active_session %}{{ active_session.state }}{% else %}stopped{% endif %}">
+  <div class="panel-head">
+    <div><h2>Licznik pracy</h2><p>Start, pauza i zapis sesji do historii czasu.</p></div>
+    <span class="status-pill {% if active_session %}ok{% endif %}">{% if active_session %}{{ active_session.get_state_display }}{% else %}Nieaktywny{% endif %}</span>
+  </div>
+  <div class="timer-readout" data-timer-readout>{{ active_session_display|default:"00:00:00" }}</div>
+  <form method="post" action="{% if active_session %}{% url 'stop_timer' %}{% else %}{% url 'start_timer' %}{% endif %}" class="inline-form">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.path }}">
+    <input type="hidden" name="inactive_seconds" data-inactive-field value="0">
+    {% if not active_session %}
+      <select name="project"><option value="">Bez projektu</option>{% for project in projects %}<option value="{{ project.id }}">{{ project.name }}</option>{% endfor %}</select>
+      <button class="primary-btn">Start</button>
+    {% else %}
+      <button class="danger-btn">Zakoncz i zapisz</button>
+    {% endif %}
+  </form>
+  {% if active_session and active_session.state == 'running' %}
+    <form method="post" action="{% url 'pause_timer' %}" class="inline-form">
+      {% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><input type="hidden" name="inactive_seconds" data-inactive-field value="0">
+      <button class="ghost-btn">Pauza</button>
+    </form>
+  {% elif active_session and active_session.state == 'paused' %}
+    <form method="post" action="{% url 'resume_timer' %}" class="inline-form">
+      {% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}">
+      <button class="primary-btn">Wznow</button>
+    </form>
+  {% endif %}
+</article>
