@@ -5,10 +5,10 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, redirect, render
 
-from features.accounts.models import UserProfile
 from features.accounts.permissions import management_required
 from features.employees.forms import EmployeeProfileForm, HourlyRateForm, UserRoleForm
 from features.employees.models import HourlyRate
+from features.employees.services import save_hourly_rate
 from features.reports.services import employee_month_summaries, month_bounds, payroll_amount
 from features.time_tracking.models import TimeEntry
 
@@ -47,10 +47,6 @@ def employee_detail(request, user_id):
             rate_form = HourlyRateForm()
             if role_form.is_valid():
                 role_form.save()
-                employee.is_staff = employee.profile.role == UserProfile.Role.MANAGEMENT
-                if employee.profile.role != UserProfile.Role.MANAGEMENT:
-                    employee.is_superuser = False
-                employee.save(update_fields=['is_staff', 'is_superuser'])
                 messages.success(request, 'Rola użytkownika została zapisana.')
                 return redirect('employee_detail', user_id=employee.id)
         elif request.POST.get('form') == 'profile':
@@ -66,10 +62,7 @@ def employee_detail(request, user_id):
             profile_form = EmployeeProfileForm(instance=employee.profile)
             rate_form = HourlyRateForm(request.POST)
             if rate_form.is_valid():
-                rate = rate_form.save(commit=False)
-                rate.user = employee
-                rate.created_by = request.user
-                rate.save()
+                save_hourly_rate(employee, rate_form.cleaned_data, request.user)
                 messages.success(request, 'Stawka została dodana.')
                 return redirect('employee_detail', user_id=employee.id)
         else:
