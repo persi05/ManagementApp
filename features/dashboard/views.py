@@ -13,6 +13,11 @@ from features.tasks.selectors import visible_tasks
 from features.time_tracking.models import TimeEntry, WorkSession
 
 
+def format_timer_seconds(seconds):
+    seconds = max(0, int(seconds))
+    return f'{seconds // 3600:02}:{(seconds % 3600) // 60:02}:{seconds % 60:02}'
+
+
 @login_required
 def dashboard(request):
     ensure_profile(request.user)
@@ -33,6 +38,7 @@ def dashboard(request):
             worklogs = TaskWorklog.objects.filter(user=request.user, date__gte=start_date, date__lt=next_month)
 
     active_session = WorkSession.objects.filter(user=request.user, state__in=[WorkSession.State.RUNNING, WorkSession.State.PAUSED]).first()
+    active_session_seconds = active_session.active_seconds() if active_session else 0
     total_minutes = sum(entry.duration_minutes for entry in entries)
     task_hours = worklogs.aggregate(total=Sum('hours'))['total'] or Decimal('0')
     client_project_rows = []
@@ -57,6 +63,8 @@ def dashboard(request):
         'projects': projects[:6],
         'tasks': tasks[:8],
         'active_session': active_session,
+        'active_session_seconds': active_session_seconds,
+        'active_session_display': format_timer_seconds(active_session_seconds),
         'total_hours': Decimal(total_minutes) / Decimal(60),
         'task_hours': task_hours,
         'client_project_rows': client_project_rows,

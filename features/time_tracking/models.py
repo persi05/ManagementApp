@@ -47,6 +47,7 @@ class TimeEntry(models.Model):
     edited_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='edited_time_entries')
     edited_at = models.DateTimeField(null=True, blank=True)
     inactive_minutes = models.PositiveIntegerField(default=0)
+    inactive_seconds = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ['-start']
@@ -57,8 +58,13 @@ class TimeEntry(models.Model):
 
     @property
     def duration_minutes(self):
+        return self.duration_seconds // 60
+
+    @property
+    def duration_seconds(self):
         seconds = max(0, int((self.end - self.start).total_seconds()))
-        return max(0, seconds // 60 - self.inactive_minutes)
+        inactive_seconds = max(self.inactive_seconds, self.inactive_minutes * 60)
+        return max(0, seconds - inactive_seconds)
 
     @property
     def hours(self):
@@ -87,9 +93,24 @@ class WorkSession(models.Model):
     ended_at = models.DateTimeField(null=True, blank=True)
     state = models.CharField(max_length=12, choices=State.choices, default=State.RUNNING)
     inactive_minutes = models.PositiveIntegerField(default=0)
+    inactive_seconds = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ['-started_at']
 
     def __str__(self):
         return f'{self.user} {self.get_state_display()}'
+
+    @property
+    def total_inactive_seconds(self):
+        return max(self.inactive_seconds, self.inactive_minutes * 60)
+
+    def active_seconds(self, now=None):
+        now = now or timezone.now()
+        end_at = self.paused_at if self.state == self.State.PAUSED and self.paused_at else now
+        elapsed_seconds = max(0, int((end_at - self.started_at).total_seconds()))
+        return max(0, elapsed_seconds - self.total_inactive_seconds)
+
+    def set_inactive_seconds(self, seconds):
+        self.inactive_seconds = max(0, int(seconds))
+        self.inactive_minutes = self.inactive_seconds // 60
