@@ -8,10 +8,10 @@ from django.views.decorators.http import require_POST
 from features.accounts.models import UserProfile, is_management, user_role
 from features.accounts.permissions import optional_pk, worker_required
 from features.projects.selectors import visible_projects
-from features.tasks.forms import TaskForm, WorklogForm
-from features.tasks.models import BoardColumn, Notification, TaskWorklog
+from features.tasks.forms import TaskEditForm, TaskForm, WorklogForm
+from features.tasks.models import BoardColumn, Notification, TaskEditNote, TaskWorklog
 from features.tasks.selectors import visible_tasks
-from features.tasks.services import can_move_task_to_column, ensure_default_columns, task_move_limit
+from features.tasks.services import can_delete_task, can_edit_task, can_move_task_to_column, ensure_default_columns, task_move_limit
 
 
 @login_required
@@ -50,6 +50,11 @@ def kanban(request, project_id=None):
             ).distinct()
     columns = project.columns.prefetch_related('tasks__assignee', 'tasks__worklogs', 'tasks__checklist')
     board_move_limit = task_move_limit(request.user, project)
+    for column in columns:
+        for task in column.tasks.all():
+            task.can_edit = can_edit_task(request.user, task)
+            task.can_move_prev = board_move_limit is not None and task.column.position > 0
+            task.can_move_next = board_move_limit is not None and task.column.position < board_move_limit
     return render(request, 'features/kanban.html', {
         'project': project,
         'projects': projects_qs,
@@ -75,6 +80,46 @@ def move_task(request, task_id):
     task.save(update_fields=['column', 'updated_at'])
     Notification.objects.create(user=task.assignee or request.user, content=f'Zmieniono status zadania: {task.title}', kind='task')
     return JsonResponse({'ok': True, 'column': column.name})
+
+
+@login_required
+def edit_task(request, task_id):
+    task = get_object_or_404(visible_tasks(request.user), pk=task_id)
+    if not can_edit_task(request.user, task):
+        return HttpResponseForbidden('Brak uprawnień do edycji zadania.')
+
+    if request.method == 'POST':
+        form = TaskEditForm(request.POST, instance=task, user=request.user, project=task.project)
+        if form.is_valid():
+            updated_task = form.save()
+            note = form.cleaned_data.get('change_note', '').strip()
+            if note:
+                TaskEditNote.objects.create(task=updated_task, user=request.user, content=note)
+            messages.success(request, 'Zadanie zostało zapisane.')
+            return redirect('kanban_project', project_id=task.project_id)
+    else:
+        form = TaskEditForm(instance=task, user=request.user, project=task.project)
+
+    history = task.edit_notes.select_related('user')
+    return render(request, 'features/task_edit.html', {
+        'task': task,
+        'form': form,
+        'history': history,
+        'can_delete_task': can_delete_task(request.user, task),
+    })
+
+
+@login_required
+@require_POST
+def delete_task(request, task_id):
+    task = get_object_or_404(visible_tasks(request.user), pk=task_id)
+    if not can_delete_task(request.user, task):
+        return HttpResponseForbidden('Brak uprawnień do usunięcia zadania.')
+
+    project_id = task.project_id
+    task.delete()
+    messages.success(request, 'Zadanie zostało usunięte.')
+    return redirect('kanban_project', project_id=project_id)
 
 
 @login_required

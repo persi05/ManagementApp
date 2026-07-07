@@ -67,3 +67,37 @@ textarea {
   flex-wrap: wrap;
   margin-top: 8px;
 }
+
+.tiny-btn {
+  padding: 5px 9px;
+  font-size: 12px;
+  min-height: 28px;
+}
+
+.history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.history-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fafbfc;
+}
+
+.history-row strong,
+.history-row small,
+.history-row p {
+  display: block;
+  margin: 0;
+}
+
+.history-row small {
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.history-row p {
+  margin-top: 8px;
+}

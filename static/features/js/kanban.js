@@ -7,6 +7,24 @@
     ? null
     : Number(board.dataset.maxMovePosition);
 
+  async function moveCard(card, targetColumn) {
+    const previousDropzone = card.parentElement;
+    const dropzone = targetColumn.querySelector('.kanban-dropzone');
+    dropzone.appendChild(card);
+
+    const body = new URLSearchParams({ column: targetColumn.dataset.column });
+    const response = await fetch(card.dataset.moveUrl, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
+      credentials: 'same-origin',
+      body,
+    });
+
+    if (!response.ok) {
+      previousDropzone?.appendChild(card);
+    }
+  }
+
   document.querySelectorAll('.kanban-card').forEach((card) => {
     card.addEventListener('dragstart', (event) => {
       card.classList.add('dragging');
@@ -25,22 +43,25 @@
       }
       const card = document.querySelector(`.kanban-card[data-task="${event.dataTransfer.getData('text/plain')}"]`);
       if (!card) return;
+      await moveCard(card, column);
+    });
+  });
 
-      const previousDropzone = card.parentElement;
-      const dropzone = column.querySelector('.kanban-dropzone');
-      dropzone.appendChild(card);
+  document.querySelectorAll('.kanban-shift-btn').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const card = button.closest('.kanban-card');
+      const column = card?.closest('.kanban-column');
+      if (!card || !column || !board) return;
 
-      const body = new URLSearchParams({ column: column.dataset.column });
-      const response = await fetch(card.dataset.moveUrl, {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
-        credentials: 'same-origin',
-        body,
-      });
-
-      if (!response.ok) {
-        previousDropzone?.appendChild(card);
+      const currentPosition = Number(column.dataset.columnPosition);
+      const direction = button.dataset.direction;
+      const targetPosition = direction === 'prev' ? currentPosition - 1 : currentPosition + 1;
+      if (Number.isFinite(maxMovePosition) && targetPosition > maxMovePosition) {
+        return;
       }
+      const targetColumn = board.querySelector(`.kanban-column[data-column-position="${targetPosition}"]`);
+      if (!targetColumn) return;
+      await moveCard(card, targetColumn);
     });
   });
 })();

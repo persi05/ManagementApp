@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Attachment, BoardColumn, ChecklistItem, Comment, Notification, Task, TaskWorklog
+from .models import Attachment, BoardColumn, ChecklistItem, Comment, Notification, Task, TaskEditNote, TaskWorklog
 
 
 @admin.register(BoardColumn)
@@ -26,3 +26,4 @@ admin.site.register(ChecklistItem)
 admin.site.register(Comment)
 admin.site.register(Attachment)
 admin.site.register(Notification)
+admin.site.register(TaskEditNote)

@@ -54,6 +54,19 @@ class Task(models.Model):
         return self.worklogs.filter(visible_to_client=True).aggregate(total=Sum('hours'))['total'] or Decimal('0')
 
 
+class TaskEditNote(models.Model):
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='edit_notes')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='task_edit_notes')
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+
+    def __str__(self):
+        return f'{self.task}: {self.user}'
+
+
 class ChecklistItem(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='checklist')
     text = models.CharField(max_length=180)

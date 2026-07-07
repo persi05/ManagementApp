@@ -65,3 +65,40 @@ class WorklogForm(forms.ModelForm):
             'visible_to_client': 'Widoczne dla klienta',
         }
         widgets = {'date': forms.DateInput(attrs={'type': 'date'})}
+
+
+class TaskEditForm(forms.ModelForm):
+    change_note = forms.CharField(
+        label='Notatka zmiany',
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+
+    class Meta:
+        model = Task
+        fields = ('title', 'description', 'due_date', 'priority', 'assignee')
+        widgets = {
+            'due_date': forms.DateInput(attrs={'type': 'date'}),
+            'description': forms.Textarea(attrs={'rows': 4}),
+        }
+        labels = {
+            'title': 'Tytuł',
+            'description': 'Opis',
+            'assignee': 'Przypisany',
+            'due_date': 'Termin',
+            'priority': 'Priorytet',
+        }
+
+    def __init__(self, *args, user=None, project=None, **kwargs):
+        self.user = user
+        self.project = project
+        super().__init__(*args, **kwargs)
+
+        if user is not None and not is_management(user):
+            self.fields.pop('assignee', None)
+
+        field_order = ['title', 'due_date', 'priority', 'description']
+        if 'assignee' in self.fields:
+            field_order.append('assignee')
+        field_order.append('change_note')
+        self.order_fields(field_order)
