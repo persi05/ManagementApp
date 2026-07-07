@@ -78,4 +78,13 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .column-permissions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .column-danger-zone {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

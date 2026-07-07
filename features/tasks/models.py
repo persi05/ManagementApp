@@ -9,12 +9,72 @@ from features.projects.models import Project
 
 
 class BoardColumn(models.Model):
+    PERMISSION_FIELDS = (
+        'client_can_move_to',
+        'client_can_edit_tasks',
+        'client_can_delete_tasks',
+        'employee_can_move_to',
+        'employee_can_edit_tasks',
+        'employee_can_delete_tasks',
+        'lead_can_move_to',
+        'lead_can_edit_tasks',
+        'lead_can_delete_tasks',
+    )
+
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='columns')
     name = models.CharField(max_length=80)
     position = models.PositiveIntegerField(default=0)
+    client_can_move_to = models.BooleanField(default=False)
+    client_can_edit_tasks = models.BooleanField(default=False)
+    client_can_delete_tasks = models.BooleanField(default=False)
+    employee_can_move_to = models.BooleanField(default=False)
+    employee_can_edit_tasks = models.BooleanField(default=False)
+    employee_can_delete_tasks = models.BooleanField(default=False)
+    lead_can_move_to = models.BooleanField(default=False)
+    lead_can_edit_tasks = models.BooleanField(default=False)
+    lead_can_delete_tasks = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['position', 'id']
+
+    @staticmethod
+    def default_permissions_for_position(position):
+        defaults = {field_name: False for field_name in BoardColumn.PERMISSION_FIELDS}
+        if position == 0:
+            defaults.update({
+                'client_can_edit_tasks': True,
+                'client_can_delete_tasks': True,
+                'employee_can_move_to': True,
+                'employee_can_edit_tasks': True,
+                'employee_can_delete_tasks': True,
+                'lead_can_move_to': True,
+                'lead_can_edit_tasks': True,
+                'lead_can_delete_tasks': True,
+            })
+        elif position == 1:
+            defaults.update({
+                'employee_can_move_to': True,
+                'employee_can_edit_tasks': True,
+                'lead_can_move_to': True,
+                'lead_can_edit_tasks': True,
+            })
+        elif position == 2:
+            defaults.update({
+                'employee_can_move_to': True,
+                'lead_can_move_to': True,
+                'lead_can_edit_tasks': True,
+            })
+        else:
+            defaults.update({
+                'lead_can_move_to': True,
+            })
+        return defaults
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not any(getattr(self, field_name) for field_name in self.PERMISSION_FIELDS):
+            for field_name, value in self.default_permissions_for_position(self.position).items():
+                setattr(self, field_name, value)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.project}: {self.name}'

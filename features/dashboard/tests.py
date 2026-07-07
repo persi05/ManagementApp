@@ -330,8 +330,8 @@ class CalendarTests(TestCase):
         self.assertIsNotNone(leave_request.read_at)
 
         refreshed = self.client.get(reverse('calendar'), {'month': '2026-07'})
-        self.assertContains(refreshed, '20 lipca 2026 - 22 lipca 2026')
-        self.assertContains(refreshed, 'Odrzucony')
+        self.assertNotContains(refreshed, '20 lipca 2026 - 22 lipca 2026')
+        self.assertNotContains(refreshed, 'Odrzucony')
         self.assertNotContains(refreshed, 'Oznacz jako przeczytane')
 
     def test_leave_requests_are_sorted_future_first_then_past(self):
@@ -478,6 +478,28 @@ class KanbanRenderingTests(TestCase):
         task = Task.objects.get(title='Nowe zadanie klienta')
         self.assertEqual(task.column, todo)
         self.assertIsNone(task.assignee)
+
+    def test_project_board_hides_project_field_and_uses_current_project(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        column = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+
+        self.client.force_login(manager)
+        page = self.client.get(reverse('kanban_project', args=[project.id]))
+        response = self.client.post(reverse('kanban_project', args=[project.id]), {
+            'column': column.id,
+            'title': 'Task without explicit project',
+            'description': 'Opis',
+            'due_date': '',
+            'priority': 'medium',
+        })
+
+        self.assertNotContains(page, 'name="project"')
+        self.assertEqual(response.status_code, 302)
+        task = Task.objects.get(title='Task without explicit project')
+        self.assertEqual(task.project, project)
 
     def test_employee_cannot_move_task_to_done(self):
         employee = User.objects.create_user(username='employee', password='pass')
@@ -781,6 +803,72 @@ class KanbanRenderingTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(BoardColumn.objects.filter(project=project, name='Blocked').exists())
+
+    def test_management_can_update_board_column_settings(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        column = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('update_column', args=[column.id]), {
+            'name': 'Backlog klienta',
+            'employee_can_move_to': 'on',
+            'employee_can_edit_tasks': 'on',
+            'lead_can_move_to': 'on',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        column.refresh_from_db()
+        self.assertEqual(column.name, 'Backlog klienta')
+        self.assertTrue(column.employee_can_move_to)
+        self.assertFalse(column.client_can_edit_tasks)
+
+    def test_management_can_open_board_column_settings_page(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        column = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('update_column', args=[column.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="name"')
+        self.assertContains(response, 'name="client_can_move_to"')
+        self.assertContains(response, 'name="employee_can_edit_tasks"')
+        self.assertContains(response, 'name="lead_can_delete_tasks"')
+
+    def test_management_can_allow_employee_to_move_to_custom_column(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        todo = BoardColumn.objects.create(project=project, name='Start', position=0, employee_can_move_to=True, employee_can_edit_tasks=True)
+        custom = BoardColumn.objects.create(project=project, name='QA', position=1)
+        task = Task.objects.create(project=project, column=todo, title='Task for employee')
+
+        self.client.force_login(manager)
+        self.client.post(reverse('update_column', args=[custom.id]), {
+            'name': 'QA',
+            'employee_can_move_to': 'on',
+            'employee_can_edit_tasks': 'on',
+            'lead_can_move_to': 'on',
+            'lead_can_edit_tasks': 'on',
+        })
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('move_task', args=[task.id]), {'column': custom.id})
+
+        self.assertEqual(response.status_code, 200)
+        task.refresh_from_db()
+        self.assertEqual(task.column, custom)
 
     def test_kanban_does_not_recreate_default_columns_after_customization(self):
         manager = User.objects.create_user(username='manager', password='pass')

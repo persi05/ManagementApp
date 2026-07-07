@@ -7,12 +7,16 @@ from .models import BoardColumn
 DEFAULT_BOARD_COLUMNS = ['Do zrobienia', 'W trakcie', 'Review', 'Zakonczone']
 
 
+def default_permissions_for_position(position):
+    return BoardColumn.default_permissions_for_position(position)
+
+
 def ensure_default_columns(project):
     for position, name in enumerate(DEFAULT_BOARD_COLUMNS):
         BoardColumn.objects.get_or_create(
             project=project,
             name=name,
-            defaults={'position': position},
+            defaults={'position': position, **default_permissions_for_position(position)},
         )
 
 
@@ -32,24 +36,36 @@ def project_role_for(user, project):
     return user_role(user)
 
 
-def task_move_limit(user, project):
-    role = project_role_for(user, project)
-    if role == UserProfile.Role.CLIENT:
+def column_permission_field(role, action):
+    role_prefix = {
+        UserProfile.Role.CLIENT: 'client',
+        UserProfile.Role.EMPLOYEE: 'employee',
+        ProjectAssignment.ProjectRole.LEAD: 'lead',
+    }.get(role)
+    if role_prefix is None:
         return None
-    if role == ProjectAssignment.ProjectRole.LEAD:
-        return 3
-    if role == UserProfile.Role.EMPLOYEE:
-        return 2
-    return 3
+    return f'{role_prefix}_can_{action}'
+
+
+def column_allows(role, column, action):
+    field_name = column_permission_field(role, action)
+    if field_name is None:
+        return False
+    return bool(getattr(column, field_name, False))
+
+
+def can_move_to_column(user, project, column):
+    if not user.is_authenticated or project.id != column.project_id:
+        return False
+    if is_management(user):
+        return True
+    return column_allows(project_role_for(user, project), column, 'move_to')
 
 
 def can_move_task_to_column(user, task, column):
     if not user.is_authenticated or task.project_id != column.project_id:
         return False
-    limit = task_move_limit(user, task.project)
-    if limit is None:
-        return False
-    return column.position <= limit
+    return can_move_to_column(user, task.project, column)
 
 
 def can_edit_task(user, task):
@@ -58,20 +74,18 @@ def can_edit_task(user, task):
     if is_management(user):
         return True
 
-    role = project_role_for(user, task.project)
-    if role == UserProfile.Role.CLIENT:
-        return task.column.position == 0
-    if role == ProjectAssignment.ProjectRole.LEAD:
-        return task.column.position in {0, 1, 2}
-    if role == UserProfile.Role.EMPLOYEE:
-        return task.column.position in {0, 1}
-    return False
+    return column_allows(project_role_for(user, task.project), task.column, 'edit_tasks')
 
 
 def can_delete_task(user, task):
-    if not can_edit_task(user, task):
+    if not user.is_authenticated:
         return False
-    return is_management(user) or task.created_by_id == user.id
+    if is_management(user):
+        return True
+    if task.created_by_id != user.id:
+        return False
+    role = project_role_for(user, task.project)
+    return column_allows(role, task.column, 'delete_tasks')
 
 
 def can_edit_task_fields(user, task):

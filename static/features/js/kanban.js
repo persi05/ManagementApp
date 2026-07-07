@@ -3,20 +3,22 @@
     || document.cookie.split('; ').find((row) => row.startsWith('csrftoken='))?.split('=')[1]
     || '';
   const board = document.querySelector('.kanban-board');
-  const maxMovePosition = board?.dataset?.maxMovePosition === undefined || board?.dataset?.maxMovePosition === ''
-    ? null
-    : Number(board.dataset.maxMovePosition);
 
   function refreshColumn(column) {
     if (!column) return;
     const taskCount = column.querySelectorAll('.kanban-card').length;
     const counter = column.querySelector('.column-count');
-    const deleteForm = column.querySelector('.delete-column-form');
     if (counter) {
       counter.textContent = String(taskCount);
     }
+    const modal = document.querySelector(`#edit-column-${column.dataset.column}`);
+    const deleteForm = modal?.querySelector('.delete-column-form');
+    const deleteNote = modal?.querySelector('.delete-column-note');
     if (deleteForm) {
       deleteForm.classList.toggle('is-hidden', taskCount > 0);
+    }
+    if (deleteNote) {
+      deleteNote.classList.toggle('is-hidden', taskCount === 0);
     }
   }
 
@@ -45,24 +47,47 @@
 
   const addColumnToggle = document.querySelector('.add-column-toggle');
   const addColumnPanel = document.querySelector('#add-column-panel');
-  function openAddColumnModal() {
-    addColumnPanel?.classList.remove('is-hidden');
-    addColumnToggle?.setAttribute('aria-expanded', 'true');
-    addColumnPanel?.querySelector('input[name="name"]')?.focus();
+  let activeModal = null;
+
+  function openModal(modal) {
+    if (!modal) return;
+    activeModal = modal;
+    modal.classList.remove('is-hidden');
+    modal.querySelector('input, button, textarea, select')?.focus();
   }
 
-  function closeAddColumnModal() {
-    addColumnPanel?.classList.add('is-hidden');
-    addColumnToggle?.setAttribute('aria-expanded', 'false');
+  function closeModal(modal = activeModal) {
+    modal?.classList.add('is-hidden');
+    if (modal === activeModal) {
+      activeModal = null;
+    }
   }
 
-  addColumnToggle?.addEventListener('click', openAddColumnModal);
+  addColumnToggle?.addEventListener('click', () => {
+    addColumnToggle.setAttribute('aria-expanded', 'true');
+    openModal(addColumnPanel);
+  });
   document.querySelectorAll('[data-close-add-column]').forEach((item) => {
-    item.addEventListener('click', closeAddColumnModal);
+    item.addEventListener('click', () => {
+      addColumnToggle?.setAttribute('aria-expanded', 'false');
+      closeModal(addColumnPanel);
+    });
+  });
+  document.querySelectorAll('[data-open-modal]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      openModal(document.querySelector(`#${button.dataset.openModal}`));
+    });
+  });
+  document.querySelectorAll('[data-close-modal]').forEach((item) => {
+    item.addEventListener('click', () => closeModal(item.closest('.kanban-modal')));
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
-      closeAddColumnModal();
+      if (activeModal === addColumnPanel) {
+        addColumnToggle?.setAttribute('aria-expanded', 'false');
+      }
+      closeModal();
     }
   });
 
@@ -78,8 +103,7 @@
     column.addEventListener('dragover', (event) => event.preventDefault());
     column.addEventListener('drop', async (event) => {
       event.preventDefault();
-      const targetPosition = Number(column.dataset.columnPosition);
-      if (Number.isFinite(maxMovePosition) && targetPosition > maxMovePosition) {
+      if (column.dataset.canAccept !== 'true') {
         return;
       }
       const card = document.querySelector(`.kanban-card[data-task="${event.dataTransfer.getData('text/plain')}"]`);

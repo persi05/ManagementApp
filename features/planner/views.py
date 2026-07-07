@@ -213,7 +213,10 @@ def leave_request_list_queryset(user, start_date, end_date):
     qs = leave_request_base_queryset(start_date, end_date)
     if is_management(user):
         return qs
-    return qs.filter(user=user)
+    return qs.filter(user=user).exclude(
+        status=LeaveRequest.Status.REJECTED,
+        read_at__isnull=False,
+    )
 
 
 def sorted_leave_requests(requests):

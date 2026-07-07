@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Edycja kolumny - Dcode Management{% endblock %}
+{% block heading %}Edycja kolumny{% endblock %}
+{% block eyebrow %}{{ project.name }} / {{ column.name }}{% endblock %}
+{% block top_actions %}
+  <a class="ghost-btn" href="{% url 'kanban_project' project.id %}">Wroc do Kanban</a>
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Ustawienia kolumny</h2>
+      <p>Zmien nazwe i prawa dla rol w tej zakladce.</p>
+    </div>
+  </div>
+  <form method="post" class="grid-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary-btn">Zapisz</button>
+  </form>
+</section>
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Usuwanie</h2>
+      <p>Kolumne mozna usunac tylko wtedy, gdy jest pusta i projekt ma jeszcze inna kolumne.</p>
+    </div>
+  </div>
+  {% if can_delete_column %}
+    <form method="post" action="{% url 'delete_column' column.id %}">
+      {% csrf_token %}
+      <button class="danger-btn">Usun kolumne</button>
+    </form>
+  {% else %}
+    <p class="empty">Tej kolumny nie mozna teraz usunac.</p>
+  {% endif %}
+</section>
+{% endblock %}
