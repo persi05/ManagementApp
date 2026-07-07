@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="{% static 'features/app.css' %}?v=20260703-2">
   <script defer src="{% static 'features/js/kanban.js' %}?v=20260703-2"></script>
   <script defer src="{% static 'features/js/timer.js' %}?v=20260703-2"></script>
+  <script defer src="{% static 'features/js/calendar.js' %}?v=20260703-2"></script>
 </head>
 <body>
   <div class="shell">
@@ -23,6 +24,7 @@
           <a href="{% url 'projects' %}">Projekty</a>
           {% if user.is_superuser or user.profile.role == 'management' %}<a href="{% url 'employees' %}">Pracownicy</a>{% endif %}
           <a href="{% url 'kanban' %}">Kanban</a>
+          <a href="{% url 'calendar' %}">Kalendarz</a>
           {% if user.profile.role != 'client' %}
             <a href="{% url 'time_entries' %}">Czas pracy</a>
             <a href="{% url 'worklogs' %}">Worklogi</a>

@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -14,6 +14,7 @@ from features.employees.services import save_hourly_rate
 from features.projects.forms import ProjectAssignmentForm
 from features.projects.models import Project, ProjectAssignment
 from features.projects.selectors import visible_projects
+from features.planner.models import LeaveRequest
 from features.tasks.models import BoardColumn, Task, TaskWorklog
 from features.time_tracking.models import TimeEntry, WorkSession
 
@@ -28,6 +29,7 @@ class RoutingTests(TestCase):
         self.assertEqual(reverse('projects'), '/app/projects/')
         self.assertEqual(reverse('employees'), '/app/employees/')
         self.assertEqual(reverse('time_entries'), '/app/time-entries/')
+        self.assertEqual(reverse('calendar'), '/app/calendar/')
 
 
 class RegistrationTests(TestCase):
@@ -223,6 +225,80 @@ class ExportPdfTests(TestCase):
 
         self.assertContains(response, 'Client project')
         self.assertContains(response, '3,50h')
+
+
+class CalendarTests(TestCase):
+    def test_employee_calendar_shows_work_hours_and_task_deadline(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        project = Project.objects.create(name='Calendar project')
+        ProjectAssignment.objects.create(project=project, user=user)
+        column = BoardColumn.objects.create(project=project, name='Todo')
+        day = timezone.localdate().replace(day=5)
+        Task.objects.create(project=project, column=column, title='Deadline task', assignee=user, due_date=day)
+        start = timezone.make_aware(datetime.combine(day, time(hour=9)))
+        TimeEntry.objects.create(
+            user=user,
+            project=project,
+            start=start,
+            end=start + timedelta(hours=8),
+            editable_until=start.replace(hour=23, minute=59),
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('calendar'), {'month': day.strftime('%Y-%m')})
+
+        self.assertContains(response, '8,00h')
+        self.assertContains(response, 'Deadline task')
+
+    def test_employee_can_request_leave(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+
+        self.client.force_login(user)
+        response = self.client.post(reverse('calendar'), {
+            'form': 'leave_request',
+            'start_date': '2026-07-20',
+            'end_date': '2026-07-22',
+            'reason': 'Urlop',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(LeaveRequest.objects.filter(user=user, status=LeaveRequest.Status.PENDING).exists())
+
+    def test_management_calendar_shows_employee_presence(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee = User.objects.create_user(username='employee', first_name='Jan', last_name='Nowak', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        day = timezone.localdate().replace(day=6)
+        start = timezone.make_aware(datetime.combine(day, time(hour=8)))
+        TimeEntry.objects.create(
+            user=employee,
+            start=start,
+            end=start + timedelta(hours=6),
+            editable_until=start.replace(hour=23, minute=59),
+        )
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('calendar'), {'month': day.strftime('%Y-%m')})
+
+        self.assertContains(response, 'Jan Nowak')
+        self.assertContains(response, '6,00h')
+
+    def test_client_calendar_does_not_show_leave_request_form(self):
+        client = User.objects.create_user(username='client', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+
+        self.client.force_login(client)
+        response = self.client.get(reverse('calendar'))
+
+        self.assertNotContains(response, 'Wyślij wniosek')
 
 
 class EmployeeProfileFormTests(TestCase):

@@ -13,12 +13,18 @@
   }
 
   .workspace-grid,
-  .content-split {
+  .content-split,
+  .calendar-side-grid {
     grid-template-columns: 1fr;
   }
 
   .kanban-board {
     grid-template-columns: repeat(4, 280px);
+  }
+
+  .month-board {
+    grid-template-columns: repeat(7, 150px);
+    overflow-x: auto;
   }
 
   .project-strip {
@@ -47,6 +53,10 @@
 
   .topbar {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .calendar-hero {
     flex-direction: column;
   }
 

@@ -1,0 +1,367 @@
+.calendar-nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.calendar-page {
+  display: grid;
+  gap: 14px;
+}
+
+.calendar-hero {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  box-shadow: var(--shadow);
+}
+
+.calendar-kicker {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 4px;
+}
+
+.calendar-hero h2 {
+  margin: 0;
+  font-size: 24px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.calendar-hero p {
+  color: var(--muted);
+  margin: 6px 0 0;
+}
+
+.month-code {
+  font-weight: 900;
+}
+
+.month-name {
+  color: var(--accent);
+  background: var(--accentSoft);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.calendar-help {
+  background: #ecfff4;
+  border: 1px solid #98f5bd;
+  border-radius: 8px;
+  padding: 11px 13px;
+  color: #105c38;
+  box-shadow: 0 10px 26px rgba(22, 138, 82, .12);
+}
+
+.calendar-help strong {
+  margin-right: 6px;
+}
+
+.calendar-month-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.calendar-legend {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.calendar-legend span {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legend-dot.work {
+  background: var(--ok);
+}
+
+.legend-dot.task {
+  background: var(--accent2);
+}
+
+.legend-dot.leave {
+  background: var(--warn);
+}
+
+.legend-dot.today {
+  background: #20ff7a;
+  box-shadow: 0 0 0 3px rgba(32, 255, 122, .22);
+}
+
+.legend-dot.selected {
+  background: #111b22;
+}
+
+.month-board {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(138px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.month-weekday {
+  background: #f8fafc;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 11px 12px;
+  min-height: 40px;
+}
+
+.day-card {
+  min-height: 168px;
+  background: #fff;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+.day-card.outside-month {
+  background: #f3f6f8;
+  color: var(--faint);
+}
+
+.day-card.is-today::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 3px solid #20ff7a;
+  box-shadow: inset 0 0 0 1px #ffffff, 0 0 18px rgba(32, 255, 122, .68);
+  pointer-events: none;
+}
+
+.day-card.selectable-day {
+  cursor: pointer;
+}
+
+.day-card.selectable-day:hover {
+  background: #f8fffb;
+}
+
+.day-card.is-selected {
+  background: #effff5;
+  box-shadow: inset 0 0 0 3px #111b22, 0 12px 26px rgba(17, 27, 34, .12);
+}
+
+.day-card.is-selected::after {
+  content: "wybrane";
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  background: #111b22;
+  color: #fff;
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+
+.day-card.has-work {
+  background: linear-gradient(180deg, #f0fbf5 0%, #fff 68%);
+}
+
+.day-card.has-tasks {
+  box-shadow: inset 4px 0 0 #9fb8df;
+}
+
+.day-card.has-leave {
+  box-shadow: inset 4px 0 0 #e4ba5e;
+}
+
+.day-card.has-tasks.has-leave {
+  box-shadow: inset 4px 0 0 #9fb8df, inset 8px 0 0 #e4ba5e;
+}
+
+.day-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.day-card-header strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.day-card-header small {
+  color: var(--muted);
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.day-total {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 4px 7px;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.day-notes {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+}
+
+.note-card {
+  display: block;
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.25;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.note-card b {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: 2px;
+}
+
+.note-work {
+  background: #ddf4e8;
+  color: #12623d;
+}
+
+.note-task {
+  background: #e5edf9;
+  color: #1d477f;
+}
+
+.note-leave {
+  background: #fff3d4;
+  color: #83510c;
+}
+
+.note-leave.approved {
+  background: #e8f7ee;
+  color: var(--ok);
+}
+
+.note-leave.rejected {
+  background: #f8e2e2;
+  color: var(--bad);
+}
+
+.note-more {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  padding-left: 2px;
+}
+
+.calendar-side-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 16px;
+  align-items: start;
+  margin-top: 16px;
+}
+
+.leave-card h2 {
+  margin: 0;
+}
+
+.leave-card.is-hidden {
+  display: none;
+}
+
+.leave-list {
+  display: grid;
+  gap: 8px;
+}
+
+.leave-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  background: #fff;
+}
+
+.leave-row.pending {
+  border-color: #ead09a;
+  background: #fffaf0;
+}
+
+.leave-row.approved {
+  border-color: #b9dfc9;
+  background: #f2fbf6;
+}
+
+.leave-row.rejected {
+  border-color: #e7b3b3;
+  background: #fff6f6;
+}
+
+.leave-row strong,
+.leave-row small {
+  display: block;
+}
+
+.leave-row small {
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.leave-row p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
