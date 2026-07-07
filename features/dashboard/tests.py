@@ -531,7 +531,7 @@ class KanbanRenderingTests(TestCase):
         client.profile.save()
         project = Project.objects.create(name='Client project', client=client)
         todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
-        task = Task.objects.create(project=project, column=todo, title='Initial title')
+        task = Task.objects.create(project=project, column=todo, title='Initial title', created_by=client)
 
         self.client.force_login(client)
         response = self.client.post(reverse('edit_task', args=[task.id]), {
@@ -554,7 +554,7 @@ class KanbanRenderingTests(TestCase):
         project = Project.objects.create(name='Employee project')
         ProjectAssignment.objects.create(project=project, user=employee)
         doing = BoardColumn.objects.create(project=project, name='W trakcie', position=1)
-        task = Task.objects.create(project=project, column=doing, title='Initial title')
+        task = Task.objects.create(project=project, column=doing, title='Initial title', created_by=employee)
 
         self.client.force_login(employee)
         response = self.client.post(reverse('edit_task', args=[task.id]), {
@@ -569,6 +569,60 @@ class KanbanRenderingTests(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.priority, 'high')
         self.assertTrue(TaskEditNote.objects.filter(task=task, user=employee, content='Zmieniono treść').exists())
+
+    def test_employee_can_edit_todo_task(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Employee project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        task = Task.objects.create(project=project, column=todo, title='Initial title', created_by=employee)
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('edit_task', args=[task.id]), {
+            'title': 'Todo updated',
+            'description': 'Updated description',
+            'due_date': '',
+            'priority': 'medium',
+            'change_note': '',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        task.refresh_from_db()
+        self.assertEqual(task.title, 'Todo updated')
+
+    def test_employee_non_owner_can_add_note_but_cannot_change_task_fields(self):
+        owner = User.objects.create_user(username='owner', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        owner.profile.role = UserProfile.Role.EMPLOYEE
+        owner.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Employee project')
+        ProjectAssignment.objects.create(project=project, user=owner)
+        ProjectAssignment.objects.create(project=project, user=employee)
+        doing = BoardColumn.objects.create(project=project, name='W trakcie', position=1)
+        task = Task.objects.create(project=project, column=doing, title='Initial title', priority='medium', created_by=owner)
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('edit_task', args=[task.id]), {
+            'title': 'Changed by non owner',
+            'description': 'Changed description',
+            'due_date': '',
+            'priority': 'high',
+            'change_note': 'Tylko notatka',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        task.refresh_from_db()
+        self.assertEqual(task.title, 'Initial title')
+        self.assertEqual(task.priority, 'medium')
+        self.assertTrue(TaskEditNote.objects.filter(task=task, user=employee, content='Tylko notatka').exists())
+
+        edit_page = self.client.get(reverse('edit_task', args=[task.id]))
+        self.assertContains(edit_page, 'readonly-field')
+        self.assertContains(edit_page, 'Initial title')
 
     def test_employee_cannot_edit_review_task(self):
         employee = User.objects.create_user(username='employee', password='pass')
@@ -595,7 +649,7 @@ class KanbanRenderingTests(TestCase):
         ProjectAssignment.objects.create(project=project, user=lead, project_role=ProjectAssignment.ProjectRole.LEAD)
         review = BoardColumn.objects.create(project=project, name='Review', position=2)
         done = BoardColumn.objects.create(project=project, name='Zakończone', position=3)
-        review_task = Task.objects.create(project=project, column=review, title='Review task')
+        review_task = Task.objects.create(project=project, column=review, title='Review task', created_by=lead)
         done_task = Task.objects.create(project=project, column=done, title='Done task')
 
         self.client.force_login(lead)
@@ -616,3 +670,124 @@ class KanbanRenderingTests(TestCase):
 
         self.assertEqual(delete_response.status_code, 302)
         self.assertFalse(Task.objects.filter(pk=done_task.pk).exists())
+
+    def test_non_management_can_delete_only_own_task(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        other = User.objects.create_user(username='other', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        other.profile.role = UserProfile.Role.EMPLOYEE
+        other.profile.save()
+        project = Project.objects.create(name='Employee project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        ProjectAssignment.objects.create(project=project, user=other)
+        todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        own_task = Task.objects.create(project=project, column=todo, title='Own task', created_by=employee)
+        other_task = Task.objects.create(project=project, column=todo, title='Other task', created_by=other)
+
+        self.client.force_login(employee)
+        forbidden = self.client.post(reverse('delete_task', args=[other_task.id]))
+        allowed = self.client.post(reverse('delete_task', args=[own_task.id]))
+
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(allowed.status_code, 302)
+        self.assertTrue(Task.objects.filter(pk=other_task.pk).exists())
+        self.assertFalse(Task.objects.filter(pk=own_task.pk).exists())
+
+    def test_client_can_delete_only_own_todo_task(self):
+        client = User.objects.create_user(username='client', password='pass')
+        other_client = User.objects.create_user(username='other_client', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        other_client.profile.role = UserProfile.Role.CLIENT
+        other_client.profile.save()
+        project = Project.objects.create(name='Client project', client=client)
+        ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
+        ProjectAssignment.objects.create(project=project, user=other_client, project_role=ProjectAssignment.ProjectRole.CLIENT)
+        todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        own_task = Task.objects.create(project=project, column=todo, title='Own client task', created_by=client)
+        other_task = Task.objects.create(project=project, column=todo, title='Other client task', created_by=other_client)
+
+        self.client.force_login(client)
+        forbidden = self.client.post(reverse('delete_task', args=[other_task.id]))
+        allowed = self.client.post(reverse('delete_task', args=[own_task.id]))
+
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(allowed.status_code, 302)
+        self.assertTrue(Task.objects.filter(pk=other_task.pk).exists())
+        self.assertFalse(Task.objects.filter(pk=own_task.pk).exists())
+
+    def test_management_can_add_board_column(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('kanban_project', args=[project.id]), {
+            'form': 'board_column',
+            'name': 'Blocked',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(BoardColumn.objects.filter(project=project, name='Blocked').exists())
+
+    def test_management_can_create_and_render_task_labels(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        column = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('kanban_project', args=[project.id]), {
+            'project': project.id,
+            'column': column.id,
+            'title': 'Task with labels',
+            'description': 'Opis',
+            'due_date': '',
+            'priority': 'medium',
+            'labels': 'pilne, backend',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        task = Task.objects.get(title='Task with labels')
+        self.assertEqual(task.labels, 'pilne, backend')
+        board = self.client.get(reverse('kanban_project', args=[project.id]))
+        self.assertContains(board, 'pilne')
+        self.assertContains(board, 'backend')
+
+    def test_assigned_employee_can_edit_labels_but_client_cannot_see_label_field(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        client = User.objects.create_user(username='client', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Project', client=client)
+        ProjectAssignment.objects.create(project=project, user=employee)
+        ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
+        doing = BoardColumn.objects.create(project=project, name='W trakcie', position=1)
+        todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        assigned_task = Task.objects.create(project=project, column=doing, title='Assigned task', assignee=employee)
+        client_task = Task.objects.create(project=project, column=todo, title='Client task', created_by=client)
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('edit_task', args=[assigned_task.id]), {
+            'title': 'Assigned task',
+            'description': '',
+            'due_date': '',
+            'priority': 'medium',
+            'labels': 'frontend',
+            'change_note': '',
+        })
+        assigned_task.refresh_from_db()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(assigned_task.labels, 'frontend')
+
+        self.client.force_login(client)
+        edit_page = self.client.get(reverse('edit_task', args=[client_task.id]))
+
+        self.assertNotContains(edit_page, 'Etykiety')

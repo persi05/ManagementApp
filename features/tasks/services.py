@@ -54,12 +54,24 @@ def can_edit_task(user, task):
     role = project_role_for(user, task.project)
     if role == UserProfile.Role.CLIENT:
         return task.column.position == 0
-    if role == UserProfile.Role.EMPLOYEE:
-        return task.column.position == 1
     if role == ProjectAssignment.ProjectRole.LEAD:
-        return task.column.position == 2
+        return task.column.position in {0, 1, 2}
+    if role == UserProfile.Role.EMPLOYEE:
+        return task.column.position in {0, 1}
     return False
 
 
 def can_delete_task(user, task):
-    return can_edit_task(user, task)
+    if not can_edit_task(user, task):
+        return False
+    return is_management(user) or task.created_by_id == user.id
+
+
+def can_edit_task_fields(user, task):
+    return user.is_authenticated and (is_management(user) or task.created_by_id == user.id)
+
+
+def can_edit_task_labels(user, task):
+    if is_management(user):
+        return True
+    return user.is_authenticated and task.assignee_id == user.id

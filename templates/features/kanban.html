@@ -21,6 +21,13 @@
           <article class="kanban-card" draggable="{% if can_move_tasks %}true{% else %}false{% endif %}" data-task="{{ task.id }}" data-move-url="{% url 'move_task' task.id %}">
             <div class="card-top"><span class="priority {{ task.priority }}"></span><strong>{{ task.title }}</strong></div>
             <p>{{ task.description|truncatechars:110 }}</p>
+            {% if task.labels_list %}
+              <div class="tag-row">
+                {% for label in task.labels_list %}
+                  <span>{{ label }}</span>
+                {% endfor %}
+              </div>
+            {% endif %}
             <footer>
               {% if not is_client_view %}
                 <small>
@@ -33,17 +40,9 @@
               {% endif %}
               <small>{{ task.total_hours|floatformat:2 }}h</small>
             </footer>
-            {% if task.can_edit or task.can_move_prev or task.can_move_next %}
+            {% if task.can_edit %}
               <div class="card-actions">
-                {% if task.can_move_prev %}
-                  <button type="button" class="ghost-btn tiny-btn kanban-shift-btn" data-direction="prev" aria-label="Przesuń w lewo">‹</button>
-                {% endif %}
-                {% if task.can_move_next %}
-                  <button type="button" class="ghost-btn tiny-btn kanban-shift-btn" data-direction="next" aria-label="Przesuń w prawo">›</button>
-                {% endif %}
-                {% if task.can_edit %}
-                  <a class="ghost-btn tiny-btn" href="{% url 'edit_task' task.id %}">Edytuj</a>
-                {% endif %}
+                <a class="ghost-btn tiny-btn" href="{% url 'edit_task' task.id %}">Edytuj</a>
               </div>
             {% endif %}
           </article>
@@ -58,6 +57,17 @@
     </div>
   {% endfor %}
 </section>
+{% if can_manage_board %}
+  <section class="panel">
+    <div class="panel-head"><div><h2>Dodaj kolumnę</h2><p>Nowa kolumna pojawi się na końcu tablicy.</p></div></div>
+    <form method="post" class="inline-form">
+      {% csrf_token %}
+      <input type="hidden" name="form" value="board_column">
+      {{ column_form.as_p }}
+      <button class="primary-btn">Dodaj kolumnę</button>
+    </form>
+  </section>
+{% endif %}
 <section class="panel" id="new-task">
   <div class="panel-head"><div><h2>Utwórz nowe zadanie</h2><p>Wypełnij szczegóły i dodaj kartę do tablicy.</p></div></div>
   <form method="post" class="grid-form">{% csrf_token %}{{ form.as_p }}<button class="primary-btn">Dodaj zadanie</button></form>
