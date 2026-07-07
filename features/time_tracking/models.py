@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import datetime, time, timedelta
 
 from django.conf import settings
 from django.db import models
@@ -6,6 +7,28 @@ from django.utils import timezone
 
 from features.projects.models import Project
 from features.tasks.models import Task
+
+
+def local_day_end(value):
+    local_value = timezone.localtime(value) if hasattr(value, 'tzinfo') and value.tzinfo else value
+    local_date = local_value.date() if isinstance(local_value, datetime) else local_value
+    return timezone.make_aware(datetime.combine(local_date, time.max))
+
+
+def employee_time_entry_edit_deadline(start):
+    local_start = timezone.localtime(start)
+    days = 3 if local_start.weekday() == 4 else 1
+    return local_day_end(local_start.date() + timedelta(days=days))
+
+
+def month_edit_deadline(value):
+    local_value = timezone.localtime(value) if isinstance(value, datetime) else value
+    local_date = local_value.date() if isinstance(local_value, datetime) else local_value
+    if local_date.month == 12:
+        next_month = local_date.replace(year=local_date.year + 1, month=1, day=1)
+    else:
+        next_month = local_date.replace(month=local_date.month + 1, day=1)
+    return timezone.make_aware(datetime.combine(next_month, time.min)) - timedelta(microseconds=1)
 
 
 class TimeEntry(models.Model):
@@ -44,7 +67,10 @@ class TimeEntry(models.Model):
     def can_be_edited_by(self, user):
         from features.accounts.models import is_management
 
-        return is_management(user) or (self.user_id == user.id and timezone.now() <= self.editable_until)
+        now = timezone.now()
+        if is_management(user):
+            return now <= month_edit_deadline(self.start)
+        return self.user_id == user.id and now <= self.editable_until
 
 
 class WorkSession(models.Model):

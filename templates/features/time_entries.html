@@ -1,15 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Czas pracy - Dcode Management{% endblock %}
 {% block heading %}Czas pracy{% endblock %}
-{% block eyebrow %}Sesje automatyczne i korekty{% endblock %}
+{% block eyebrow %}Realny czas pracy do rozliczen{% endblock %}
 {% block content %}
+<div class="tabs">
+  <a class="active" href="{% url 'time_entries' %}">Czas pracy</a>
+  <a href="{% url 'worklogs' %}">Czas zadan / Czas dla klienta</a>
+</div>
 <section class="content-split">
   <div class="panel">
     <div class="panel-head">
       <div>
         <h2>Historia</h2>
-        <p>Pracownik dodaje i koryguje własne wpisy czasu pracy. Każdy wpis musi mieć godzinę rozpoczęcia i zakończenia.</p>
+        <p>Ten czas sluzy do rozliczania pracownika i nie jest czasem raportowanym klientowi przy zadaniach.</p>
       </div>
+      <p class="panel-summary"><strong>Suma godzin:</strong> {{ total_hours|floatformat:2 }}h</p>
     </div>
     <form class="filter-bar">
       <input type="month" name="month" value="{{ month }}">
@@ -17,7 +22,9 @@
     </form>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Od</th><th>Do</th><th>Godziny</th><th>Projekt</th><th>Źródło</th></tr></thead>
+        <thead>
+          <tr><th>Data</th><th>Od</th><th>Do</th><th>Godziny</th><th>Projekt</th><th>Zrodlo</th><th></th></tr>
+        </thead>
         <tbody>
           {% for entry in entries %}
             <tr>
@@ -27,9 +34,10 @@
               <td>{{ entry.hours|floatformat:2 }}</td>
               <td>{{ entry.project.name|default:"-" }}</td>
               <td>{{ entry.get_source_display }}</td>
+              <td>{% if entry.can_edit %}<a class="ghost-btn small-btn" href="{% url 'edit_time_entry' entry.id %}">Edytuj</a>{% endif %}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="6">Brak wpisów.</td></tr>
+            <tr><td colspan="7">Brak wpisow.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -37,9 +45,9 @@
   </div>
   <form method="post" class="form-card compact">
     {% csrf_token %}
-    <h2>Dodaj czas ręcznie</h2>
+    <h2>Dodaj czas pracy</h2>
     {{ form.as_p }}
-    <button class="primary-btn full">Zapisz czas</button>
+    <button class="primary-btn full">Zapisz czas pracy</button>
   </form>
 </section>
 {% endblock %}

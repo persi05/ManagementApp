@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import datetime, time, timedelta
 
 from django.conf import settings
 from django.db import models
@@ -156,6 +157,26 @@ class TaskWorklog(models.Model):
 
     def __str__(self):
         return f'{self.task}: {self.hours}h'
+
+    @staticmethod
+    def employee_edit_deadline(worklog_date):
+        return timezone.make_aware(datetime.combine(worklog_date, time.max))
+
+    @staticmethod
+    def management_edit_deadline(worklog_date):
+        if worklog_date.month == 12:
+            next_month = worklog_date.replace(year=worklog_date.year + 1, month=1, day=1)
+        else:
+            next_month = worklog_date.replace(month=worklog_date.month + 1, day=1)
+        return timezone.make_aware(datetime.combine(next_month, time.min)) - timedelta(microseconds=1)
+
+    def can_be_edited_by(self, user):
+        from features.accounts.models import is_management
+
+        now = timezone.now()
+        if is_management(user):
+            return now <= self.management_edit_deadline(self.date)
+        return self.user_id == user.id and now <= self.employee_edit_deadline(self.date)
 
 
 class Comment(models.Model):

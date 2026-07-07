@@ -1,9 +1,10 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.db.models import Max
+from django.db.models import Max, Sum
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from features.accounts.models import UserProfile, is_management, user_role
@@ -223,18 +224,27 @@ def worklogs(request):
     if forbidden:
         return forbidden
 
+    projects_qs = visible_projects(request.user)
+    selected_project_id = optional_pk(request.POST.get('project') or request.GET.get('project'))
+    selected_project = get_object_or_404(projects_qs, pk=selected_project_id) if selected_project_id else projects_qs.first()
+    task_qs = visible_tasks(request.user)
+    if selected_project:
+        task_qs = task_qs.filter(project=selected_project)
+    else:
+        task_qs = task_qs.none()
+
     if request.method == 'POST':
         form = WorklogForm(request.POST)
-        form.fields['task'].queryset = visible_tasks(request.user)
+        form.fields['task'].queryset = task_qs
         if form.is_valid():
             worklog = form.save(commit=False)
             worklog.user = request.user
             worklog.save()
             messages.success(request, 'Worklog zostal dodany.')
-            return redirect('worklogs')
+            return redirect(f"{reverse('worklogs')}?project={worklog.task.project_id}")
     else:
         form = WorklogForm()
-        form.fields['task'].queryset = visible_tasks(request.user)
+        form.fields['task'].queryset = task_qs
 
     qs = TaskWorklog.objects.select_related('task', 'task__project', 'user')
     if is_management(request.user):
@@ -243,7 +253,51 @@ def worklogs(request):
         qs = qs.filter(task__project__in=visible_projects(request.user), visible_to_client=True)
     else:
         qs = qs.filter(user=request.user)
-    return render(request, 'features/worklogs.html', {'worklogs': qs[:100], 'form': form, 'role': user_role(request.user)})
+    if selected_project:
+        qs = qs.filter(task__project=selected_project)
+    else:
+        qs = qs.none()
+    total_hours = qs.aggregate(total=Sum('hours'))['total'] or 0
+    worklog_items = list(qs[:100])
+    for item in worklog_items:
+        item.can_edit = item.can_be_edited_by(request.user)
+    return render(request, 'features/worklogs.html', {
+        'worklogs': worklog_items,
+        'form': form,
+        'role': user_role(request.user),
+        'projects': projects_qs,
+        'selected_project': selected_project,
+        'total_hours': total_hours,
+    })
+
+
+@login_required
+def edit_worklog(request, worklog_id):
+    forbidden = worker_required(request.user)
+    if forbidden:
+        return forbidden
+
+    qs = TaskWorklog.objects.select_related('task', 'task__project', 'user')
+    if is_management(request.user):
+        pass
+    else:
+        qs = qs.filter(user=request.user)
+    worklog = get_object_or_404(qs, pk=worklog_id)
+    if not worklog.can_be_edited_by(request.user):
+        return HttpResponseForbidden('Nie mozna juz edytowac tego czasu zadania.')
+
+    if request.method == 'POST':
+        form = WorklogForm(request.POST, instance=worklog)
+        form.fields['task'].queryset = visible_tasks(request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Czas zadania zostal zaktualizowany.')
+            return redirect('worklogs')
+    else:
+        form = WorklogForm(instance=worklog)
+        form.fields['task'].queryset = visible_tasks(request.user)
+
+    return render(request, 'features/worklog_edit.html', {'worklog': worklog, 'form': form})
 
 
 @login_required
@@ -251,6 +305,8 @@ def worklogs(request):
 def toggle_worklog_visibility(request, worklog_id):
     qs = TaskWorklog.objects.all() if is_management(request.user) else TaskWorklog.objects.filter(user=request.user)
     worklog = get_object_or_404(qs, pk=worklog_id)
+    if not worklog.can_be_edited_by(request.user):
+        return HttpResponseForbidden('Nie mozna juz edytowac tego czasu zadania.')
     worklog.visible_to_client = not worklog.visible_to_client
     worklog.save(update_fields=['visible_to_client'])
     return redirect('worklogs')
