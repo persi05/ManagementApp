@@ -30,18 +30,17 @@
     </section>
   </div>
 {% endif %}
-<section class="kanban-board" {% if board_move_limit is not None %}data-max-move-position="{{ board_move_limit }}"{% endif %}>
+<section class="kanban-board">
   {% for column in columns %}
-    <div class="kanban-column" data-column="{{ column.id }}" data-column-position="{{ column.position }}">
+    <div class="kanban-column" data-column="{{ column.id }}" data-can-accept="{% if column.can_accept_tasks %}true{% else %}false{% endif %}">
       <header>
-        <span>{{ column.name }}</span>
+        <div class="column-title-wrap">
+          <span class="column-title">{{ column.name }}</span>
+        </div>
         <div class="column-actions">
           <small class="column-count">{{ column.tasks.all|length }}</small>
           {% if can_manage_board %}
-            <form method="post" action="{% url 'delete_column' column.id %}" class="delete-column-form {% if column.tasks.all %}is-hidden{% endif %}">
-              {% csrf_token %}
-              <button class="ghost-btn tiny-btn" aria-label="Usuń kolumnę {{ column.name }}">Usuń</button>
-            </form>
+            <a class="ghost-btn tiny-btn" href="{% url 'update_column' column.id %}" data-open-modal="edit-column-{{ column.id }}">Edytuj</a>
           {% endif %}
         </div>
       </header>
@@ -76,16 +75,68 @@
             {% endif %}
           </article>
         {% empty %}
-          {% if can_move_tasks %}
-            {% if column.position < 3 or board_move_limit == 3 %}
-              <p class="empty small">Upuść tu zadanie.</p>
-            {% endif %}
+          {% if column.can_accept_tasks %}
+            <p class="empty small">Upuść tu zadanie.</p>
           {% endif %}
         {% endfor %}
       </div>
     </div>
   {% endfor %}
 </section>
+{% if can_manage_board %}
+  {% for column in columns %}
+    <div class="kanban-modal is-hidden" id="edit-column-{{ column.id }}" role="dialog" aria-modal="true" aria-labelledby="edit-column-title-{{ column.id }}">
+      <div class="kanban-modal-backdrop" data-close-modal></div>
+      <section class="kanban-modal-card column-settings-card">
+        <button type="button" class="ghost-btn tiny-btn kanban-modal-close" data-close-modal aria-label="Zamknij">×</button>
+        <div class="panel-head">
+          <div>
+            <h2 id="edit-column-title-{{ column.id }}">Edytuj kolumnę</h2>
+            <p>Ustaw nazwę i uprawnienia dla ról w tym projekcie.</p>
+          </div>
+        </div>
+        <form method="post" action="{% url 'update_column' column.id %}" class="column-settings-form">
+          {% csrf_token %}
+          <p>
+            <label for="column-name-{{ column.id }}">Nazwa kolumny</label>
+            <input id="column-name-{{ column.id }}" type="text" name="name" value="{{ column.name }}" maxlength="80" required>
+          </p>
+          <div class="column-permissions-grid">
+            <div class="column-permissions-head">Rola</div>
+            <div class="column-permissions-head">Przenoszenie</div>
+            <div class="column-permissions-head">Edycja</div>
+            <div class="column-permissions-head">Usuwanie</div>
+
+            <div class="column-role-label">Klient</div>
+            <label><input type="checkbox" name="client_can_move_to" {% if column.client_can_move_to %}checked{% endif %}> <span>Może</span></label>
+            <label><input type="checkbox" name="client_can_edit_tasks" {% if column.client_can_edit_tasks %}checked{% endif %}> <span>Może</span></label>
+            <label><input type="checkbox" name="client_can_delete_tasks" {% if column.client_can_delete_tasks %}checked{% endif %}> <span>Może</span></label>
+
+            <div class="column-role-label">Pracownik</div>
+            <label><input type="checkbox" name="employee_can_move_to" {% if column.employee_can_move_to %}checked{% endif %}> <span>Może</span></label>
+            <label><input type="checkbox" name="employee_can_edit_tasks" {% if column.employee_can_edit_tasks %}checked{% endif %}> <span>Może</span></label>
+            <label><input type="checkbox" name="employee_can_delete_tasks" {% if column.employee_can_delete_tasks %}checked{% endif %}> <span>Może</span></label>
+
+            <div class="column-role-label">Lead</div>
+            <label><input type="checkbox" name="lead_can_move_to" {% if column.lead_can_move_to %}checked{% endif %}> <span>Może</span></label>
+            <label><input type="checkbox" name="lead_can_edit_tasks" {% if column.lead_can_edit_tasks %}checked{% endif %}> <span>Może</span></label>
+            <label><input type="checkbox" name="lead_can_delete_tasks" {% if column.lead_can_delete_tasks %}checked{% endif %}> <span>Może</span></label>
+          </div>
+          <div class="column-settings-actions">
+            <button class="primary-btn">Zapisz</button>
+          </div>
+        </form>
+        <div class="column-danger-zone">
+          <form method="post" action="{% url 'delete_column' column.id %}" class="delete-column-form {% if column.tasks.all %}is-hidden{% endif %}">
+            {% csrf_token %}
+            <button class="ghost-btn tiny-btn" aria-label="Usuń kolumnę {{ column.name }}">Usuń kolumnę</button>
+          </form>
+          <p class="empty small delete-column-note {% if not column.tasks.all %}is-hidden{% endif %}">Kolumnę można usunąć dopiero, gdy nie ma w niej zadań.</p>
+        </div>
+      </section>
+    </div>
+  {% endfor %}
+{% endif %}
 <section class="panel" id="new-task">
   <div class="panel-head"><div><h2>Utwórz nowe zadanie</h2><p>Wypełnij szczegóły i dodaj kartę do tablicy.</p></div></div>
   <form method="post" class="grid-form">{% csrf_token %}{{ form.as_p }}<button class="primary-btn">Dodaj zadanie</button></form>

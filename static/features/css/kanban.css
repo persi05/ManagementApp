@@ -114,14 +114,37 @@
   margin-bottom: 10px;
 }
 
+.column-title-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
+.column-title {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: default;
+  word-break: break-word;
+}
+
+.column-title-input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-weight: 800;
+}
+
 .column-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-.column-actions form {
-  margin: 0;
 }
 
 .kanban-dropzone {
@@ -180,4 +203,73 @@
   gap: 6px;
   flex-wrap: wrap;
   margin-top: 10px;
+}
+
+.column-settings-card {
+  width: min(720px, 100%);
+}
+
+.column-settings-form p {
+  margin-bottom: 14px;
+}
+
+.column-settings-form label:first-child,
+.column-settings-form p label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.column-settings-form input[type="text"] {
+  width: 100%;
+}
+
+.column-permissions-grid {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.2fr) repeat(3, minmax(110px, 1fr));
+  gap: 10px 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.column-permissions-head {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.column-role-label {
+  font-weight: 800;
+}
+
+.column-permissions-grid label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.column-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.column-danger-zone {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.column-danger-zone .delete-column-form {
+  margin: 0;
+}
+
+.delete-column-note {
+  margin: 0;
 }
