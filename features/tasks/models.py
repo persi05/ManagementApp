@@ -33,7 +33,6 @@ class Task(models.Model):
     assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
     due_date = models.DateField(null=True, blank=True)
     priority = models.CharField(max_length=12, choices=Priority.choices, default=Priority.MEDIUM)
-    labels = models.CharField(max_length=180, blank=True)
     position = models.PositiveIntegerField(default=0)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_tasks')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -53,10 +52,6 @@ class Task(models.Model):
     @property
     def client_hours(self):
         return self.worklogs.filter(visible_to_client=True).aggregate(total=Sum('hours'))['total'] or Decimal('0')
-
-    @property
-    def labels_list(self):
-        return [label.strip() for label in self.labels.split(',') if label.strip()]
 
 
 class ChecklistItem(models.Model):

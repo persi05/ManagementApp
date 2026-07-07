@@ -130,34 +130,36 @@
     </form>
   {% endif %}
 
-  <article class="panel">
-    <div class="panel-head">
-      <div>
-        <h2>{% if can_review_leave %}Wnioski o wolne{% else %}Moje wnioski{% endif %}</h2>
-        <p>Wnioski nachodzące na wybrany miesiąc.</p>
-      </div>
-    </div>
-    <div class="leave-list">
-      {% for leave in leave_requests %}
-        <div class="leave-row {{ leave.status }}">
-          <div>
-            <strong>{{ leave.user.get_full_name|default:leave.user.username }}</strong>
-            <small>{{ leave.start_date }} - {{ leave.end_date }} / {{ leave.get_status_display }}</small>
-            {% if leave.reason %}<p>{{ leave.reason }}</p>{% endif %}
-          </div>
-          {% if can_review_leave and leave.status == 'pending' %}
-            <form method="post" action="{% url 'update_leave_status' leave.id %}" class="inline-form">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <button class="ghost-btn small-btn" name="status" value="approved">Akceptuj</button>
-              <button class="danger-btn small-btn" name="status" value="rejected">Odrzuć</button>
-            </form>
-          {% endif %}
+  {% if not is_client_view %}
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>{% if can_review_leave %}Wnioski o wolne{% else %}Moje wnioski{% endif %}</h2>
+          <p>Wnioski nachodzące na wybrany miesiąc.</p>
         </div>
-      {% empty %}
-        <p class="empty">Brak wniosków w tym miesiącu.</p>
-      {% endfor %}
-    </div>
-  </article>
+      </div>
+      <div class="leave-list">
+        {% for leave in leave_requests %}
+          <div class="leave-row {{ leave.status }}">
+            <div>
+              <strong>{{ leave.user.get_full_name|default:leave.user.username }}</strong>
+              <small>{{ leave.start_date }} - {{ leave.end_date }} / {{ leave.get_status_display }}</small>
+              {% if leave.reason %}<p>{{ leave.reason }}</p>{% endif %}
+            </div>
+            {% if can_review_leave and leave.status == 'pending' %}
+              <form method="post" action="{% url 'update_leave_status' leave.id %}" class="inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button class="ghost-btn small-btn" name="status" value="approved">Akceptuj</button>
+                <button class="danger-btn small-btn" name="status" value="rejected">Odrzuć</button>
+              </form>
+            {% endif %}
+          </div>
+        {% empty %}
+          <p class="empty">Brak wniosków w tym miesiącu.</p>
+        {% endfor %}
+      </div>
+    </article>
+  {% endif %}
 </section>
 {% endblock %}

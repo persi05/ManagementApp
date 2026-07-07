@@ -33,6 +33,10 @@ textarea {
   margin: 0 0 12px;
 }
 
+.grid-form p:has(textarea) {
+  grid-column: 1 / -1;
+}
+
 .form-card label,
 .grid-form label {
   font-size: 12px;
