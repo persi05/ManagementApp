@@ -21,18 +21,20 @@
       </a>
       {% if user.is_authenticated %}
         <nav class="nav">
-          <a href="{% url 'dashboard' %}">Pulpit</a>
-          <a href="{% url 'projects' %}">Projekty</a>
-          {% if user.is_superuser or user.profile.role == 'management' %}<a href="{% url 'employees' %}">Pracownicy</a>{% endif %}
-          <a href="{% url 'kanban' %}">Kanban</a>
-          <a href="{% url 'calendar' %}">Kalendarz</a>
+          {% with current=request.resolver_match.url_name namespace=request.resolver_match.namespace %}
+          <a class="{% if current == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">Pulpit</a>
+          <a class="{% if current == 'projects' or current == 'project_detail' %}active{% endif %}" href="{% url 'projects' %}">Projekty</a>
+          {% if user.is_superuser or user.profile.role == 'management' %}<a class="{% if current == 'employees' or current == 'employee_detail' %}active{% endif %}" href="{% url 'employees' %}">Pracownicy</a>{% endif %}
+          <a class="{% if current == 'kanban' or current == 'kanban_project' or current == 'edit_task' or current == 'update_column' %}active{% endif %}" href="{% url 'kanban' %}">Kanban</a>
+          <a class="{% if current == 'calendar' %}active{% endif %}" href="{% url 'calendar' %}">Kalendarz</a>
           {% if user.profile.role != 'client' %}
-            <a href="{% url 'time_entries' %}">Czas pracy</a>
-            <a href="{% url 'worklogs' %}">Czas zadan</a>
+            <a class="{% if current == 'time_entries' or current == 'edit_time_entry' %}active{% endif %}" href="{% url 'time_entries' %}">Czas pracy</a>
+            <a class="{% if current == 'worklogs' or current == 'edit_worklog' %}active{% endif %}" href="{% url 'worklogs' %}">Czas zadan</a>
           {% endif %}
-          <a href="{% url 'reports' %}">Raporty</a>
-          <a href="{% url 'accounts:settings' %}">Moje konto</a>
-          {% if user.profile.role == 'management' %}<a href="/admin/">Admin</a>{% endif %}
+          <a class="{% if current == 'reports' %}active{% endif %}" href="{% url 'reports' %}">Raporty</a>
+          <a class="{% if namespace == 'accounts' and current == 'settings' %}active{% endif %}" href="{% url 'accounts:settings' %}">Moje konto</a>
+          {% if user.profile.role == 'management' %}<a class="{% if request.path == '/admin/' %}active{% endif %}" href="/admin/">Admin</a>{% endif %}
+          {% endwith %}
         </nav>
       {% endif %}
       <div class="sidebar-footer">
