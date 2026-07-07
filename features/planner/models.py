@@ -16,6 +16,7 @@ class LeaveRequest(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_leave_requests')
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -32,4 +33,13 @@ class LeaveRequest(models.Model):
         self.status = status
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
-        self.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+        self.read_at = None
+        self.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'read_at'])
+
+    def mark_as_read(self):
+        self.read_at = timezone.now()
+        self.save(update_fields=['read_at'])
+
+    @property
+    def is_past(self):
+        return self.end_date < timezone.localdate()
