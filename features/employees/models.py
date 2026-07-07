@@ -13,6 +13,9 @@ class HourlyRate(models.Model):
 
     class Meta:
         ordering = ['-valid_from']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'valid_from'], name='unique_hourly_rate_per_user_date'),
+        ]
 
     def __str__(self):
         return f'{self.user}: {self.amount} {self.currency} od {self.valid_from}'

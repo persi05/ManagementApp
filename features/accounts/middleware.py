@@ -18,7 +18,7 @@ class LoginRateLimitMiddleware:
             if attempts >= settings.LOGIN_RATE_LIMIT_ATTEMPTS:
                 if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                     return JsonResponse({'error': 'Too many login attempts.'}, status=429)
-                return HttpResponseForbidden('Za duzo prob logowania. Sprobuj ponownie pozniej.')
+                return HttpResponseForbidden('Za dużo prób logowania. Spróbuj ponownie później.')
 
             response = self.get_response(request)
             if response.status_code in {301, 302, 303}:
@@ -48,7 +48,6 @@ class BlockedAccountMiddleware:
             logout(request)
             return HttpResponseForbidden('Konto jest zablokowane.')
         if request.path.startswith('/admin/') and getattr(user, 'is_authenticated', False):
-            is_management = getattr(profile, 'role', None) == 'management'
-            if not is_management:
-                return HttpResponseForbidden('Panel administracyjny jest dostępny tylko dla managementu.')
+            if not user.is_superuser:
+                return HttpResponseForbidden('Panel administracyjny jest dostępny tylko dla superusera.')
         return self.get_response(request)

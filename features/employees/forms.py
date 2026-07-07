@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django import forms
+from django.utils import timezone
 
 from features.accounts.models import UserProfile
 
@@ -80,3 +83,24 @@ class HourlyRateForm(forms.ModelForm):
             'valid_from': forms.DateInput(attrs={'type': 'date'}),
             'valid_to': forms.DateInput(attrs={'type': 'date'}),
         }
+
+    def clean(self):
+        cleaned = super().clean()
+        valid_from = cleaned.get('valid_from')
+        valid_to = cleaned.get('valid_to')
+
+        if valid_from and timezone.localdate() > retroactive_rate_change_cutoff(valid_from):
+            self.add_error(
+                'valid_from',
+                'Stawkę za ten miesiąc można zmienić najpóźniej do 15. dnia następnego miesiąca.',
+            )
+
+        if valid_from and valid_to and valid_to < valid_from:
+            self.add_error('valid_to', 'Data końca nie może być wcześniejsza niż data początku.')
+
+        return cleaned
+
+
+def retroactive_rate_change_cutoff(valid_from):
+    first_next_month = (valid_from.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return first_next_month + timedelta(days=15)

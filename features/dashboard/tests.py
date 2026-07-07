@@ -1,4 +1,6 @@
-from datetime import timedelta
+from datetime import date, timedelta
+from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -6,7 +8,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from features.accounts.models import UserProfile
-from features.employees.forms import EmployeeProfileForm
+from features.employees.forms import EmployeeProfileForm, HourlyRateForm
+from features.employees.models import HourlyRate
+from features.employees.services import save_hourly_rate
 from features.projects.forms import ProjectAssignmentForm
 from features.projects.models import Project, ProjectAssignment
 from features.projects.selectors import visible_projects
@@ -43,7 +47,7 @@ class RegistrationTests(TestCase):
 
 
 class AdminAccessTests(TestCase):
-    def test_admin_is_forbidden_for_non_management_user(self):
+    def test_admin_is_forbidden_for_non_superuser(self):
         user = User.objects.create_user(username='employee', password='pass', is_staff=True)
         user.profile.role = UserProfile.Role.EMPLOYEE
         user.profile.save()
@@ -52,6 +56,24 @@ class AdminAccessTests(TestCase):
         response = self.client.get('/admin/')
 
         self.assertEqual(response.status_code, 403)
+
+    def test_admin_is_forbidden_for_management_without_superuser(self):
+        user = User.objects.create_user(username='manager', password='pass', is_staff=True)
+        user.profile.role = UserProfile.Role.MANAGEMENT
+        user.profile.save()
+
+        self.client.force_login(user)
+        response = self.client.get('/admin/')
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_allows_superuser(self):
+        user = User.objects.create_superuser(username='admin', password='pass')
+
+        self.client.force_login(user)
+        response = self.client.get('/admin/')
+
+        self.assertEqual(response.status_code, 200)
 
 
 class ProjectVisibilityTests(TestCase):
@@ -225,6 +247,59 @@ class EmployeeProfileFormTests(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn('bank_account', form.errors)
+
+
+class HourlyRateFormTests(TestCase):
+    def test_rate_for_previous_month_can_be_changed_until_tenth_day(self):
+        with patch('features.employees.forms.timezone.localdate', return_value=date(2026, 6, 10)):
+            form = HourlyRateForm(data={
+                'amount': '30.00',
+                'currency': 'PLN',
+                'valid_from': '2026-05-01',
+                'valid_to': '',
+            })
+            self.assertTrue(form.is_valid())
+
+    def test_rate_for_previous_month_is_blocked_after_tenth_day(self):
+        with patch('features.employees.forms.timezone.localdate', return_value=date(2026, 6, 11)):
+            form = HourlyRateForm(data={
+                'amount': '30.00',
+                'currency': 'PLN',
+                'valid_from': '2026-05-01',
+                'valid_to': '',
+            })
+            self.assertFalse(form.is_valid())
+            self.assertIn('valid_from', form.errors)
+
+    def test_saving_same_effective_date_updates_existing_rate(self):
+        user = User.objects.create_user(username='employee')
+        manager = User.objects.create_user(username='manager')
+        HourlyRate.objects.create(user=user, amount=Decimal('30.50'), currency='PLN', valid_from=date(2026, 5, 1), created_by=manager)
+
+        save_hourly_rate(user, {
+            'amount': Decimal('30.00'),
+            'currency': 'PLN',
+            'valid_from': date(2026, 5, 1),
+            'valid_to': None,
+        }, manager)
+
+        self.assertEqual(HourlyRate.objects.filter(user=user).count(), 1)
+        self.assertEqual(HourlyRate.objects.get(user=user).amount, Decimal('30.00'))
+
+    def test_new_rate_closes_previous_open_ended_rate(self):
+        user = User.objects.create_user(username='employee')
+        manager = User.objects.create_user(username='manager')
+        previous = HourlyRate.objects.create(user=user, amount=Decimal('30.00'), currency='PLN', valid_from=date(2026, 5, 1), created_by=manager)
+
+        save_hourly_rate(user, {
+            'amount': Decimal('30.50'),
+            'currency': 'PLN',
+            'valid_from': date(2026, 6, 1),
+            'valid_to': None,
+        }, manager)
+
+        previous.refresh_from_db()
+        self.assertEqual(previous.valid_to, date(2026, 5, 31))
 
 
 class ProjectAssignmentFormTests(TestCase):
