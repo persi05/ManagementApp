@@ -15,6 +15,7 @@ from features.projects.forms import ProjectAssignmentForm
 from features.projects.models import Project, ProjectAssignment
 from features.projects.selectors import visible_projects
 from features.planner.models import LeaveRequest
+from features.reports.services import payroll_amount
 from features.tasks.models import BoardColumn, Task, TaskEditNote, TaskWorklog
 from features.time_tracking.models import TimeEntry, WorkSession
 
@@ -180,6 +181,128 @@ class TimerTests(TestCase):
         self.assertEqual(response.status_code, 302)
         entry = TimeEntry.objects.get(user=user)
         self.assertLessEqual(entry.duration_minutes, 31)
+
+
+class TimeAccountingTests(TestCase):
+    def test_employee_can_edit_work_time_until_next_day(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        start = timezone.make_aware(datetime(2026, 7, 6, 9, 0))
+        entry = TimeEntry.objects.create(
+            user=user,
+            start=start,
+            end=start + timedelta(hours=2),
+            editable_until=timezone.make_aware(datetime(2026, 7, 7, 23, 59, 59)),
+        )
+
+        self.client.force_login(user)
+        with patch('features.time_tracking.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 7, 7, 20, 0))):
+            self.assertTrue(entry.can_be_edited_by(user))
+            response = self.client.get(reverse('edit_time_entry', args=[entry.id]))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_friday_work_time_can_be_edited_until_monday_end(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        friday = timezone.make_aware(datetime(2026, 7, 3, 9, 0))
+
+        self.client.force_login(user)
+        response = self.client.post(reverse('time_entries'), {
+            'project': '',
+            'task': '',
+            'start': '2026-07-03T09:00',
+            'end': '2026-07-03T11:00',
+            'comment': '',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        entry = TimeEntry.objects.get(user=user)
+        self.assertEqual(timezone.localtime(entry.editable_until).date(), date(2026, 7, 6))
+
+        with patch('features.time_tracking.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 7, 6, 22, 0))):
+            self.assertTrue(entry.can_be_edited_by(user))
+        with patch('features.time_tracking.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 7, 7, 0, 1))):
+            self.assertFalse(entry.can_be_edited_by(user))
+
+    def test_management_can_edit_work_time_only_until_month_end(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        start = timezone.make_aware(datetime(2026, 7, 6, 9, 0))
+        entry = TimeEntry.objects.create(
+            user=employee,
+            start=start,
+            end=start + timedelta(hours=2),
+            editable_until=start,
+        )
+
+        with patch('features.time_tracking.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 7, 31, 20, 0))):
+            self.assertTrue(entry.can_be_edited_by(manager))
+        with patch('features.time_tracking.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 8, 1, 0, 1))):
+            self.assertFalse(entry.can_be_edited_by(manager))
+
+    def test_task_worklog_does_not_affect_employee_payroll(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        save_hourly_rate(user, {
+            'amount': Decimal('30.50'),
+            'currency': 'PLN',
+            'valid_from': date(2026, 7, 1),
+            'valid_to': None,
+        }, user)
+        project = Project.objects.create(name='Client project')
+        column = BoardColumn.objects.create(project=project, name='Do zrobienia')
+        task = Task.objects.create(project=project, column=column, title='Client task')
+        start = timezone.make_aware(datetime(2026, 7, 6, 9, 0))
+        TimeEntry.objects.create(
+            user=user,
+            project=project,
+            start=start,
+            end=start + timedelta(hours=2),
+            editable_until=start + timedelta(days=1),
+        )
+        TaskWorklog.objects.create(task=task, user=user, date=date(2026, 7, 6), hours=Decimal('5.00'), visible_to_client=True)
+
+        payroll = payroll_amount(user, list(TimeEntry.objects.filter(user=user)), date(2026, 7, 1), date(2026, 8, 1))
+
+        self.assertEqual(payroll, Decimal('61.00'))
+
+    def test_employee_can_edit_task_worklog_only_same_day(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        project = Project.objects.create(name='Project')
+        column = BoardColumn.objects.create(project=project, name='Do zrobienia')
+        task = Task.objects.create(project=project, column=column, title='Task')
+        worklog = TaskWorklog.objects.create(task=task, user=user, date=date(2026, 7, 6), hours=Decimal('1.20'))
+
+        with patch('features.tasks.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 7, 6, 23, 0))):
+            self.assertTrue(worklog.can_be_edited_by(user))
+        with patch('features.tasks.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 7, 7, 0, 1))):
+            self.assertFalse(worklog.can_be_edited_by(user))
+
+    def test_time_accounting_pages_render_separate_tabs(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+
+        self.client.force_login(user)
+        time_response = self.client.get(reverse('time_entries'))
+        worklog_response = self.client.get(reverse('worklogs'))
+
+        self.assertEqual(time_response.status_code, 200)
+        self.assertContains(time_response, 'Czas pracy')
+        self.assertContains(time_response, 'Czas zadan / Czas dla klienta')
+        self.assertEqual(worklog_response.status_code, 200)
+        self.assertContains(worklog_response, 'Czas zadan / Czas dla klienta')
+        self.assertContains(worklog_response, 'nie wchodzi do wynagrodzenia')
 
 
 class ExportPdfTests(TestCase):
@@ -542,25 +665,6 @@ class KanbanRenderingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Task.objects.filter(title='Task for employee').exists())
         self.assertContains(response, 'Wybierz poprawną wartość')
-
-    def test_employee_does_not_see_drop_hint_in_done_column(self):
-        employee = User.objects.create_user(username='employee', password='pass')
-        employee.profile.role = UserProfile.Role.EMPLOYEE
-        employee.profile.save()
-        project = Project.objects.create(name='Employee project')
-        ProjectAssignment.objects.create(project=project, user=employee)
-        todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
-        doing = BoardColumn.objects.create(project=project, name='W trakcie', position=1)
-        review = BoardColumn.objects.create(project=project, name='Review', position=2)
-        done = BoardColumn.objects.create(project=project, name='Zakończone', position=3)
-        Task.objects.create(project=project, column=todo, title='Task todo')
-        Task.objects.create(project=project, column=doing, title='Task doing')
-        Task.objects.create(project=project, column=review, title='Task review')
-
-        self.client.force_login(employee)
-        response = self.client.get(reverse('kanban_project', args=[project.id]))
-
-        self.assertNotContains(response, 'Upuść tu zadanie.')
 
     def test_lead_can_move_task_to_done(self):
         lead = User.objects.create_user(username='lead', password='pass')

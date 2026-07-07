@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -11,7 +12,7 @@ from features.projects.selectors import visible_projects
 from features.reports.services import month_bounds
 from features.tasks.selectors import visible_tasks
 from features.time_tracking.forms import TimeEntryForm
-from features.time_tracking.models import TimeEntry, WorkSession
+from features.time_tracking.models import TimeEntry, WorkSession, employee_time_entry_edit_deadline
 
 
 def paused_minutes(session, now=None):
@@ -31,7 +32,6 @@ def time_entries(request):
     if request.method == 'POST':
         form = TimeEntryForm(request.POST)
         form.fields['project'].queryset = visible_projects(request.user)
-        form.fields['task'].queryset = visible_tasks(request.user)
         if form.is_valid():
             entry = form.save(commit=False)
             entry.user = request.user
@@ -44,12 +44,43 @@ def time_entries(request):
     else:
         form = TimeEntryForm()
         form.fields['project'].queryset = visible_projects(request.user)
-        form.fields['task'].queryset = visible_tasks(request.user)
 
     qs = TimeEntry.objects.select_related('project', 'task', 'user').filter(start__gte=start_dt, start__lt=end_dt)
     if not is_management(request.user):
         qs = qs.filter(user=request.user)
+    for entry in qs:
+        entry.can_edit = entry.can_be_edited_by(request.user)
     return render(request, 'features/time_entries.html', {'entries': qs, 'form': form, 'month': start_date.strftime('%Y-%m')})
+
+
+@login_required
+def edit_time_entry(request, entry_id):
+    forbidden = worker_required(request.user)
+    if forbidden:
+        return forbidden
+
+    qs = TimeEntry.objects.select_related('project', 'task', 'user')
+    if not is_management(request.user):
+        qs = qs.filter(user=request.user)
+    entry = get_object_or_404(qs, pk=entry_id)
+    if not entry.can_be_edited_by(request.user):
+        return HttpResponseForbidden('Nie mozna juz edytowac tego wpisu czasu pracy.')
+
+    if request.method == 'POST':
+        form = TimeEntryForm(request.POST, instance=entry)
+        form.fields['project'].queryset = visible_projects(request.user)
+        if form.is_valid():
+            updated_entry = form.save(commit=False)
+            updated_entry.edited_by = request.user
+            updated_entry.edited_at = timezone.now()
+            updated_entry.save()
+            messages.success(request, 'Wpis czasu pracy zostal zaktualizowany.')
+            return redirect('time_entries')
+    else:
+        form = TimeEntryForm(instance=entry)
+        form.fields['project'].queryset = visible_projects(request.user)
+
+    return render(request, 'features/time_entry_edit.html', {'entry': entry, 'form': form})
 
 
 @login_required
@@ -115,7 +146,6 @@ def stop_timer(request):
     session.ended_at = now
     session.inactive_minutes += int(request.POST.get('inactive_minutes') or 0) + pause_minutes
     session.save(update_fields=['state', 'ended_at', 'inactive_minutes'])
-    local_day_end = timezone.localtime(session.started_at).replace(hour=23, minute=59, second=59, microsecond=999999)
     if now > session.started_at:
         TimeEntry.objects.create(
             user=request.user,
@@ -124,7 +154,7 @@ def stop_timer(request):
             start=session.started_at,
             end=now,
             source=TimeEntry.Source.AUTO,
-            editable_until=local_day_end,
+            editable_until=employee_time_entry_edit_deadline(session.started_at),
             inactive_minutes=session.inactive_minutes,
             comment='Utworzone z licznika czasu.',
         )

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Edycja czasu pracy - Dcode Management{% endblock %}
+{% block heading %}Edycja czasu pracy{% endblock %}
+{% block eyebrow %}Realny czas pracy do rozliczen{% endblock %}
+{% block top_actions %}
+  <a class="ghost-btn" href="{% url 'time_entries' %}">Wroc do czasu pracy</a>
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Wpis czasu pracy</h2>
+      <p>Ten wpis wplywa na rozliczenie pracownika.</p>
+    </div>
+  </div>
+  <form method="post" class="grid-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary-btn">Zapisz</button>
+  </form>
+</section>
+{% endblock %}

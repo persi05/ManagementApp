@@ -112,7 +112,17 @@ class WorklogForm(forms.ModelForm):
             'comment': 'Komentarz',
             'visible_to_client': 'Widoczne dla klienta',
         }
-        widgets = {'date': forms.DateInput(attrs={'type': 'date'})}
+        widgets = {'date': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d')}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['date'].input_formats = ['%Y-%m-%d']
+
+    def clean_hours(self):
+        hours = self.cleaned_data['hours']
+        if hours <= 0:
+            raise forms.ValidationError('Liczba godzin musi byc wieksza od zera.')
+        return hours
 
 
 class TaskEditForm(forms.ModelForm):

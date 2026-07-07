@@ -243,7 +243,39 @@ def worklogs(request):
         qs = qs.filter(task__project__in=visible_projects(request.user), visible_to_client=True)
     else:
         qs = qs.filter(user=request.user)
-    return render(request, 'features/worklogs.html', {'worklogs': qs[:100], 'form': form, 'role': user_role(request.user)})
+    worklog_items = list(qs[:100])
+    for item in worklog_items:
+        item.can_edit = item.can_be_edited_by(request.user)
+    return render(request, 'features/worklogs.html', {'worklogs': worklog_items, 'form': form, 'role': user_role(request.user)})
+
+
+@login_required
+def edit_worklog(request, worklog_id):
+    forbidden = worker_required(request.user)
+    if forbidden:
+        return forbidden
+
+    qs = TaskWorklog.objects.select_related('task', 'task__project', 'user')
+    if is_management(request.user):
+        pass
+    else:
+        qs = qs.filter(user=request.user)
+    worklog = get_object_or_404(qs, pk=worklog_id)
+    if not worklog.can_be_edited_by(request.user):
+        return HttpResponseForbidden('Nie mozna juz edytowac tego czasu zadania.')
+
+    if request.method == 'POST':
+        form = WorklogForm(request.POST, instance=worklog)
+        form.fields['task'].queryset = visible_tasks(request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Czas zadania zostal zaktualizowany.')
+            return redirect('worklogs')
+    else:
+        form = WorklogForm(instance=worklog)
+        form.fields['task'].queryset = visible_tasks(request.user)
+
+    return render(request, 'features/worklog_edit.html', {'worklog': worklog, 'form': form})
 
 
 @login_required
@@ -251,6 +283,8 @@ def worklogs(request):
 def toggle_worklog_visibility(request, worklog_id):
     qs = TaskWorklog.objects.all() if is_management(request.user) else TaskWorklog.objects.filter(user=request.user)
     worklog = get_object_or_404(qs, pk=worklog_id)
+    if not worklog.can_be_edited_by(request.user):
+        return HttpResponseForbidden('Nie mozna juz edytowac tego czasu zadania.')
     worklog.visible_to_client = not worklog.visible_to_client
     worklog.save(update_fields=['visible_to_client'])
     return redirect('worklogs')

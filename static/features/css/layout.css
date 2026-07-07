@@ -33,6 +33,13 @@
   place-items: center;
 }
 
+.brand-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
 .nav {
   display: flex;
   flex-direction: column;

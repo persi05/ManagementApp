@@ -1,16 +1,15 @@
 from django import forms
-from django.utils import timezone
 
 from .models import TimeEntry
+from .models import employee_time_entry_edit_deadline
 
 
 class TimeEntryForm(forms.ModelForm):
     class Meta:
         model = TimeEntry
-        fields = ('project', 'task', 'start', 'end', 'comment')
+        fields = ('project', 'start', 'end', 'comment')
         labels = {
             'project': 'Projekt',
-            'task': 'Zadanie',
             'start': 'Rozpoczęcie pracy',
             'end': 'Zakończenie pracy',
             'comment': 'Komentarz',
@@ -21,9 +20,14 @@ class TimeEntryForm(forms.ModelForm):
             'comment': 'Opcjonalnie opisz korektę, np. "zapomniałem uruchomić licznik".',
         }
         widgets = {
-            'start': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
-            'end': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
+            'start': forms.DateTimeInput(attrs={'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'),
+            'end': forms.DateTimeInput(attrs={'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['start'].input_formats = ['%Y-%m-%dT%H:%M']
+        self.fields['end'].input_formats = ['%Y-%m-%dT%H:%M']
 
     def clean(self):
         cleaned = super().clean()
@@ -37,8 +41,7 @@ class TimeEntryForm(forms.ModelForm):
 
     def save(self, commit=True):
         instance = super().save(commit=False)
-        local_day_end = timezone.localtime(instance.start).replace(hour=23, minute=59, second=59, microsecond=999999)
-        instance.editable_until = local_day_end
+        instance.editable_until = employee_time_entry_edit_deadline(instance.start)
         if commit:
             instance.save()
         return instance

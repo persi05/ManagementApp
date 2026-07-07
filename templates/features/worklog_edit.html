@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Edycja czasu zadania - Dcode Management{% endblock %}
+{% block heading %}Edycja czasu zadania{% endblock %}
+{% block eyebrow %}Czas widoczny przy zadaniu, bez wynagrodzenia{% endblock %}
+{% block top_actions %}
+  <a class="ghost-btn" href="{% url 'worklogs' %}">Wroc do czasu zadan</a>
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Wpis czasu zadania</h2>
+      <p>Ten czas nie wchodzi do czasu pracy pracownika ani do wyplaty.</p>
+    </div>
+  </div>
+  <form method="post" class="grid-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary-btn">Zapisz</button>
+  </form>
+</section>
+{% endblock %}
