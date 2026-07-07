@@ -164,6 +164,47 @@ class TimerTests(TestCase):
         self.assertIsNone(session.paused_at)
         self.assertGreaterEqual(session.inactive_minutes, 9)
 
+    def test_resume_timer_excludes_subminute_pause_from_active_seconds(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        now = timezone.make_aware(datetime(2026, 7, 7, 12, 0, 30))
+        session = WorkSession.objects.create(
+            user=user,
+            state=WorkSession.State.PAUSED,
+            started_at=now - timedelta(seconds=30),
+            paused_at=now - timedelta(seconds=15),
+        )
+
+        self.client.force_login(user)
+        with patch('features.time_tracking.views.timezone.now', return_value=now):
+            response = self.client.post(reverse('resume_timer'), {'next': '/'})
+
+        self.assertEqual(response.status_code, 302)
+        session.refresh_from_db()
+        self.assertEqual(session.inactive_seconds, 15)
+        self.assertEqual(session.active_seconds(now), 15)
+
+    def test_timer_status_returns_active_seconds_without_current_pause(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        now = timezone.make_aware(datetime(2026, 7, 7, 12, 1, 0))
+        WorkSession.objects.create(
+            user=user,
+            state=WorkSession.State.PAUSED,
+            started_at=now - timedelta(seconds=60),
+            paused_at=now - timedelta(seconds=15),
+        )
+
+        self.client.force_login(user)
+        with patch('features.time_tracking.models.timezone.now', return_value=now):
+            response = self.client.get(reverse('timer_status'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['state'], WorkSession.State.PAUSED)
+        self.assertEqual(response.json()['active_seconds'], 45)
+
     def test_stop_paused_timer_excludes_pause_duration(self):
         user = User.objects.create_user(username='employee', password='pass')
         user.profile.role = UserProfile.Role.EMPLOYEE
@@ -181,6 +222,27 @@ class TimerTests(TestCase):
         self.assertEqual(response.status_code, 302)
         entry = TimeEntry.objects.get(user=user)
         self.assertLessEqual(entry.duration_minutes, 31)
+
+    def test_stop_paused_timer_excludes_subminute_pause_from_entry(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        now = timezone.make_aware(datetime(2026, 7, 7, 12, 0, 30))
+        WorkSession.objects.create(
+            user=user,
+            state=WorkSession.State.PAUSED,
+            started_at=now - timedelta(seconds=30),
+            paused_at=now - timedelta(seconds=15),
+        )
+
+        self.client.force_login(user)
+        with patch('features.time_tracking.views.timezone.now', return_value=now):
+            response = self.client.post(reverse('stop_timer'), {'next': '/'})
+
+        self.assertEqual(response.status_code, 302)
+        entry = TimeEntry.objects.get(user=user)
+        self.assertEqual(entry.inactive_seconds, 15)
+        self.assertEqual(entry.duration_seconds, 15)
 
 
 class TimeAccountingTests(TestCase):

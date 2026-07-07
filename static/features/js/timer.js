@@ -1,29 +1,87 @@
 (() => {
   const timerRoot = document.querySelector('[data-timer-root]');
-  if (!timerRoot || !timerRoot.dataset.startedAt) return;
+  if (!timerRoot) return;
 
   const readout = timerRoot.querySelector('[data-timer-readout]');
-  const startedAt = new Date(timerRoot.dataset.startedAt).getTime();
-  const pausedAt = timerRoot.dataset.pausedAt ? new Date(timerRoot.dataset.pausedAt).getTime() : null;
-  const isRunning = timerRoot.dataset.state === 'running';
-  const isPaused = timerRoot.dataset.state === 'paused';
   const inactiveFields = document.querySelectorAll('[data-inactive-field]');
-  const savedInactiveMinutes = Number(timerRoot.dataset.inactiveMinutes || 0);
-  let newInactiveMinutes = 0;
+  const statusPill = timerRoot.querySelector('.status-pill');
+  const statusUrl = timerRoot.dataset.statusUrl;
+
+  const state = {
+    timerState: timerRoot.dataset.state || 'stopped',
+    activeSeconds: Number(timerRoot.dataset.activeSeconds || 0),
+    syncedAt: Date.now(),
+  };
+
+  let newInactiveSeconds = 0;
   let lastActivity = Date.now();
   let warned = false;
   let modalShown = false;
 
   const format = (seconds) => {
-    const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
-    const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
-    const s = String(seconds % 60).padStart(2, '0');
+    const value = Math.max(0, Math.floor(seconds));
+    const h = String(Math.floor(value / 3600)).padStart(2, '0');
+    const m = String(Math.floor((value % 3600) / 60)).padStart(2, '0');
+    const s = String(value % 60).padStart(2, '0');
     return `${h}:${m}:${s}`;
   };
 
+  const activeSecondsNow = () => {
+    const localActiveSeconds = state.timerState === 'running'
+      ? (Date.now() - state.syncedAt) / 1000
+      : 0;
+    return Math.max(0, state.activeSeconds + localActiveSeconds);
+  };
+
+  const displayedSeconds = () => {
+    return Math.max(0, activeSecondsNow() - newInactiveSeconds);
+  };
+
+  const render = () => {
+    if (readout) readout.textContent = format(displayedSeconds());
+  };
+
   const setInactive = () => inactiveFields.forEach((field) => {
-    field.value = newInactiveMinutes;
+    field.value = newInactiveSeconds;
   });
+
+  const applyStatus = (payload) => {
+    const nextTimerState = payload.state || 'stopped';
+    const serverActiveSeconds = Number(payload.active_seconds || 0);
+    const localActiveSeconds = activeSecondsNow();
+    const canSmoothSync = state.timerState === 'running' && nextTimerState === 'running';
+
+    state.timerState = nextTimerState;
+    state.activeSeconds = canSmoothSync && Math.abs(serverActiveSeconds - localActiveSeconds) <= 2
+      ? localActiveSeconds
+      : serverActiveSeconds;
+    state.syncedAt = Date.now();
+
+    timerRoot.dataset.state = state.timerState;
+    timerRoot.dataset.activeSeconds = String(state.activeSeconds);
+    timerRoot.dataset.inactiveSeconds = String(payload.inactive_seconds || 0);
+    timerRoot.dataset.startedAt = payload.started_at || '';
+    timerRoot.dataset.pausedAt = payload.paused_at || '';
+
+    if (statusPill) {
+      statusPill.textContent = payload.state_label || 'Nieaktywny';
+      statusPill.classList.toggle('ok', Boolean(payload.active));
+    }
+    render();
+  };
+
+  const pollStatus = async () => {
+    if (!statusUrl) return;
+    try {
+      const response = await fetch(statusUrl, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+      });
+      if (!response.ok) return;
+      applyStatus(await response.json());
+    } catch (error) {
+    }
+  };
 
   const markActive = () => {
     lastActivity = Date.now();
@@ -39,7 +97,7 @@
     if (document.querySelector('.idle-toast')) return;
     const toast = document.createElement('div');
     toast.className = 'idle-toast';
-    toast.textContent = 'Brak aktywności. Za chwilę licznik zostanie oznaczony jako nieaktywny.';
+    toast.textContent = 'Brak aktywnosci. Za chwile licznik zostanie oznaczony jako nieaktywny.';
     document.body.appendChild(toast);
   };
 
@@ -48,7 +106,7 @@
     modalShown = true;
     const modal = document.createElement('div');
     modal.className = 'idle-modal';
-    modal.innerHTML = '<div><h2>Czy nadal pracujesz?</h2><p>Potwierdź aktywność, aby licznik działał dalej bez doliczania czasu nieaktywnego.</p><button class="primary-btn full" type="button">Pracuję dalej</button></div>';
+    modal.innerHTML = '<div><h2>Czy nadal pracujesz?</h2><p>Potwierdz aktywnosc, aby licznik dzialal dalej bez doliczania czasu nieaktywnego.</p><button class="primary-btn full" type="button">Pracuje dalej</button></div>';
     modal.querySelector('button').addEventListener('click', () => {
       modal.remove();
       modalShown = false;
@@ -57,14 +115,14 @@
     document.body.appendChild(modal);
   };
 
-  setInterval(() => {
-    if (readout) {
-      const endAt = isPaused && pausedAt ? pausedAt : Date.now();
-      const elapsed = Math.max(0, Math.floor((endAt - startedAt) / 1000) - (savedInactiveMinutes + newInactiveMinutes) * 60);
-      readout.textContent = format(elapsed);
-    }
+  render();
+  setInactive();
+  pollStatus();
 
-    if (!isRunning) return;
+  setInterval(() => {
+    render();
+
+    if (state.timerState !== 'running') return;
 
     const idleMs = Date.now() - lastActivity;
     if (idleMs > 30 * 60 * 1000 && !warned) {
@@ -73,10 +131,14 @@
     }
 
     if (idleMs > 35 * 60 * 1000) {
-      newInactiveMinutes += 5;
+      newInactiveSeconds += 5 * 60;
       setInactive();
       showModal();
       lastActivity = Date.now();
+      state.activeSeconds = activeSecondsNow();
+      state.syncedAt = Date.now();
     }
-  }, 1000);
+  }, 250);
+
+  setInterval(pollStatus, 5000);
 })();

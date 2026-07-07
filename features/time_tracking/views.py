@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -17,11 +17,49 @@ from features.time_tracking.forms import TimeEntryForm
 from features.time_tracking.models import TimeEntry, WorkSession, employee_time_entry_edit_deadline
 
 
-def paused_minutes(session, now=None):
+def format_seconds(seconds):
+    seconds = max(0, int(seconds))
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    remaining_seconds = seconds % 60
+    return f'{hours:02}:{minutes:02}:{remaining_seconds:02}'
+
+
+def posted_inactive_seconds(request):
+    if request.POST.get('inactive_seconds'):
+        return max(0, int(request.POST.get('inactive_seconds') or 0))
+    return max(0, int(request.POST.get('inactive_minutes') or 0)) * 60
+
+
+def paused_seconds(session, now=None):
     if session.state != WorkSession.State.PAUSED or not session.paused_at:
         return 0
     now = now or timezone.now()
-    return max(0, int((now - session.paused_at).total_seconds()) // 60)
+    return max(0, int((now - session.paused_at).total_seconds()))
+
+
+def timer_payload(user):
+    session = WorkSession.objects.filter(user=user, state__in=[WorkSession.State.RUNNING, WorkSession.State.PAUSED]).first()
+    if not session:
+        return {
+            'active': False,
+            'state': 'stopped',
+            'state_label': 'Nieaktywny',
+            'active_seconds': 0,
+            'display': format_seconds(0),
+        }
+
+    active_seconds = session.active_seconds()
+    return {
+        'active': True,
+        'state': session.state,
+        'state_label': session.get_state_display(),
+        'active_seconds': active_seconds,
+        'display': format_seconds(active_seconds),
+        'started_at': session.started_at.isoformat(),
+        'paused_at': session.paused_at.isoformat() if session.paused_at else None,
+        'inactive_seconds': session.total_inactive_seconds,
+    }
 
 
 @login_required
@@ -110,6 +148,14 @@ def start_timer(request):
 
 
 @login_required
+def timer_status(request):
+    forbidden = worker_required(request.user)
+    if forbidden:
+        return forbidden
+    return JsonResponse(timer_payload(request.user))
+
+
+@login_required
 @require_POST
 def pause_timer(request):
     forbidden = worker_required(request.user)
@@ -119,8 +165,8 @@ def pause_timer(request):
     session = get_object_or_404(WorkSession, user=request.user, state=WorkSession.State.RUNNING)
     session.state = WorkSession.State.PAUSED
     session.paused_at = timezone.now()
-    session.inactive_minutes += int(request.POST.get('inactive_minutes') or 0)
-    session.save(update_fields=['state', 'paused_at', 'inactive_minutes'])
+    session.set_inactive_seconds(session.total_inactive_seconds + posted_inactive_seconds(request))
+    session.save(update_fields=['state', 'paused_at', 'inactive_minutes', 'inactive_seconds'])
     messages.info(request, 'Licznik został zatrzymany na pauzie.')
     return redirect(request.POST.get('next') or reverse('dashboard'))
 
@@ -133,10 +179,10 @@ def resume_timer(request):
         return forbidden
 
     session = get_object_or_404(WorkSession, user=request.user, state=WorkSession.State.PAUSED)
-    session.inactive_minutes += paused_minutes(session)
+    session.set_inactive_seconds(session.total_inactive_seconds + paused_seconds(session))
     session.state = WorkSession.State.RUNNING
     session.paused_at = None
-    session.save(update_fields=['inactive_minutes', 'state', 'paused_at'])
+    session.save(update_fields=['inactive_minutes', 'inactive_seconds', 'state', 'paused_at'])
     messages.success(request, 'Licznik został wznowiony.')
     return redirect(request.POST.get('next') or reverse('dashboard'))
 
@@ -150,11 +196,11 @@ def stop_timer(request):
 
     session = get_object_or_404(WorkSession, user=request.user, state__in=[WorkSession.State.RUNNING, WorkSession.State.PAUSED])
     now = timezone.now()
-    pause_minutes = paused_minutes(session, now)
+    pause_seconds = paused_seconds(session, now)
     session.state = WorkSession.State.STOPPED
     session.ended_at = now
-    session.inactive_minutes += int(request.POST.get('inactive_minutes') or 0) + pause_minutes
-    session.save(update_fields=['state', 'ended_at', 'inactive_minutes'])
+    session.set_inactive_seconds(session.total_inactive_seconds + posted_inactive_seconds(request) + pause_seconds)
+    session.save(update_fields=['state', 'ended_at', 'inactive_minutes', 'inactive_seconds'])
     if now > session.started_at:
         TimeEntry.objects.create(
             user=request.user,
@@ -165,6 +211,7 @@ def stop_timer(request):
             source=TimeEntry.Source.AUTO,
             editable_until=employee_time_entry_edit_deadline(session.started_at),
             inactive_minutes=session.inactive_minutes,
+            inactive_seconds=session.inactive_seconds,
             comment='Utworzone z licznika czasu.',
         )
     messages.success(request, 'Sesja pracy została zakończona i zapisana.')
