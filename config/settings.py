@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'features.tasks.apps.TasksConfig',
     'features.time_tracking.apps.TimeTrackingConfig',
     'features.reports.apps.ReportsConfig',
+    'features.planner.apps.PlannerConfig',
 ]
 
 MIDDLEWARE = [

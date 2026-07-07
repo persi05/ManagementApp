@@ -92,7 +92,7 @@ class HourlyRateForm(forms.ModelForm):
         if valid_from and timezone.localdate() > retroactive_rate_change_cutoff(valid_from):
             self.add_error(
                 'valid_from',
-                'Stawkę za ten miesiąc można zmienić najpóźniej do 15. dnia następnego miesiąca.',
+                'Stawkę za ten miesiąc można zmienić najpóźniej do 10. dnia następnego miesiąca.',
             )
 
         if valid_from and valid_to and valid_to < valid_from:
@@ -103,4 +103,4 @@ class HourlyRateForm(forms.ModelForm):
 
 def retroactive_rate_change_cutoff(valid_from):
     first_next_month = (valid_from.replace(day=28) + timedelta(days=4)).replace(day=1)
-    return first_next_month + timedelta(days=15)
+    return first_next_month + timedelta(days=9)

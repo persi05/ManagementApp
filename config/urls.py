@@ -26,4 +26,5 @@ urlpatterns = [
     path('app/', include('features.tasks.urls')),
     path('app/', include('features.time_tracking.urls')),
     path('app/', include('features.reports.urls')),
+    path('app/', include('features.planner.urls')),
 ]
