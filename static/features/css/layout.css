@@ -57,6 +57,12 @@
   color: #fff;
 }
 
+.nav a.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 800;
+}
+
 .sidebar-footer {
   margin-top: auto;
 }
