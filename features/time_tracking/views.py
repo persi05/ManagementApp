@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden
@@ -48,9 +50,16 @@ def time_entries(request):
     qs = TimeEntry.objects.select_related('project', 'task', 'user').filter(start__gte=start_dt, start__lt=end_dt)
     if not is_management(request.user):
         qs = qs.filter(user=request.user)
-    for entry in qs:
+    entries = list(qs)
+    total_hours = sum((entry.hours for entry in entries), Decimal('0'))
+    for entry in entries:
         entry.can_edit = entry.can_be_edited_by(request.user)
-    return render(request, 'features/time_entries.html', {'entries': qs, 'form': form, 'month': start_date.strftime('%Y-%m')})
+    return render(request, 'features/time_entries.html', {
+        'entries': entries,
+        'form': form,
+        'month': start_date.strftime('%Y-%m'),
+        'total_hours': total_hours,
+    })
 
 
 @login_required

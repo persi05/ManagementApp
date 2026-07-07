@@ -14,6 +14,7 @@
         <h2>Historia</h2>
         <p>Ten czas sluzy do rozliczania pracownika i nie jest czasem raportowanym klientowi przy zadaniach.</p>
       </div>
+      <p class="panel-summary"><strong>Suma godzin:</strong> {{ total_hours|floatformat:2 }}h</p>
     </div>
     <form class="filter-bar">
       <input type="month" name="month" value="{{ month }}">

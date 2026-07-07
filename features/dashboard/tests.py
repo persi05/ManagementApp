@@ -288,6 +288,53 @@ class TimeAccountingTests(TestCase):
         with patch('features.tasks.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 7, 7, 0, 1))):
             self.assertFalse(worklog.can_be_edited_by(user))
 
+    def test_time_entries_show_total_hours_for_selected_month(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        start = timezone.make_aware(datetime(2026, 7, 6, 9, 0))
+        TimeEntry.objects.create(
+            user=user,
+            start=start,
+            end=start + timedelta(hours=2),
+            editable_until=start + timedelta(days=1),
+        )
+        TimeEntry.objects.create(
+            user=user,
+            start=start + timedelta(days=1),
+            end=start + timedelta(days=1, hours=1, minutes=30),
+            editable_until=start + timedelta(days=2),
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('time_entries'), {'month': '2026-07'})
+
+        self.assertContains(response, 'Suma godzin')
+        self.assertContains(response, '3,50h')
+
+    def test_worklogs_filter_entries_and_task_choices_by_project(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        project_a = Project.objects.create(name='Projekt A')
+        project_b = Project.objects.create(name='Projekt B')
+        ProjectAssignment.objects.create(project=project_a, user=user)
+        ProjectAssignment.objects.create(project=project_b, user=user)
+        column_a = BoardColumn.objects.create(project=project_a, name='Do zrobienia')
+        column_b = BoardColumn.objects.create(project=project_b, name='Do zrobienia')
+        task_a = Task.objects.create(project=project_a, column=column_a, title='Zadanie A')
+        task_b = Task.objects.create(project=project_b, column=column_b, title='Zadanie B')
+        TaskWorklog.objects.create(task=task_a, user=user, date=date(2026, 7, 6), hours=Decimal('1.50'))
+        TaskWorklog.objects.create(task=task_b, user=user, date=date(2026, 7, 6), hours=Decimal('2.00'))
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('worklogs'), {'project': project_a.id})
+
+        self.assertContains(response, 'Projekt A')
+        self.assertContains(response, 'Zadanie A')
+        self.assertContains(response, '1,50h')
+        self.assertNotContains(response, 'Zadanie B')
+
     def test_time_accounting_pages_render_separate_tabs(self):
         user = User.objects.create_user(username='employee', password='pass')
         user.profile.role = UserProfile.Role.EMPLOYEE

@@ -7,13 +7,21 @@
   <a href="{% url 'time_entries' %}">Czas pracy</a>
   <a class="active" href="{% url 'worklogs' %}">Czas zadan / Czas dla klienta</a>
 </div>
+<div class="tabs">
+  {% for project in projects %}
+    <a class="{% if selected_project.id == project.id %}active{% endif %}" href="{% url 'worklogs' %}?project={{ project.id }}">{{ project.name }}</a>
+  {% empty %}
+    <span>Brak projektow.</span>
+  {% endfor %}
+</div>
 <section class="content-split">
   <div class="panel">
     <div class="panel-head">
       <div>
-        <h2>Wpisy</h2>
+        <h2>Wpisy{% if selected_project %}: {{ selected_project.name }}{% endif %}</h2>
         <p>Ten czas jest raportowany przy zadaniach i nie wchodzi do wynagrodzenia pracownika.</p>
       </div>
+      <p class="panel-summary"><strong>Suma godzin:</strong> {{ total_hours|floatformat:2 }}h</p>
     </div>
     <div class="table-wrap">
       <table>
@@ -46,7 +54,9 @@
   {% if role != 'client' %}
     <form method="post" class="form-card compact">
       {% csrf_token %}
+      {% if selected_project %}<input type="hidden" name="project" value="{{ selected_project.id }}">{% endif %}
       <h2>Dodaj czas do zadania</h2>
+      {% if selected_project %}<p>{{ selected_project.name }}</p>{% endif %}
       {{ form.as_p }}
       <button class="primary-btn full">Dodaj</button>
     </form>
