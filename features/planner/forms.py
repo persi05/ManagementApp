@@ -1,4 +1,5 @@
 from django import forms
+from django.utils import timezone
 
 from .models import LeaveRequest
 
@@ -21,6 +22,11 @@ class LeaveRequestForm(forms.ModelForm):
         cleaned = super().clean()
         start_date = cleaned.get('start_date')
         end_date = cleaned.get('end_date')
+        today = timezone.localdate()
+        if start_date and start_date < today:
+            self.add_error('start_date', 'Nie mozna brac wolnego w przeszlosci.')
+        if end_date and end_date < today:
+            self.add_error('end_date', 'Nie mozna brac wolnego w przeszlosci.')
         if start_date and end_date and end_date < start_date:
             self.add_error('end_date', 'Data końca nie może być wcześniejsza niż data początku.')
         return cleaned

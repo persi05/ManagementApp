@@ -14,7 +14,8 @@
 
   .workspace-grid,
   .content-split,
-  .calendar-side-grid {
+  .calendar-side-grid,
+  .leave-range-grid {
     grid-template-columns: 1fr;
   }
 

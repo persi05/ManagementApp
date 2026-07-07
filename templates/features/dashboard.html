@@ -82,7 +82,10 @@
 </section>
 
 {% if role == 'management' %}
-<section class="panel">
+<section class="workspace-grid">
+  {% include "features/_timer_panel.html" %}
+
+  <article class="panel">
   <div class="panel-head">
     <div><h2>Pracownicy</h2><p>Miesięczny czas pracy. Szczegóły rozliczeń są w profilu pracownika.</p></div>
     <a class="ghost-btn" href="{% url 'employees' %}">Pełna lista</a>
@@ -104,6 +107,7 @@
       </tbody>
     </table>
   </div>
+</article>
 </section>
 {% else %}
 <section class="workspace-grid">

@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -28,6 +28,32 @@ def month_bounds(request):
     start_dt = timezone.make_aware(datetime.combine(start_date, time.min))
     end_dt = timezone.make_aware(datetime.combine(next_month, time.min))
     return start_date, next_month, start_dt, end_dt
+
+
+def date_range_bounds(request):
+    start_date, default_end, start_dt, end_dt = month_bounds(request)
+    end_date = default_end - timedelta(days=1)
+    raw_start = request.GET.get('date_from')
+    raw_end = request.GET.get('date_to')
+
+    if raw_start:
+        try:
+            start_date = date.fromisoformat(raw_start)
+        except ValueError:
+            pass
+
+    if raw_end:
+        try:
+            parsed_end = date.fromisoformat(raw_end)
+            if parsed_end >= start_date:
+                end_date = parsed_end
+        except ValueError:
+            pass
+
+    exclusive_end = end_date + timedelta(days=1)
+    start_dt = timezone.make_aware(datetime.combine(start_date, time.min))
+    end_dt = timezone.make_aware(datetime.combine(exclusive_end, time.min))
+    return start_date, exclusive_end, start_dt, end_dt, end_date
 
 
 def payroll_amount(user, entries, start_date, end_date):

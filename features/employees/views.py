@@ -9,7 +9,7 @@ from features.accounts.permissions import management_required
 from features.employees.forms import EmployeeProfileForm, HourlyRateForm, UserRoleForm
 from features.employees.models import HourlyRate
 from features.employees.services import save_hourly_rate
-from features.reports.services import employee_month_summaries, month_bounds, payroll_amount
+from features.reports.services import date_range_bounds, employee_month_summaries, payroll_amount
 from features.time_tracking.models import TimeEntry
 
 
@@ -19,13 +19,16 @@ def employees(request):
     if forbidden:
         return forbidden
 
-    start_date, next_month, start_dt, end_dt = month_bounds(request)
+    start_date, next_month, start_dt, end_dt, end_date = date_range_bounds(request)
     summaries = employee_month_summaries(start_date, next_month, start_dt, end_dt)
     registered_users = User.objects.select_related('profile').order_by('last_name', 'first_name', 'username')
     return render(request, 'features/employees.html', {
         'employees': summaries,
         'registered_users': registered_users,
         'month': start_date.strftime('%Y-%m'),
+        'date_from': start_date.isoformat(),
+        'date_to': end_date.isoformat(),
+        'period_label': f'{start_date:%Y-%m-%d} - {end_date:%Y-%m-%d}',
         'total_hours': sum(row['hours'] for row in summaries),
         'total_payroll': sum(row['payroll'] for row in summaries),
     })
@@ -38,7 +41,7 @@ def employee_detail(request, user_id):
         return forbidden
 
     employee = get_object_or_404(User.objects.select_related('profile'), pk=user_id)
-    start_date, next_month, start_dt, end_dt = month_bounds(request)
+    start_date, next_month, start_dt, end_dt, end_date = date_range_bounds(request)
 
     if request.method == 'POST':
         if request.POST.get('form') == 'role':
@@ -81,6 +84,9 @@ def employee_detail(request, user_id):
         'employee': employee,
         'entries': entries,
         'month': start_date.strftime('%Y-%m'),
+        'date_from': start_date.isoformat(),
+        'date_to': end_date.isoformat(),
+        'period_label': f'{start_date:%Y-%m-%d} - {end_date:%Y-%m-%d}',
         'hours': Decimal(minutes) / Decimal(60),
         'payroll': payroll_amount(employee, entries, start_date, next_month),
         'rates': rates,
