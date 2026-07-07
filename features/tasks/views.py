@@ -12,7 +12,7 @@ from features.projects.selectors import visible_projects
 from features.tasks.forms import BoardColumnForm, TaskEditForm, TaskForm, WorklogForm
 from features.tasks.models import BoardColumn, Notification, TaskEditNote, TaskWorklog
 from features.tasks.selectors import visible_tasks
-from features.tasks.services import can_delete_task, can_edit_task, can_move_task_to_column, ensure_default_columns, task_move_limit
+from features.tasks.services import can_delete_task, can_edit_task, can_move_task_to_column, normalize_column_positions, task_move_limit
 
 
 @login_required
@@ -21,7 +21,6 @@ def kanban(request, project_id=None):
     project = get_object_or_404(projects_qs, pk=project_id) if project_id else projects_qs.first()
     if not project:
         return render(request, 'features/kanban.html', {'project': None, 'projects': projects_qs})
-    ensure_default_columns(project)
     selected_project = project
     if request.method == 'POST':
         if request.POST.get('form') == 'board_column':
@@ -40,7 +39,6 @@ def kanban(request, project_id=None):
         else:
             selected_project_id = optional_pk(request.POST.get('project')) or project.id
             selected_project = get_object_or_404(projects_qs, pk=selected_project_id)
-            ensure_default_columns(selected_project)
             form = TaskForm(request.POST, user=request.user, project=selected_project, projects_queryset=projects_qs)
             column_form = BoardColumnForm()
             if 'assignee' in form.fields:
@@ -52,10 +50,14 @@ def kanban(request, project_id=None):
                 task = form.save(commit=False)
                 if 'column' not in form.fields:
                     task.column = selected_project.columns.order_by('position').first()
-                task.created_by = request.user
-                task.save()
-                messages.success(request, 'Zadanie zostało dodane.')
-                return redirect('kanban_project', project_id=task.project_id)
+                if task.column_id is None:
+                    form.add_error(None, 'Projekt nie ma jeszcze żadnej kolumny.')
+                    project = selected_project
+                else:
+                    task.created_by = request.user
+                    task.save()
+                    messages.success(request, 'Zadanie zostało dodane.')
+                    return redirect('kanban_project', project_id=task.project_id)
             project = selected_project
     else:
         form = TaskForm(initial={'project': project}, user=request.user, project=project, projects_queryset=projects_qs)
@@ -97,6 +99,27 @@ def move_task(request, task_id):
     task.save(update_fields=['column', 'updated_at'])
     Notification.objects.create(user=task.assignee or request.user, content=f'Zmieniono status zadania: {task.title}', kind='task')
     return JsonResponse({'ok': True, 'column': column.name})
+
+
+@login_required
+@require_POST
+def delete_column(request, column_id):
+    if not is_management(request.user):
+        return HttpResponseForbidden('Brak uprawnień do usunięcia kolumny.')
+
+    column = get_object_or_404(BoardColumn, pk=column_id, project__in=visible_projects(request.user))
+    project = column.project
+    if project.columns.count() <= 1:
+        messages.error(request, 'Projekt musi mieć przynajmniej jedną kolumnę.')
+        return redirect('kanban_project', project_id=project.id)
+    if column.tasks.exists():
+        messages.error(request, 'Nie można usunąć kolumny, która ma zadania.')
+        return redirect('kanban_project', project_id=project.id)
+
+    column.delete()
+    normalize_column_positions(project)
+    messages.success(request, 'Kolumna została usunięta.')
+    return redirect('kanban_project', project_id=project.id)
 
 
 @login_required

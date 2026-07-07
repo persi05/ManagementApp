@@ -782,6 +782,64 @@ class KanbanRenderingTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(BoardColumn.objects.filter(project=project, name='Blocked').exists())
 
+    def test_kanban_does_not_recreate_default_columns_after_customization(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        BoardColumn.objects.create(project=project, name='Custom only', position=0)
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('kanban_project', args=[project.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(project.columns.values_list('name', flat=True)), ['Custom only'])
+
+    def test_management_can_delete_empty_board_column(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        first = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        second = BoardColumn.objects.create(project=project, name='Extra', position=1)
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('delete_column', args=[second.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(BoardColumn.objects.filter(pk=first.pk, position=0).exists())
+        self.assertFalse(BoardColumn.objects.filter(pk=second.pk).exists())
+
+    def test_management_board_renders_add_column_toggle_and_hidden_delete_form(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        column = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        Task.objects.create(project=project, column=column, title='Task in column')
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('kanban_project', args=[project.id]))
+
+        self.assertContains(response, 'add-column-toggle')
+        self.assertContains(response, 'kanban-modal is-hidden')
+        self.assertContains(response, 'delete-column-form is-hidden')
+
+    def test_management_cannot_delete_column_with_tasks(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        column = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        BoardColumn.objects.create(project=project, name='Extra', position=1)
+        Task.objects.create(project=project, column=column, title='Blocked task')
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('delete_column', args=[column.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(BoardColumn.objects.filter(pk=column.pk).exists())
+
     def test_management_can_create_and_render_task_labels(self):
         manager = User.objects.create_user(username='manager', password='pass')
         manager.profile.role = UserProfile.Role.MANAGEMENT

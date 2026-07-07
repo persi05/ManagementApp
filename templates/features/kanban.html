@@ -12,10 +12,39 @@
 <div class="tabs">
   {% for item in projects %}<a class="{% if item.id == project.id %}active{% endif %}" href="{% url 'kanban_project' item.id %}">{{ item.name }}</a>{% endfor %}
 </div>
+{% if can_manage_board %}
+  <div class="kanban-toolbar">
+    <button type="button" class="primary-btn add-column-toggle" aria-expanded="false" aria-controls="add-column-panel">+</button>
+  </div>
+  <div class="kanban-modal is-hidden" id="add-column-panel" role="dialog" aria-modal="true" aria-labelledby="add-column-title">
+    <div class="kanban-modal-backdrop" data-close-add-column></div>
+    <section class="kanban-modal-card">
+      <button type="button" class="ghost-btn tiny-btn kanban-modal-close" data-close-add-column aria-label="Zamknij">×</button>
+      <div class="panel-head"><div><h2 id="add-column-title">Dodaj kolumnę</h2><p>Nowa kolumna pojawi się na końcu tablicy.</p></div></div>
+      <form method="post" class="grid-form add-column-form">
+        {% csrf_token %}
+        <input type="hidden" name="form" value="board_column">
+        {{ column_form.as_p }}
+        <button class="primary-btn">Dodaj kolumnę</button>
+      </form>
+    </section>
+  </div>
+{% endif %}
 <section class="kanban-board" {% if board_move_limit is not None %}data-max-move-position="{{ board_move_limit }}"{% endif %}>
   {% for column in columns %}
     <div class="kanban-column" data-column="{{ column.id }}" data-column-position="{{ column.position }}">
-      <header><span>{{ column.name }}</span><small>{{ column.tasks.all|length }}</small></header>
+      <header>
+        <span>{{ column.name }}</span>
+        <div class="column-actions">
+          <small class="column-count">{{ column.tasks.all|length }}</small>
+          {% if can_manage_board %}
+            <form method="post" action="{% url 'delete_column' column.id %}" class="delete-column-form {% if column.tasks.all %}is-hidden{% endif %}">
+              {% csrf_token %}
+              <button class="ghost-btn tiny-btn" aria-label="Usuń kolumnę {{ column.name }}">Usuń</button>
+            </form>
+          {% endif %}
+        </div>
+      </header>
       <div class="kanban-dropzone">
         {% for task in column.tasks.all %}
           <article class="kanban-card" draggable="{% if can_move_tasks %}true{% else %}false{% endif %}" data-task="{{ task.id }}" data-move-url="{% url 'move_task' task.id %}">
@@ -57,17 +86,6 @@
     </div>
   {% endfor %}
 </section>
-{% if can_manage_board %}
-  <section class="panel">
-    <div class="panel-head"><div><h2>Dodaj kolumnę</h2><p>Nowa kolumna pojawi się na końcu tablicy.</p></div></div>
-    <form method="post" class="inline-form">
-      {% csrf_token %}
-      <input type="hidden" name="form" value="board_column">
-      {{ column_form.as_p }}
-      <button class="primary-btn">Dodaj kolumnę</button>
-    </form>
-  </section>
-{% endif %}
 <section class="panel" id="new-task">
   <div class="panel-head"><div><h2>Utwórz nowe zadanie</h2><p>Wypełnij szczegóły i dodaj kartę do tablicy.</p></div></div>
   <form method="post" class="grid-form">{% csrf_token %}{{ form.as_p }}<button class="primary-btn">Dodaj zadanie</button></form>
