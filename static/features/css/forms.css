@@ -1,0 +1,65 @@
+input,
+select,
+textarea {
+  border: 1px solid var(--border2);
+  background: #fff;
+  border-radius: 8px;
+  padding: 9px 10px;
+  min-width: 0;
+}
+
+textarea {
+  min-height: 90px;
+}
+
+.form-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+  max-width: 520px;
+}
+
+.form-card.compact {
+  max-width: none;
+}
+
+.form-card p,
+.grid-form p {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.form-card label,
+.grid-form label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.auth-panel {
+  display: grid;
+  place-items: center;
+  min-height: 65vh;
+}
+
+.grid-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.grid-form button {
+  align-self: end;
+}
+
+.inline-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}

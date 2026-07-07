@@ -1,0 +1,39 @@
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 70px;
+  gap: 10px;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.bar-row div {
+  height: 9px;
+  background: var(--surface2);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.bar-row i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 99px;
+}
+
+.empty {
+  color: var(--muted);
+}
+
+.empty.small {
+  font-size: 13px;
+  text-align: center;
+  padding: 20px 0;
+}

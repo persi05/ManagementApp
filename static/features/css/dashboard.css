@@ -1,0 +1,183 @@
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.metric {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.metric span,
+.metric small {
+  display: block;
+  color: var(--muted);
+}
+
+.metric strong {
+  display: block;
+  font-size: 26px;
+  margin: 8px 0;
+}
+
+.metric-small {
+  font-size: 18px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(330px, .8fr) 1.2fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.panel h2 {
+  font-size: 17px;
+  margin: 0;
+}
+
+.panel p {
+  color: var(--muted);
+  margin: 4px 0 0;
+  line-height: 1.45;
+}
+
+.task-list {
+  display: grid;
+  gap: 8px;
+}
+
+.task-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.task-row small {
+  display: block;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.task-row em {
+  font-style: normal;
+  font-weight: 800;
+}
+
+.priority {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--faint);
+}
+
+.priority.high {
+  background: var(--bad);
+}
+
+.priority.medium {
+  background: var(--warn);
+}
+
+.priority.low {
+  background: var(--ok);
+}
+
+.project-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.project-tile {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 13px;
+  background: var(--surface2);
+  display: grid;
+  gap: 6px;
+}
+
+.project-tile span,
+.project-tile small {
+  color: var(--muted);
+}
+
+.client-project-list {
+  display: grid;
+  gap: 10px;
+}
+
+.client-project-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.2fr) minmax(160px, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+
+.client-project-row strong,
+.client-project-row small {
+  display: block;
+}
+
+.client-project-row small {
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.client-progress {
+  height: 9px;
+  background: var(--surface2);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.client-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 99px;
+}
+
+.client-project-stats {
+  text-align: right;
+}
+
+.client-project-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}

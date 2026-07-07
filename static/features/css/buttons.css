@@ -1,0 +1,48 @@
+.primary-btn,
+.ghost-btn,
+.danger-btn {
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  min-height: 38px;
+  padding: 8px 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.primary-btn {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.ghost-btn {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.danger-btn {
+  background: var(--bad);
+  color: #fff;
+  border-color: var(--bad);
+}
+
+.full {
+  width: 100%;
+}
+
+.small-btn {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.text-link {
+  display: block;
+  text-align: center;
+  color: var(--accent);
+  font-weight: 700;
+  margin-top: 12px;
+}

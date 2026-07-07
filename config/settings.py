@@ -29,17 +29,23 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'core.apps.CoreConfig',
+    'features.accounts.apps.AccountsConfig',
+    'features.dashboard.apps.DashboardConfig',
+    'features.projects.apps.ProjectsConfig',
+    'features.employees.apps.EmployeesConfig',
+    'features.tasks.apps.TasksConfig',
+    'features.time_tracking.apps.TimeTrackingConfig',
+    'features.reports.apps.ReportsConfig',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'core.middleware.LoginRateLimitMiddleware',
+    'features.accounts.middleware.LoginRateLimitMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'core.middleware.BlockedAccountMiddleware',
+    'features.accounts.middleware.BlockedAccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
