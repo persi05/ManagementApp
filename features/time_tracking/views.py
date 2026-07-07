@@ -14,6 +14,13 @@ from features.time_tracking.forms import TimeEntryForm
 from features.time_tracking.models import TimeEntry, WorkSession
 
 
+def paused_minutes(session, now=None):
+    if session.state != WorkSession.State.PAUSED or not session.paused_at:
+        return 0
+    now = now or timezone.now()
+    return max(0, int((now - session.paused_at).total_seconds()) // 60)
+
+
 @login_required
 def time_entries(request):
     forbidden = worker_required(request.user)
@@ -73,8 +80,24 @@ def pause_timer(request):
     session.state = WorkSession.State.PAUSED
     session.paused_at = timezone.now()
     session.inactive_minutes += int(request.POST.get('inactive_minutes') or 0)
-    session.save()
+    session.save(update_fields=['state', 'paused_at', 'inactive_minutes'])
     messages.info(request, 'Licznik został zatrzymany na pauzie.')
+    return redirect(request.POST.get('next') or reverse('dashboard'))
+
+
+@login_required
+@require_POST
+def resume_timer(request):
+    forbidden = worker_required(request.user)
+    if forbidden:
+        return forbidden
+
+    session = get_object_or_404(WorkSession, user=request.user, state=WorkSession.State.PAUSED)
+    session.inactive_minutes += paused_minutes(session)
+    session.state = WorkSession.State.RUNNING
+    session.paused_at = None
+    session.save(update_fields=['inactive_minutes', 'state', 'paused_at'])
+    messages.success(request, 'Licznik został wznowiony.')
     return redirect(request.POST.get('next') or reverse('dashboard'))
 
 
@@ -87,10 +110,11 @@ def stop_timer(request):
 
     session = get_object_or_404(WorkSession, user=request.user, state__in=[WorkSession.State.RUNNING, WorkSession.State.PAUSED])
     now = timezone.now()
+    pause_minutes = paused_minutes(session, now)
     session.state = WorkSession.State.STOPPED
     session.ended_at = now
-    session.inactive_minutes += int(request.POST.get('inactive_minutes') or 0)
-    session.save()
+    session.inactive_minutes += int(request.POST.get('inactive_minutes') or 0) + pause_minutes
+    session.save(update_fields=['state', 'ended_at', 'inactive_minutes'])
     local_day_end = timezone.localtime(session.started_at).replace(hour=23, minute=59, second=59, microsecond=999999)
     if now > session.started_at:
         TimeEntry.objects.create(
