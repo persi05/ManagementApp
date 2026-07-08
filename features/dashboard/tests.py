@@ -12,7 +12,7 @@ from features.employees.forms import EmployeeProfileForm, HourlyRateForm
 from features.employees.models import HourlyRate
 from features.employees.services import save_hourly_rate
 from features.projects.forms import ProjectAssignmentForm
-from features.projects.models import Project, ProjectAssignment
+from features.projects.models import Project, ProjectAssignment, ProjectLabelRate
 from features.projects.selectors import visible_projects
 from features.planner.models import LeaveRequest
 from features.reports.services import payroll_amount
@@ -468,6 +468,62 @@ class ExportPdfTests(TestCase):
 
         self.assertContains(response, 'Client project')
         self.assertContains(response, '3,50h')
+
+    def test_project_pdf_and_csv_include_rates_and_amounts(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee = User.objects.create_user(username='employee')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Client project', client_hourly_rate=Decimal('100.00'))
+        column = BoardColumn.objects.create(project=project, name='Done')
+        task = Task.objects.create(project=project, column=column, title='Priced task', labels='backend')
+        ProjectLabelRate.objects.create(project=project, label='backend', hourly_rate=Decimal('220.00'))
+        TaskWorklog.objects.create(task=task, user=employee, date=timezone.localdate(), hours=Decimal('2.00'), visible_to_client=True)
+
+        self.client.force_login(manager)
+        pdf_response = self.client.get(reverse('export_pdf'))
+        csv_response = self.client.get(reverse('export_csv'))
+
+        self.assertContains(pdf_response, '220,00 PLN/h')
+        self.assertContains(pdf_response, '440,00 PLN')
+        csv_content = csv_response.content.decode('utf-8')
+        self.assertIn('Stawka', csv_content)
+        self.assertIn('Kwota', csv_content)
+        self.assertIn('220.00', csv_content)
+        self.assertIn('440.00', csv_content)
+
+    def test_management_pdf_uses_management_scope_label(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Client project')
+        column = BoardColumn.objects.create(project=project, name='Done')
+        task = Task.objects.create(project=project, column=column, title='Task')
+        TaskWorklog.objects.create(task=task, user=manager, date=timezone.localdate(), hours=Decimal('1.00'))
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('export_pdf'), {'visibility': 'management'})
+
+        self.assertContains(response, 'godziny widoczne dla managementu')
+        self.assertNotContains(response, 'godziny widoczne dla klienta')
+        self.assertContains(response, 'Zakres')
+
+    def test_client_pdf_hides_scope_label(self):
+        client = User.objects.create_user(username='client', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Client project', client=client)
+        column = BoardColumn.objects.create(project=project, name='Done')
+        task = Task.objects.create(project=project, column=column, title='Task')
+        TaskWorklog.objects.create(task=task, user=client, date=timezone.localdate(), hours=Decimal('1.00'))
+
+        self.client.force_login(client)
+        response = self.client.get(reverse('export_pdf'), {'visibility': 'client', 'project': project.pk})
+
+        self.assertNotContains(response, 'Zakres')
+        self.assertNotContains(response, 'godziny widoczne dla klienta')
 
 
 class EmployeePayrollRangeTests(TestCase):
@@ -1492,14 +1548,42 @@ class KanbanRenderingTests(TestCase):
         ProjectAssignment.objects.create(project=project, user=employee)
         ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
         start = BoardColumn.objects.create(project=project, name='Start', position=0)
-        done = BoardColumn.objects.create(project=project, name='Done', position=1, employee_can_move_to=True)
+        done = BoardColumn.objects.create(project=project, name='Done', position=1, employee_can_move_to=True, notify_client_on_move_to=True)
         task = Task.objects.create(project=project, column=start, title='Finish me', assignee=employee)
 
         self.client.force_login(employee)
         response = self.client.post(reverse('move_task', args=[task.id]), {'column': done.id})
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(Notification.objects.filter(user=client, kind='client_done', content__contains='Finish me').exists())
+        self.assertTrue(Notification.objects.filter(user=client, kind='client_task', content__contains='Finish me').exists())
+
+    def test_column_notification_settings_control_move_notifications(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        client = User.objects.create_user(username='client', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Client project', client=client)
+        ProjectAssignment.objects.create(project=project, user=employee)
+        ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
+        start = BoardColumn.objects.create(project=project, name='Start', position=0)
+        review = BoardColumn.objects.create(
+            project=project,
+            name='Review',
+            position=1,
+            employee_can_move_to=True,
+            notify_client_on_move_to=True,
+            notify_assignee_on_move_to=False,
+        )
+        task = Task.objects.create(project=project, column=start, title='Review task', assignee=employee)
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('move_task', args=[task.id]), {'column': review.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Notification.objects.filter(user=client, kind='client_task', content__contains='Review task').exists())
+        self.assertFalse(Notification.objects.filter(user=employee, kind='task', content__contains='Review task').exists())
 
     def test_daily_reminders_create_deadline_and_leave_notifications(self):
         employee = User.objects.create_user(username='employee', password='pass')
@@ -1541,3 +1625,182 @@ class KanbanRenderingTests(TestCase):
         self.assertNotContains(response, '<th>Pracownik</th>')
         self.assertNotContains(response, 'employee')
         self.assertNotContains(response, '<td>widzi</td>')
+
+    def test_client_report_uses_first_matching_label_rate(self):
+        client = User.objects.create_user(username='client', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Client project', client=client, client_hourly_rate=Decimal('100.00'))
+        ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
+        column = BoardColumn.objects.create(project=project, name='Done', position=0)
+        task = Task.objects.create(project=project, column=column, title='Priced task', labels='backend, frontend')
+        ProjectLabelRate.objects.create(project=project, label='backend', hourly_rate=Decimal('220.00'))
+        ProjectLabelRate.objects.create(project=project, label='frontend', hourly_rate=Decimal('190.00'))
+        TaskWorklog.objects.create(task=task, user=employee, date=timezone.localdate(), hours=Decimal('2.00'), visible_to_client=True)
+
+        self.client.force_login(client)
+        response = self.client.get(reverse('reports'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '220,00 PLN/h')
+        self.assertContains(response, '440,00 PLN')
+        self.assertContains(response, 'backend')
+
+    def test_client_report_falls_back_to_project_rate_without_label_rate(self):
+        client = User.objects.create_user(username='client', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Client project', client=client, client_hourly_rate=Decimal('150.00'))
+        ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
+        column = BoardColumn.objects.create(project=project, name='Done', position=0)
+        task = Task.objects.create(project=project, column=column, title='Default priced task', labels='support')
+        TaskWorklog.objects.create(task=task, user=employee, date=timezone.localdate(), hours=Decimal('3.00'), visible_to_client=True)
+
+        self.client.force_login(client)
+        response = self.client.get(reverse('reports'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '150,00 PLN/h')
+        self.assertContains(response, '450,00 PLN')
+
+    def test_management_can_add_and_update_project_label_rate(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('project_detail', args=[project.id]), {
+            'form': 'label_rate',
+            'label': 'Backend',
+            'hourly_rate': '220,50',
+            'currency': 'pln',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        rate = ProjectLabelRate.objects.get(project=project)
+        self.assertEqual(rate.label, 'backend')
+        self.assertEqual(rate.hourly_rate, Decimal('220.50'))
+        self.assertEqual(rate.currency, 'PLN')
+
+        page = self.client.get(reverse('project_detail', args=[project.id]))
+        self.assertContains(page, 'backend')
+        self.assertContains(page, '220,50 PLN/h')
+
+        response = self.client.post(reverse('project_detail', args=[project.id]), {
+            'form': 'label_rate',
+            'label': 'backend',
+            'hourly_rate': '250.00',
+            'currency': 'PLN',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        rate.refresh_from_db()
+        self.assertEqual(rate.hourly_rate, Decimal('250.00'))
+        self.assertEqual(ProjectLabelRate.objects.filter(project=project, label='backend').count(), 1)
+
+    def test_kanban_shows_project_label_rate_suggestions_and_card_rates(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project', client_hourly_rate=Decimal('100.00'))
+        column = BoardColumn.objects.create(project=project, name='Start', position=0)
+        ProjectLabelRate.objects.create(project=project, label='backend', hourly_rate=Decimal('220.00'))
+        Task.objects.create(project=project, column=column, title='Priced task', labels='backend, new-label')
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('kanban_project', args=[project.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'project-label-suggestions')
+        self.assertContains(response, 'backend - 220,00 PLN/h')
+        self.assertContains(response, 'backend')
+        self.assertContains(response, '220,00 PLN/h')
+        self.assertContains(response, 'Stawka: 220,00 PLN/h')
+
+    def test_management_report_defaults_to_client_visible_scope(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        client = User.objects.create_user(username='client', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Client project', client=client, client_hourly_rate=Decimal('100.00'))
+        column = BoardColumn.objects.create(project=project, name='Done', position=0)
+        priced_task = Task.objects.create(project=project, column=column, title='Priced task', labels='backend')
+        hidden_task = Task.objects.create(project=project, column=column, title='Hidden task')
+        ProjectLabelRate.objects.create(project=project, label='backend', hourly_rate=Decimal('220.00'))
+        TaskWorklog.objects.create(task=priced_task, user=employee, date=timezone.localdate(), hours=Decimal('2.00'), visible_to_client=True)
+        TaskWorklog.objects.create(task=hidden_task, user=employee, date=timezone.localdate(), hours=Decimal('3.00'), visible_to_client=False)
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('reports'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Godziny widoczne dla klienta')
+        self.assertContains(response, '2,00h')
+        self.assertContains(response, 'Godziny klienta')
+        self.assertContains(response, '2,00h')
+        self.assertContains(response, 'Kwota klienta')
+        self.assertContains(response, '440,00 PLN')
+        self.assertContains(response, '220,00 PLN/h')
+        self.assertNotContains(response, '300,00 PLN')
+        self.assertNotContains(response, 'ukryte')
+
+    def test_management_report_can_switch_to_management_scope(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        client = User.objects.create_user(username='client', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Client project', client=client, client_hourly_rate=Decimal('100.00'))
+        column = BoardColumn.objects.create(project=project, name='Done', position=0)
+        priced_task = Task.objects.create(project=project, column=column, title='Priced task', labels='backend')
+        hidden_task = Task.objects.create(project=project, column=column, title='Hidden task')
+        ProjectLabelRate.objects.create(project=project, label='backend', hourly_rate=Decimal('220.00'))
+        TaskWorklog.objects.create(task=priced_task, user=employee, date=timezone.localdate(), hours=Decimal('2.00'), visible_to_client=True)
+        TaskWorklog.objects.create(task=hidden_task, user=employee, date=timezone.localdate(), hours=Decimal('3.00'), visible_to_client=False)
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('reports'), {'visibility': 'management'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Zakres raportu managementu')
+        self.assertContains(response, 'Godziny laczne')
+        self.assertContains(response, '5,00h')
+        self.assertContains(response, 'Godziny klienta')
+        self.assertContains(response, '2,00h')
+        self.assertContains(response, 'Kwota wg stawek')
+        self.assertContains(response, '740,00 PLN')
+        self.assertContains(response, '300,00 PLN')
+        self.assertContains(response, 'ukryte')
+
+    def test_selected_project_report_uses_single_project_copy(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Solo project')
+        column = BoardColumn.objects.create(project=project, name='Done', position=0)
+        task = Task.objects.create(project=project, column=column, title='Task')
+        TaskWorklog.objects.create(task=task, user=manager, date=timezone.localdate(), hours=Decimal('1.00'))
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('reports'), {'project': project.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '<h1>Raport projektu</h1>', html=True)
+        self.assertContains(response, 'Solo project')
+        self.assertContains(response, 'Podsumowanie projektu')

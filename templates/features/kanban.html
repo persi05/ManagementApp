@@ -19,7 +19,7 @@
   <div class="kanban-modal is-hidden" id="add-column-panel" role="dialog" aria-modal="true" aria-labelledby="add-column-title">
     <div class="kanban-modal-backdrop" data-close-add-column></div>
     <section class="kanban-modal-card">
-      <button type="button" class="ghost-btn tiny-btn kanban-modal-close" data-close-add-column aria-label="Zamknij">×</button>
+      <button type="button" class="ghost-btn tiny-btn kanban-modal-close" data-close-add-column aria-label="Zamknij">x</button>
       <div class="panel-head"><div><h2 id="add-column-title">Dodaj kolumnę</h2><p>Nowa kolumna pojawi się na końcu tablicy.</p></div></div>
       <form method="post" class="grid-form add-column-form">
         {% csrf_token %}
@@ -49,11 +49,25 @@
           <article class="kanban-card" draggable="{% if can_move_tasks %}true{% else %}false{% endif %}" data-task="{{ task.id }}" data-move-url="{% url 'move_task' task.id %}">
             <div class="card-top"><span class="priority {{ task.priority }}"></span><strong>{{ task.title }}</strong></div>
             <p>{{ task.description|truncatechars:110 }}</p>
-            {% if task.labels_list %}
+            {% if task.label_badges %}
               <div class="tag-row">
-                {% for label in task.labels_list %}
-                  <span>{{ label }}</span>
+                {% for label in task.label_badges %}
+                  <span class="{% if label.rate %}priced{% endif %}">
+                    {{ label.name }}
+                    {% if label.rate %}<em>{{ label.rate|floatformat:2 }} {{ label.currency }}/h</em>{% endif %}
+                  </span>
                 {% endfor %}
+              </div>
+            {% endif %}
+            {% if task.due_date or task.effective_client_rate %}
+              <div class="card-meta">
+                {% if task.due_date %}<span>Termin: {{ task.due_date|date:"Y-m-d" }}</span>{% endif %}
+                {% if task.effective_client_rate %}
+                  <span class="rate-pill">
+                    Stawka: {{ task.effective_client_rate.rate|floatformat:2 }} {{ task.effective_client_rate.currency }}/h
+                    {% if task.effective_client_rate.label %}<em>{{ task.effective_client_rate.label }}</em>{% endif %}
+                  </span>
+                {% endif %}
               </div>
             {% endif %}
             <footer>
@@ -85,11 +99,11 @@
     <div class="kanban-modal is-hidden" id="edit-column-{{ column.id }}" role="dialog" aria-modal="true" aria-labelledby="edit-column-title-{{ column.id }}">
       <div class="kanban-modal-backdrop" data-close-modal></div>
       <section class="kanban-modal-card column-settings-card">
-        <button type="button" class="ghost-btn tiny-btn kanban-modal-close" data-close-modal aria-label="Zamknij">×</button>
+        <button type="button" class="ghost-btn tiny-btn kanban-modal-close" data-close-modal aria-label="Zamknij">x</button>
         <div class="panel-head">
           <div>
             <h2 id="edit-column-title-{{ column.id }}">Edytuj kolumnę</h2>
-            <p>Ustaw nazwę i uprawnienia dla ról w tym projekcie.</p>
+            <p>Ustaw nazwę, uprawnienia i powiadomienia dla tej kolumny.</p>
           </div>
         </div>
         <form method="post" action="{% url 'update_column' column.id %}" class="column-settings-form">
@@ -119,6 +133,13 @@
             <label><input type="checkbox" name="lead_can_edit_tasks" {% if column.lead_can_edit_tasks %}checked{% endif %}> <span>Może</span></label>
             <label><input type="checkbox" name="lead_can_delete_tasks" {% if column.lead_can_delete_tasks %}checked{% endif %}> <span>Może</span></label>
           </div>
+          <div class="column-notifications">
+            <h3>Powiadomienia</h3>
+            <label><input type="checkbox" name="notify_client_on_task_create" {% if column.notify_client_on_task_create %}checked{% endif %}> <span>Powiadamiaj klienta o nowym zadaniu w tej kolumnie</span></label>
+            <label><input type="checkbox" name="notify_client_on_note" {% if column.notify_client_on_note %}checked{% endif %}> <span>Powiadamiaj klienta o notatce w tej kolumnie</span></label>
+            <label><input type="checkbox" name="notify_client_on_move_to" {% if column.notify_client_on_move_to %}checked{% endif %}> <span>Powiadamiaj klienta o przeniesieniu tutaj</span></label>
+            <label><input type="checkbox" name="notify_assignee_on_move_to" {% if column.notify_assignee_on_move_to %}checked{% endif %}> <span>Powiadamiaj pracownika o przeniesieniu tutaj</span></label>
+          </div>
           <div class="column-settings-actions">
             <button class="primary-btn">Zapisz</button>
           </div>
@@ -136,6 +157,13 @@
 {% endif %}
 <section class="panel" id="new-task">
   <div class="panel-head"><div><h2>Utwórz nowe zadanie</h2><p>Wypełnij szczegóły i dodaj kartę do tablicy.</p></div></div>
+  {% if project_label_rates %}
+    <datalist id="project-label-suggestions">
+      {% for rate in project_label_rates %}
+        <option value="{{ rate.label }}">{{ rate.label }} - {{ rate.hourly_rate|floatformat:2 }} {{ rate.currency }}/h</option>
+      {% endfor %}
+    </datalist>
+  {% endif %}
   <form method="post" class="grid-form">{% csrf_token %}{{ form.as_p }}<button class="primary-btn">Dodaj zadanie</button></form>
 </section>
 {% endif %}

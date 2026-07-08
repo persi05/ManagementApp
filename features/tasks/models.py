@@ -21,6 +21,12 @@ class BoardColumn(models.Model):
         'lead_can_edit_tasks',
         'lead_can_delete_tasks',
     )
+    NOTIFICATION_FIELDS = (
+        'notify_client_on_task_create',
+        'notify_client_on_note',
+        'notify_client_on_move_to',
+        'notify_assignee_on_move_to',
+    )
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='columns')
     name = models.CharField(max_length=80)
@@ -34,6 +40,10 @@ class BoardColumn(models.Model):
     lead_can_move_to = models.BooleanField(default=False)
     lead_can_edit_tasks = models.BooleanField(default=False)
     lead_can_delete_tasks = models.BooleanField(default=False)
+    notify_client_on_task_create = models.BooleanField(default=False)
+    notify_client_on_note = models.BooleanField(default=False)
+    notify_client_on_move_to = models.BooleanField(default=False)
+    notify_assignee_on_move_to = models.BooleanField(default=True)
 
     class Meta:
         ordering = ['position', 'id']
@@ -71,10 +81,28 @@ class BoardColumn(models.Model):
             })
         return defaults
 
+    @staticmethod
+    def default_notifications_for_position(position):
+        return {
+            'notify_client_on_task_create': position == 0,
+            'notify_client_on_note': position == 0,
+            'notify_client_on_move_to': position >= 3,
+            'notify_assignee_on_move_to': True,
+        }
+
     def save(self, *args, **kwargs):
         if self._state.adding and not any(getattr(self, field_name) for field_name in self.PERMISSION_FIELDS):
             for field_name, value in self.default_permissions_for_position(self.position).items():
                 setattr(self, field_name, value)
+        client_notification_fields = (
+            'notify_client_on_task_create',
+            'notify_client_on_note',
+            'notify_client_on_move_to',
+        )
+        if self._state.adding and not any(getattr(self, field_name) for field_name in client_notification_fields):
+            for field_name, value in self.default_notifications_for_position(self.position).items():
+                if field_name in client_notification_fields:
+                    setattr(self, field_name, value)
         super().save(*args, **kwargs)
 
     def __str__(self):

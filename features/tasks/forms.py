@@ -1,6 +1,7 @@
 from django import forms
 
 from features.accounts.models import UserProfile, is_management, user_role
+from features.projects.models import ProjectLabelRate
 
 from .models import BoardColumn, Task, TaskWorklog
 from .services import can_edit_task_fields, can_edit_task_labels, can_move_to_column
@@ -63,6 +64,17 @@ class TaskForm(forms.ModelForm):
         if 'assignee' in self.fields:
             field_order.append('assignee')
         self.order_fields(field_order)
+        self._setup_label_suggestions()
+
+    def _setup_label_suggestions(self):
+        if 'labels' not in self.fields or self.project is None:
+            return
+        self.fields['labels'].widget.attrs.update({
+            'list': 'project-label-suggestions',
+            'placeholder': 'np. backend, frontend',
+        })
+        rates = ProjectLabelRate.objects.filter(project=self.project).order_by('label')
+        self.project_label_rates = list(rates)
 
 
 class BoardColumnForm(forms.ModelForm):
@@ -86,6 +98,10 @@ class BoardColumnSettingsForm(forms.ModelForm):
             'lead_can_move_to',
             'lead_can_edit_tasks',
             'lead_can_delete_tasks',
+            'notify_client_on_task_create',
+            'notify_client_on_note',
+            'notify_client_on_move_to',
+            'notify_assignee_on_move_to',
         )
         labels = {
             'name': 'Nazwa kolumny',
@@ -98,6 +114,10 @@ class BoardColumnSettingsForm(forms.ModelForm):
             'lead_can_move_to': 'Lead: przenoszenie',
             'lead_can_edit_tasks': 'Lead: edycja',
             'lead_can_delete_tasks': 'Lead: usuwanie',
+            'notify_client_on_task_create': 'Klient: nowe zadanie w tej kolumnie',
+            'notify_client_on_note': 'Klient: notatka w tej kolumnie',
+            'notify_client_on_move_to': 'Klient: przeniesienie tutaj',
+            'notify_assignee_on_move_to': 'Pracownik: przeniesienie tutaj',
         }
 
 
@@ -170,3 +190,17 @@ class TaskEditForm(forms.ModelForm):
             field_order.append('assignee')
         field_order.append('change_note')
         self.order_fields(field_order)
+        self._setup_label_suggestions()
+
+    def _setup_label_suggestions(self):
+        if 'labels' not in self.fields:
+            return
+        project = self.project or getattr(self.instance, 'project', None)
+        if project is None:
+            return
+        self.fields['labels'].widget.attrs.update({
+            'list': 'project-label-suggestions',
+            'placeholder': 'np. backend, frontend',
+        })
+        rates = ProjectLabelRate.objects.filter(project=project).order_by('label')
+        self.project_label_rates = list(rates)

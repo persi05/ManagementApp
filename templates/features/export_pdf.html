@@ -12,6 +12,7 @@
     th{background:#f2f5f7}
     .summary{border:1px solid #b8c2cc;padding:16px;margin:18px 0;background:#f8fafb}
     .summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .summary-grid.two-cols{grid-template-columns:repeat(2,1fr)}
     .summary-grid div{border:1px solid #d7dde3;padding:10px;background:#fff}
     .muted{color:#647281}
     @media print{button{display:none}}
@@ -22,27 +23,33 @@
 
   {% if is_client_summary %}
     <h1>Raport projektu - {{ period_label|default:month }}</h1>
-    <div class="summary summary-grid">
-      <div><strong>Godziny łącznie</strong><br>{{ total_hours|floatformat:2 }}h</div>
-      <div><strong>Zakres</strong><br>godziny widoczne dla klienta</div>
-      <div><strong>Okres</strong><br>{{ period_label|default:month }}</div>
+    <div class="summary summary-grid {% if report_visibility != 'management' %}two-cols{% endif %}">
+      <div><strong>Godziny lacznie</strong><br>{{ total_hours|floatformat:2 }}h</div>
+      {% if report_visibility == 'management' %}
+        <div><strong>Zakres</strong><br>godziny widoczne dla managementu</div>
+      {% endif %}
+      <div><strong>Kwota</strong><br>{% if total_amount != None %}{{ total_amount|floatformat:2 }} {{ report_currency }}{% else %}-{% endif %}</div>
     </div>
 
-    <h2>Podsumowanie projektów</h2>
+    <h2>Podsumowanie projektow</h2>
     <table>
-      <thead><tr><th>Projekt</th><th>Godziny</th></tr></thead>
+      <thead><tr><th>Projekt</th><th>Godziny</th><th>Kwota</th></tr></thead>
       <tbody>
         {% for row in by_project %}
-          <tr><td>{{ row.project.name }}</td><td>{{ row.hours|floatformat:2 }}h</td></tr>
+          <tr>
+            <td>{{ row.project.name }}</td>
+            <td>{{ row.hours|floatformat:2 }}h</td>
+            <td>{% if row.amount != None %}{{ row.amount|floatformat:2 }} {{ row.currency }}{% else %}-{% endif %}</td>
+          </tr>
         {% empty %}
-          <tr><td colspan="2">Brak godzin widocznych dla klienta.</td></tr>
+          <tr><td colspan="3">Brak godzin widocznych dla klienta.</td></tr>
         {% endfor %}
       </tbody>
     </table>
 
-    <h2>Wpisy zadań</h2>
+    <h2>Wpisy zadan</h2>
     <table>
-      <thead><tr><th>Data</th><th>Godziny</th><th>Projekt</th><th>Zadanie</th><th>Komentarz</th></tr></thead>
+      <thead><tr><th>Data</th><th>Godziny</th><th>Projekt</th><th>Zadanie</th><th>Stawka</th><th>Kwota</th><th>Komentarz</th></tr></thead>
       <tbody>
         {% for worklog in worklogs %}
           <tr>
@@ -50,10 +57,12 @@
             <td>{{ worklog.hours|floatformat:2 }}</td>
             <td>{{ worklog.task.project.name }}</td>
             <td>{{ worklog.task.title }}</td>
+            <td>{% if worklog.billing_rate != None %}{{ worklog.billing_rate|floatformat:2 }} {{ worklog.billing_currency }}/h{% if worklog.billing_label %}<br><span class="muted">{{ worklog.billing_label }}</span>{% endif %}{% else %}-{% endif %}</td>
+            <td>{% if worklog.billing_amount != None %}{{ worklog.billing_amount|floatformat:2 }} {{ worklog.billing_currency }}{% else %}-{% endif %}</td>
             <td>{{ worklog.comment|default:"-" }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="5">Brak wpisów czasu w tym okresie.</td></tr>
+          <tr><td colspan="7">Brak wpisow czasu w tym okresie.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -61,11 +70,11 @@
     <h1>Zbiorczy raport czasu pracy - {{ period_label|default:month }}</h1>
     <div class="summary summary-grid">
       <div><strong>Pracownicy</strong><br>{{ employees|length }}</div>
-      <div><strong>Godziny łącznie</strong><br>{{ total_hours|floatformat:2 }}h</div>
-      <div><strong>Wynagrodzenia łącznie</strong><br>{{ total_payroll }} PLN</div>
+      <div><strong>Godziny lacznie</strong><br>{{ total_hours|floatformat:2 }}h</div>
+      <div><strong>Wynagrodzenia lacznie</strong><br>{{ total_payroll }} PLN</div>
     </div>
 
-    <h2>Podsumowanie pracowników</h2>
+    <h2>Podsumowanie pracownikow</h2>
     <table>
       <thead><tr><th>Pracownik</th><th>Godziny</th><th>Wpisy</th><th>Konto do przelewu</th><th>Kwota</th></tr></thead>
       <tbody>
@@ -78,12 +87,12 @@
             <td>{{ row.payroll }} PLN</td>
           </tr>
         {% empty %}
-          <tr><td colspan="5">Brak pracowników w raporcie.</td></tr>
+          <tr><td colspan="5">Brak pracownikow w raporcie.</td></tr>
         {% endfor %}
       </tbody>
     </table>
 
-    <h2>Wpisy źródłowe</h2>
+    <h2>Wpisy zrodlowe</h2>
     <table>
       <thead><tr><th>Pracownik</th><th>Data</th><th>Od</th><th>Do</th><th>Godziny</th><th>Projekt</th><th>Zadanie</th></tr></thead>
       <tbody>
@@ -98,7 +107,7 @@
             <td>{{ entry.task.title|default:"-" }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="7">Brak wpisów czasu w tym okresie.</td></tr>
+          <tr><td colspan="7">Brak wpisow czasu w tym okresie.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -122,7 +131,7 @@
             <td>{{ entry.task.title|default:"-" }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="6">Brak wpisów czasu w tym okresie.</td></tr>
+          <tr><td colspan="6">Brak wpisow czasu w tym okresie.</td></tr>
         {% endfor %}
       </tbody>
     </table>

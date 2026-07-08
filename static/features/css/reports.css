@@ -8,6 +8,29 @@
 
 .report-filter-panel {
   background: var(--surface);
+  margin-bottom: 18px;
+}
+
+.report-visibility-switch {
+  display: inline-flex;
+  gap: 6px;
+  padding: 5px;
+  margin: 0 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.report-visibility-switch a {
+  padding: 8px 12px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.report-visibility-switch a.active {
+  background: var(--accent);
+  color: #fff;
 }
 
 .client-filter-panel {
@@ -118,9 +141,15 @@
   color: var(--accent);
 }
 
-.client-report-card small {
+.client-report-card small,
+.client-report-card-values small {
   display: block;
   margin-top: 2px;
+}
+
+.client-report-card-values {
+  flex: 0 0 auto;
+  text-align: right;
 }
 
 .empty-card {
@@ -200,6 +229,10 @@
   .client-report-summary div,
   .client-report-card strong {
     width: 100%;
+    text-align: left;
+  }
+
+  .client-report-card-values {
     text-align: left;
   }
 }

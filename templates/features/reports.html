@@ -1,20 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Raporty projektow - Dcode Management{% endblock %}
-{% block heading %}Raporty projektow{% endblock %}
-{% block eyebrow %}Zestawienie projektow{% endblock %}
+{% block title %}{% if selected_project_obj %}Raport projektu{% else %}Raporty projektow{% endif %} - Dcode Management{% endblock %}
+{% block heading %}{% if selected_project_obj %}Raport projektu{% else %}Raporty projektow{% endif %}{% endblock %}
+{% block eyebrow %}{% if selected_project_obj %}{{ selected_project_obj.name }}{% else %}Zestawienie projektow{% endif %}{% endblock %}
 {% block top_actions %}
-  <a class="ghost-btn" href="{% url 'export_csv' %}?date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}">CSV</a>
-  <a class="primary-btn" href="{% url 'export_pdf' %}?date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}" target="_blank">PDF / druk</a>
+  <a class="ghost-btn" href="{% url 'export_csv' %}?date_from={{ date_from }}&date_to={{ date_to }}&visibility={{ report_visibility }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}">CSV</a>
+  <a class="primary-btn" href="{% url 'export_pdf' %}?date_from={{ date_from }}&date_to={{ date_to }}&visibility={{ report_visibility }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}" target="_blank">PDF / druk</a>
 {% endblock %}
 {% block content %}
 <section class="panel report-filter-panel {% if is_client_report %}client-filter-panel{% endif %}">
   <div class="panel-head">
     <div>
-      <h2>{% if is_client_report %}Zakres raportu{% else %}Filtry raportu{% endif %}</h2>
-      <p>{% if is_client_report %}Wybierz okres i projekt. Raport pokazuje tylko prace udostępnione klientowi.{% else %}Raport bazuje na czasie zadan projektowych, czyli godzinach wpisanych do zadan.{% endif %}</p>
+      <h2>{% if report_visibility == 'management' %}Zakres raportu managementu{% elif selected_project_obj %}Zakres raportu projektu{% elif is_client_report %}Zakres raportu{% else %}Zakres raportu klienta{% endif %}</h2>
+      <p>{% if report_visibility == 'management' %}Raport pokazuje wszystkie wpisy zadan. Dolna tabela zawiera rowniez pozycje ukryte przed klientem.{% elif is_client_report %}Wybierz okres i projekt. Raport pokazuje tylko prace udostepnione klientowi.{% else %}Raport podlicza tylko wpisy widoczne dla klienta.{% endif %}</p>
     </div>
   </div>
   <form class="filter-bar">
+    <input type="hidden" name="visibility" value="{{ report_visibility }}">
     <input type="date" name="date_from" value="{{ date_from }}">
     <input type="date" name="date_to" value="{{ date_to }}">
     {% if can_manage %}
@@ -43,6 +44,17 @@
   </form>
 </section>
 
+{% if can_manage %}
+<div class="report-visibility-switch">
+  <a class="{% if report_visibility == 'client' %}active{% endif %}" href="{% url 'reports' %}?visibility=client&date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}">
+    Widoczne dla klienta
+  </a>
+  <a class="{% if report_visibility == 'management' %}active{% endif %}" href="{% url 'reports' %}?visibility=management&date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}">
+    Widoczne dla managementu
+  </a>
+</div>
+{% endif %}
+
 {% if is_client_report %}
 <section class="client-report-hero">
   <div>
@@ -50,9 +62,10 @@
     <strong>{{ period_label }}</strong>
   </div>
   <dl class="client-report-summary">
-    <div><dt>Projekty</dt><dd>{{ by_project|length }}</dd></div>
+    <div><dt>{% if selected_project_obj %}Projekt{% else %}Projekty{% endif %}</dt><dd>{% if selected_project_obj %}1{% else %}{{ by_project|length }}{% endif %}</dd></div>
     <div><dt>Wpisy</dt><dd>{{ client_worklogs|length }}</dd></div>
-    <div><dt>Łącznie</dt><dd>{{ total_hours|floatformat:2 }}h</dd></div>
+    <div><dt>Lacznie</dt><dd>{{ total_hours|floatformat:2 }}h</dd></div>
+    <div><dt>Kwota</dt><dd>{% if total_amount != None %}{{ total_amount|floatformat:2 }} {{ report_currency }}{% else %}-{% endif %}</dd></div>
   </dl>
 </section>
 <section class="client-report-cards">
@@ -60,22 +73,27 @@
     <article class="client-report-card">
       <div>
         <h3>{{ row.project.name }}</h3>
-        <small>{{ row.entries_count }} wpisów w zakresie</small>
+        <small>{{ row.entries_count }} wpisow w zakresie</small>
       </div>
-      <strong>{{ row.hours|floatformat:2 }}h</strong>
+      <div class="client-report-card-values">
+        <strong>{{ row.hours|floatformat:2 }}h</strong>
+        <small>{% if row.amount != None %}{{ row.amount|floatformat:2 }} {{ row.currency }}{% else %}Brak stawki{% endif %}</small>
+      </div>
     </article>
   {% empty %}
     <article class="client-report-card empty-card">
       <h3>Brak danych w tym okresie</h3>
-      <small>Zmień zakres dat albo wybierz inny projekt.</small>
+      <small>Zmien zakres dat albo wybierz inny projekt.</small>
     </article>
   {% endfor %}
 </section>
 {% else %}
-<section class="metrics-grid">
-  <article class="metric"><span>Okres</span><strong class="metric-small">{{ period_label }}</strong><small>zakres raportu</small></article>
-  <article class="metric"><span>Projekty</span><strong>{{ by_project|length }}</strong><small>z godzinami w zakresie</small></article>
-  <article class="metric"><span>Godziny projektowe</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>z worklogow zadan</small></article>
+<section class="metrics-grid report-metrics">
+  <article class="metric"><span>{% if report_visibility == 'management' %}Zakres managementu{% else %}Zakres klienta{% endif %}</span><strong class="metric-small">{{ period_label }}</strong><small>{% if report_visibility == 'management' %}wszystkie wpisy zadan{% else %}tylko widoczne dla klienta{% endif %}</small></article>
+  <article class="metric"><span>{% if selected_project_obj %}Projekt{% else %}Projekty{% endif %}</span><strong class="{% if selected_project_obj %}metric-small{% endif %}">{% if selected_project_obj %}{{ selected_project_obj.name }}{% else %}{{ by_project|length }}{% endif %}</strong><small>{% if selected_project_obj %}wybrany projekt{% else %}z godzinami w zakresie{% endif %}</small></article>
+  <article class="metric"><span>{% if is_client_visibility_report %}Godziny widoczne dla klienta{% else %}Godziny laczne{% endif %}</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>{% if is_client_visibility_report %}podliczane tylko z wpisow klienta{% else %}wszystkie worklogi zadan{% endif %}</small></article>
+  <article class="metric"><span>Godziny klienta</span><strong>{{ total_visible_hours|floatformat:2 }}h</strong><small>wpisy widoczne dla klienta</small></article>
+  <article class="metric"><span>{% if is_client_visibility_report %}Kwota klienta{% else %}Kwota wg stawek{% endif %}</span><strong>{% if total_amount != None %}{{ total_amount|floatformat:2 }} {{ report_currency }}{% else %}-{% endif %}</strong><small>wedlug stawek projektu i etykiet</small></article>
   <article class="metric"><span>Pracownicy</span><strong>{{ by_user|length }}</strong><small>z wpisami w zakresie</small></article>
 </section>
 {% endif %}
@@ -83,20 +101,22 @@
 {% if not is_client_report %}
 <section class="workspace-grid">
   <div class="panel">
-    <div class="panel-head"><div><h2>Zestawienie projektow</h2><p>Godziny wpisane do zadan, z mozliwoscia filtrowania po kliencie i projekcie.</p></div></div>
+    <div class="panel-head"><div><h2>{% if selected_project_obj %}Podsumowanie projektu{% else %}Zestawienie projektow{% endif %}</h2><p>{% if report_visibility == 'management' %}Raport podlicza wszystkie wpisy, a kwoty widac takze dla pozycji ukrytych przed klientem.{% elif is_client_visibility_report %}Raport podlicza tylko godziny widoczne dla klienta.{% elif selected_project_obj %}Godziny, widocznosc klienta i kwota dla wybranego projektu.{% else %}Godziny wpisane do zadan, z mozliwoscia filtrowania po kliencie i projekcie.{% endif %}</p></div></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Projekt</th>{% if not is_client_report %}<th>Klient</th>{% endif %}<th>Godziny</th><th>Wpisy</th></tr></thead>
+        <thead><tr><th>Projekt</th>{% if not is_client_report %}<th>Klient</th>{% endif %}<th>Godziny laczne</th><th>Godziny klienta</th><th>Kwota klienta</th><th>Wpisy</th></tr></thead>
         <tbody>
           {% for row in by_project %}
             <tr>
               <td>{{ row.project.name }}</td>
               {% if not is_client_report %}<td>{% if row.client %}{% if row.client.get_full_name %}{{ row.client.get_full_name }}{% else %}{{ row.client.username }}{% endif %}{% else %}-{% endif %}</td>{% endif %}
               <td>{{ row.hours|floatformat:2 }}h</td>
+              <td>{{ row.visible_hours|floatformat:2 }}h</td>
+              <td>{% if row.amount != None %}{{ row.amount|floatformat:2 }} {{ row.currency }}{% else %}-{% endif %}</td>
               <td>{{ row.entries_count }}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="{% if is_client_report %}3{% else %}4{% endif %}">Brak danych projektowych.</td></tr>
+            <tr><td colspan="6">Brak danych projektowych.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -125,10 +145,10 @@
 {% endif %}
 
 <section class="panel {% if is_client_report %}client-worklog-panel{% endif %}">
-  <div class="panel-head"><div><h2>{% if is_client_report %}Wykonane prace{% else %}Wpisy zadan{% endif %}</h2><p>{% if is_client_report %}Lista udostępnionych wpisów bez danych pracowników.{% else %}Ostatnie 100 worklogow dla wybranego zakresu.{% endif %}</p></div></div>
+  <div class="panel-head"><div><h2>{% if is_client_report %}Wykonane prace{% else %}Wpisy zadan{% endif %}</h2><p>{% if is_client_report %}Lista udostepnionych wpisow bez danych pracownikow.{% elif report_visibility == 'management' %}Ostatnie 100 wpisow widocznych dla managementu. Kwoty pokazujemy rowniez dla wpisow ukrytych dla klienta.{% else %}Ostatnie 100 wpisow widocznych dla klienta.{% endif %}</p></div></div>
   <div class="table-wrap">
     <table class="{% if is_client_report %}client-worklog-table{% endif %}">
-      <thead><tr><th>Data</th>{% if not is_client_report %}<th>Pracownik</th>{% endif %}<th>Projekt</th><th>Zadanie</th><th>Godziny</th>{% if not is_client_report %}<th>Klient</th>{% endif %}</tr></thead>
+      <thead><tr><th>Data</th>{% if not is_client_report %}<th>Pracownik</th>{% endif %}<th>Projekt</th><th>Zadanie</th><th>Godziny</th><th>Stawka</th><th>Kwota</th>{% if not is_client_report %}<th>Klient</th>{% endif %}</tr></thead>
       <tbody>
         {% for worklog in client_worklogs %}
           <tr>
@@ -137,10 +157,12 @@
             <td>{{ worklog.task.project.name }}</td>
             <td>{{ worklog.task.title }}</td>
             <td>{{ worklog.hours|floatformat:2 }}</td>
+            <td>{% if worklog.billing_rate != None %}{{ worklog.billing_rate|floatformat:2 }} {{ worklog.billing_currency }}/h{% if worklog.billing_label %}<br><small>{{ worklog.billing_label }}</small>{% endif %}{% else %}-{% endif %}</td>
+            <td>{% if worklog.billing_amount != None %}{{ worklog.billing_amount|floatformat:2 }} {{ worklog.billing_currency }}{% else %}-{% endif %}</td>
             {% if not is_client_report %}<td>{% if worklog.visible_to_client %}widzi{% else %}ukryte{% endif %}</td>{% endif %}
           </tr>
         {% empty %}
-          <tr><td colspan="{% if is_client_report %}4{% else %}6{% endif %}">Brak wpisow.</td></tr>
+          <tr><td colspan="{% if is_client_report %}6{% else %}8{% endif %}">Brak wpisow.</td></tr>
         {% endfor %}
       </tbody>
     </table>
