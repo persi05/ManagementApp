@@ -16,7 +16,7 @@ from features.projects.models import Project, ProjectAssignment
 from features.projects.selectors import visible_projects
 from features.planner.models import LeaveRequest
 from features.reports.services import payroll_amount
-from features.tasks.models import BoardColumn, Task, TaskEditNote, TaskWorklog
+from features.tasks.models import BoardColumn, Notification, Task, TaskEditNote, TaskWorklog
 from features.time_tracking.models import TimeEntry, WorkSession
 
 
@@ -1309,3 +1309,235 @@ class KanbanRenderingTests(TestCase):
         edit_page = self.client.get(reverse('edit_task', args=[client_task.id]))
 
         self.assertNotContains(edit_page, 'Etykiety')
+
+    def test_creating_assigned_task_sends_notification_to_assignee(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        column = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('kanban_project', args=[project.id]), {
+            'project': project.id,
+            'column': column.id,
+            'title': 'New assigned task',
+            'description': '',
+            'due_date': '',
+            'priority': 'medium',
+            'labels': '',
+            'assignee': employee.id,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        notification = Notification.objects.get(user=employee)
+        self.assertEqual(notification.kind, 'task')
+        self.assertIn('New assigned task', notification.content)
+        self.assertIn('/edit/', notification.url)
+
+    def test_task_note_sends_notification_to_assignee(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        column = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        task = Task.objects.create(project=project, column=column, title='Task', assignee=employee)
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('edit_task', args=[task.id]), {
+            'title': 'Task',
+            'description': '',
+            'due_date': '',
+            'priority': 'medium',
+            'labels': '',
+            'assignee': employee.id,
+            'change_note': 'Please check details.',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(TaskEditNote.objects.filter(task=task, content='Please check details.').exists())
+        self.assertTrue(Notification.objects.filter(user=employee, kind='task_note').exists())
+
+    def test_leave_request_notifies_management_and_status_notifies_employee(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        start = timezone.localdate() + timedelta(days=10)
+        end = start + timedelta(days=1)
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('calendar'), {
+            'form': 'leave_request',
+            'start_date': start.isoformat(),
+            'end_date': end.isoformat(),
+            'reason': 'Urlop',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        leave_request = LeaveRequest.objects.get(user=employee)
+        self.assertTrue(Notification.objects.filter(user=manager, kind='leave').exists())
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('update_leave_status', args=[leave_request.id]), {
+            'status': LeaveRequest.Status.APPROVED,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Notification.objects.filter(user=employee, kind='leave', title='Status wniosku o wolne').exists())
+
+    def test_notifications_can_be_marked_as_read(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        first = Notification.objects.create(user=user, title='One', content='First')
+        Notification.objects.create(user=user, title='Two', content='Second')
+
+        self.client.force_login(user)
+        response = self.client.post(reverse('mark_notification_read', args=[first.id]), {'next': reverse('notifications')})
+
+        self.assertEqual(response.status_code, 302)
+        first.refresh_from_db()
+        self.assertTrue(first.is_read)
+
+        response = self.client.post(reverse('mark_all_notifications_read'), {'next': reverse('notifications')})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Notification.objects.filter(user=user, is_read=False).exists())
+
+    def test_client_gets_notification_for_new_task_in_first_column(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        client = User.objects.create_user(username='client', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Client project', client=client)
+        ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
+        column = BoardColumn.objects.create(project=project, name='Start', position=0)
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('kanban_project', args=[project.id]), {
+            'project': project.id,
+            'column': column.id,
+            'title': 'Client visible task',
+            'description': '',
+            'due_date': '',
+            'priority': 'medium',
+            'labels': '',
+            'assignee': '',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Notification.objects.filter(user=client, kind='client_task', content__contains='Client visible task').exists())
+
+    def test_client_gets_note_notification_only_for_task_in_first_column(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        client = User.objects.create_user(username='client', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Client project', client=client)
+        ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
+        first = BoardColumn.objects.create(project=project, name='Start', position=0)
+        second = BoardColumn.objects.create(project=project, name='Work', position=1)
+        first_task = Task.objects.create(project=project, column=first, title='First task')
+        second_task = Task.objects.create(project=project, column=second, title='Second task')
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('edit_task', args=[first_task.id]), {
+            'title': 'First task',
+            'description': '',
+            'due_date': '',
+            'priority': 'medium',
+            'labels': '',
+            'assignee': '',
+            'change_note': 'Client should see this.',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        response = self.client.post(reverse('edit_task', args=[second_task.id]), {
+            'title': 'Second task',
+            'description': '',
+            'due_date': '',
+            'priority': 'medium',
+            'labels': '',
+            'assignee': '',
+            'change_note': 'Client should not see this.',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.assertTrue(Notification.objects.filter(user=client, kind='client_note', content__contains='First task').exists())
+        self.assertFalse(Notification.objects.filter(user=client, kind='client_note', content__contains='Second task').exists())
+
+    def test_client_gets_notification_when_task_moves_to_last_column(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        client = User.objects.create_user(username='client', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Client project', client=client)
+        ProjectAssignment.objects.create(project=project, user=employee)
+        ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
+        start = BoardColumn.objects.create(project=project, name='Start', position=0)
+        done = BoardColumn.objects.create(project=project, name='Done', position=1, employee_can_move_to=True)
+        task = Task.objects.create(project=project, column=start, title='Finish me', assignee=employee)
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('move_task', args=[task.id]), {'column': done.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Notification.objects.filter(user=client, kind='client_done', content__contains='Finish me').exists())
+
+    def test_daily_reminders_create_deadline_and_leave_notifications(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        column = BoardColumn.objects.create(project=project, name='Start', position=0)
+        tomorrow = timezone.localdate() + timedelta(days=1)
+        Task.objects.create(project=project, column=column, title='Due tomorrow', assignee=employee, due_date=tomorrow)
+        LeaveRequest.objects.create(user=employee, start_date=tomorrow, end_date=tomorrow, status=LeaveRequest.Status.APPROVED)
+
+        self.client.force_login(employee)
+        response = self.client.get(reverse('dashboard'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Notification.objects.filter(user=employee, kind='task_deadline', content__contains='Due tomorrow').exists())
+        self.assertTrue(Notification.objects.filter(user=employee, kind='leave_reminder').exists())
+
+    def test_client_report_hides_visibility_column(self):
+        client = User.objects.create_user(username='client', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Client project', client=client)
+        ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
+        column = BoardColumn.objects.create(project=project, name='Done', position=0)
+        task = Task.objects.create(project=project, column=column, title='Visible task')
+        TaskWorklog.objects.create(task=task, user=employee, date=timezone.localdate(), hours=Decimal('2.00'), visible_to_client=True)
+
+        self.client.force_login(client)
+        response = self.client.get(reverse('reports'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Raport klienta')
+        self.assertNotContains(response, '<th>Klient</th>')
+        self.assertNotContains(response, '<th>Pracownik</th>')
+        self.assertNotContains(response, 'employee')
+        self.assertNotContains(response, '<td>widzi</td>')

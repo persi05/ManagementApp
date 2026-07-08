@@ -6,6 +6,144 @@
   flex-wrap: wrap;
 }
 
+.report-filter-panel {
+  background: var(--surface);
+}
+
+.client-filter-panel {
+  border-color: #cfdbe3;
+}
+
+.client-filter-panel .panel-head {
+  margin-bottom: 10px;
+}
+
+.client-report-hero {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(25, 37, 51, .05);
+}
+
+.client-report-hero span,
+.client-report-card small {
+  color: var(--muted);
+}
+
+.client-report-hero span {
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.client-report-hero > div > strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+}
+
+.client-report-card h3 {
+  margin: 4px 0;
+}
+
+.client-report-summary {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+}
+
+.client-report-summary div {
+  min-width: 92px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface2);
+  display: grid;
+  gap: 2px;
+}
+
+.client-report-summary dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.client-report-summary dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--accent);
+}
+
+.client-report-cards {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.client-report-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.client-report-card h3 {
+  font-size: 16px;
+}
+
+.client-report-card > div {
+  min-width: 0;
+}
+
+.client-report-card strong {
+  flex: 0 0 auto;
+  min-width: 90px;
+  text-align: right;
+  font-size: 20px;
+  color: var(--accent);
+}
+
+.client-report-card small {
+  display: block;
+  margin-top: 2px;
+}
+
+.empty-card {
+  display: grid;
+  justify-content: start;
+  grid-column: 1 / -1;
+}
+
+.client-worklog-panel {
+  max-width: 1040px;
+}
+
+.client-worklog-table th,
+.client-worklog-table td {
+  padding-top: 13px;
+  padding-bottom: 13px;
+}
+
+.client-worklog-table td:last-child {
+  font-weight: 800;
+  color: var(--accent);
+}
+
 .bar-row {
   display: grid;
   grid-template-columns: 130px 1fr 70px;
@@ -36,4 +174,32 @@
   font-size: 13px;
   text-align: center;
   padding: 20px 0;
+}
+
+@media (max-width: 1050px) {
+  .client-report-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .client-report-summary {
+    width: 100%;
+  }
+
+  .client-report-summary div {
+    flex: 1;
+  }
+}
+
+@media (max-width: 620px) {
+  .client-report-summary,
+  .client-report-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .client-report-summary div,
+  .client-report-card strong {
+    width: 100%;
+    text-align: left;
+  }
 }

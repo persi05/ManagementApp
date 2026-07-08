@@ -7,11 +7,11 @@
   <a class="primary-btn" href="{% url 'export_pdf' %}?date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}" target="_blank">PDF / druk</a>
 {% endblock %}
 {% block content %}
-<section class="panel">
+<section class="panel report-filter-panel {% if is_client_report %}client-filter-panel{% endif %}">
   <div class="panel-head">
     <div>
-      <h2>Filtry raportu</h2>
-      <p>Raport bazuje na czasie zadan projektowych, czyli godzinach wpisanych do zadan.</p>
+      <h2>{% if is_client_report %}Zakres raportu{% else %}Filtry raportu{% endif %}</h2>
+      <p>{% if is_client_report %}Wybierz okres i projekt. Raport pokazuje tylko prace udostępnione klientowi.{% else %}Raport bazuje na czasie zadan projektowych, czyli godzinach wpisanych do zadan.{% endif %}</p>
     </div>
   </div>
   <form class="filter-bar">
@@ -43,36 +43,67 @@
   </form>
 </section>
 
+{% if is_client_report %}
+<section class="client-report-hero">
+  <div>
+    <span>Raport klienta</span>
+    <strong>{{ period_label }}</strong>
+  </div>
+  <dl class="client-report-summary">
+    <div><dt>Projekty</dt><dd>{{ by_project|length }}</dd></div>
+    <div><dt>Wpisy</dt><dd>{{ client_worklogs|length }}</dd></div>
+    <div><dt>Łącznie</dt><dd>{{ total_hours|floatformat:2 }}h</dd></div>
+  </dl>
+</section>
+<section class="client-report-cards">
+  {% for row in by_project %}
+    <article class="client-report-card">
+      <div>
+        <h3>{{ row.project.name }}</h3>
+        <small>{{ row.entries_count }} wpisów w zakresie</small>
+      </div>
+      <strong>{{ row.hours|floatformat:2 }}h</strong>
+    </article>
+  {% empty %}
+    <article class="client-report-card empty-card">
+      <h3>Brak danych w tym okresie</h3>
+      <small>Zmień zakres dat albo wybierz inny projekt.</small>
+    </article>
+  {% endfor %}
+</section>
+{% else %}
 <section class="metrics-grid">
   <article class="metric"><span>Okres</span><strong class="metric-small">{{ period_label }}</strong><small>zakres raportu</small></article>
   <article class="metric"><span>Projekty</span><strong>{{ by_project|length }}</strong><small>z godzinami w zakresie</small></article>
   <article class="metric"><span>Godziny projektowe</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>z worklogow zadan</small></article>
   <article class="metric"><span>Pracownicy</span><strong>{{ by_user|length }}</strong><small>z wpisami w zakresie</small></article>
 </section>
+{% endif %}
 
+{% if not is_client_report %}
 <section class="workspace-grid">
   <div class="panel">
     <div class="panel-head"><div><h2>Zestawienie projektow</h2><p>Godziny wpisane do zadan, z mozliwoscia filtrowania po kliencie i projekcie.</p></div></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Projekt</th><th>Klient</th><th>Godziny</th><th>Wpisy</th></tr></thead>
+        <thead><tr><th>Projekt</th>{% if not is_client_report %}<th>Klient</th>{% endif %}<th>Godziny</th><th>Wpisy</th></tr></thead>
         <tbody>
           {% for row in by_project %}
             <tr>
               <td>{{ row.project.name }}</td>
-              <td>{% if row.client %}{% if row.client.get_full_name %}{{ row.client.get_full_name }}{% else %}{{ row.client.username }}{% endif %}{% else %}-{% endif %}</td>
+              {% if not is_client_report %}<td>{% if row.client %}{% if row.client.get_full_name %}{{ row.client.get_full_name }}{% else %}{{ row.client.username }}{% endif %}{% else %}-{% endif %}</td>{% endif %}
               <td>{{ row.hours|floatformat:2 }}h</td>
               <td>{{ row.entries_count }}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="4">Brak danych projektowych.</td></tr>
+            <tr><td colspan="{% if is_client_report %}3{% else %}4{% endif %}">Brak danych projektowych.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 
-  <div class="panel">
+  <div class="panel {% if is_client_report %}client-report-team-panel{% endif %}">
     <div class="panel-head"><div><h2>Podzial pracownikow</h2><p>Ile dany pracownik wpisal godzin w wybranym raporcie.</p></div></div>
     <div class="table-wrap">
       <table>
@@ -91,24 +122,25 @@
     </div>
   </div>
 </section>
+{% endif %}
 
-<section class="panel">
-  <div class="panel-head"><div><h2>Wpisy zadan</h2><p>Ostatnie 100 worklogow dla wybranego zakresu.</p></div></div>
+<section class="panel {% if is_client_report %}client-worklog-panel{% endif %}">
+  <div class="panel-head"><div><h2>{% if is_client_report %}Wykonane prace{% else %}Wpisy zadan{% endif %}</h2><p>{% if is_client_report %}Lista udostępnionych wpisów bez danych pracowników.{% else %}Ostatnie 100 worklogow dla wybranego zakresu.{% endif %}</p></div></div>
   <div class="table-wrap">
-    <table>
-      <thead><tr><th>Data</th><th>Pracownik</th><th>Projekt</th><th>Zadanie</th><th>Godziny</th><th>Klient</th></tr></thead>
+    <table class="{% if is_client_report %}client-worklog-table{% endif %}">
+      <thead><tr><th>Data</th>{% if not is_client_report %}<th>Pracownik</th>{% endif %}<th>Projekt</th><th>Zadanie</th><th>Godziny</th>{% if not is_client_report %}<th>Klient</th>{% endif %}</tr></thead>
       <tbody>
         {% for worklog in client_worklogs %}
           <tr>
             <td>{{ worklog.date }}</td>
-            <td>{% if worklog.user.get_full_name %}{{ worklog.user.get_full_name }}{% else %}{{ worklog.user.username }}{% endif %}</td>
+            {% if not is_client_report %}<td>{% if worklog.user.get_full_name %}{{ worklog.user.get_full_name }}{% else %}{{ worklog.user.username }}{% endif %}</td>{% endif %}
             <td>{{ worklog.task.project.name }}</td>
             <td>{{ worklog.task.title }}</td>
             <td>{{ worklog.hours|floatformat:2 }}</td>
-            <td>{% if worklog.visible_to_client %}widzi{% else %}ukryte{% endif %}</td>
+            {% if not is_client_report %}<td>{% if worklog.visible_to_client %}widzi{% else %}ukryte{% endif %}</td>{% endif %}
           </tr>
         {% empty %}
-          <tr><td colspan="6">Brak wpisow.</td></tr>
+          <tr><td colspan="{% if is_client_report %}4{% else %}6{% endif %}">Brak wpisow.</td></tr>
         {% endfor %}
       </tbody>
     </table>

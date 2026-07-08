@@ -19,6 +19,10 @@ from features.tasks.services import (
     can_move_task_to_column,
     can_move_to_column,
     default_permissions_for_position,
+    is_first_project_column,
+    is_last_project_column,
+    notify_project_clients,
+    notify_user,
     normalize_column_positions,
 )
 
@@ -85,6 +89,23 @@ def kanban(request, project_id=None):
                 else:
                     task.created_by = request.user
                     task.save()
+                    notify_user(
+                        task.assignee,
+                        'Nowe zadanie',
+                        f'Przypisano Ci zadanie: {task.title}',
+                        kind='task',
+                        url=reverse('edit_task', args=[task.id]),
+                        actor=request.user,
+                    )
+                    if is_first_project_column(task):
+                        notify_project_clients(
+                            task.project,
+                            'Nowe zadanie w projekcie',
+                            f'Dodano zadanie: {task.title}',
+                            kind='client_task',
+                            url=reverse('edit_task', args=[task.id]),
+                            actor=request.user,
+                        )
                     messages.success(request, 'Zadanie zostalo dodane.')
                     return redirect('kanban_project', project_id=task.project_id)
             project = selected_project
@@ -128,9 +149,26 @@ def move_task(request, task_id):
     column = get_object_or_404(BoardColumn, pk=request.POST.get('column'), project=task.project)
     if not can_move_task_to_column(request.user, task, column):
         return HttpResponseForbidden('Brak uprawnien do zmiany statusu zadania.')
+    previous_column_id = task.column_id
     task.column = column
     task.save(update_fields=['column', 'updated_at'])
-    Notification.objects.create(user=task.assignee or request.user, content=f'Zmieniono status zadania: {task.title}', kind='task')
+    notify_user(
+        task.assignee,
+        'Zmieniono status zadania',
+        f'{task.title} jest teraz w kolumnie {column.name}.',
+        kind='task',
+        url=reverse('edit_task', args=[task.id]),
+        actor=request.user,
+    )
+    if previous_column_id != column.id and is_last_project_column(task.project, column):
+        notify_project_clients(
+            task.project,
+            'Zadanie zakończone',
+            f'Zadanie jest gotowe: {task.title}',
+            kind='client_done',
+            url=reverse('kanban_project', args=[task.project_id]),
+            actor=request.user,
+        )
     return JsonResponse({'ok': True, 'column': column.name})
 
 
@@ -185,12 +223,39 @@ def edit_task(request, task_id):
         return HttpResponseForbidden('Brak uprawnien do edycji zadania.')
 
     if request.method == 'POST':
+        previous_assignee_id = task.assignee_id
         form = TaskEditForm(request.POST, instance=task, user=request.user, project=task.project)
         if form.is_valid():
             updated_task = form.save()
+            if updated_task.assignee_id and updated_task.assignee_id != previous_assignee_id:
+                notify_user(
+                    updated_task.assignee,
+                    'Nowe przypisanie',
+                    f'Przypisano Ci zadanie: {updated_task.title}',
+                    kind='task',
+                    url=reverse('edit_task', args=[updated_task.id]),
+                    actor=request.user,
+                )
             note = form.cleaned_data.get('change_note', '').strip()
             if note:
                 TaskEditNote.objects.create(task=updated_task, user=request.user, content=note)
+                notify_user(
+                    updated_task.assignee,
+                    'Nowa notatka do zadania',
+                    f'Dodano notatke do zadania: {updated_task.title}',
+                    kind='task_note',
+                    url=reverse('edit_task', args=[updated_task.id]),
+                    actor=request.user,
+                )
+                if is_first_project_column(updated_task):
+                    notify_project_clients(
+                        updated_task.project,
+                        'Nowa notatka do zadania',
+                        f'Dodano notatke do zadania: {updated_task.title}',
+                        kind='client_note',
+                        url=reverse('edit_task', args=[updated_task.id]),
+                        actor=request.user,
+                    )
             messages.success(request, 'Zadanie zostalo zapisane.')
             return redirect('kanban_project', project_id=task.project_id)
     else:
@@ -310,3 +375,30 @@ def toggle_worklog_visibility(request, worklog_id):
     worklog.visible_to_client = not worklog.visible_to_client
     worklog.save(update_fields=['visible_to_client'])
     return redirect('worklogs')
+
+
+@login_required
+def notifications(request):
+    items = request.user.notifications.all()[:100]
+    unread_count = request.user.notifications.filter(is_read=False).count()
+    return render(request, 'features/notifications.html', {
+        'notifications': items,
+        'unread_count': unread_count,
+    })
+
+
+@login_required
+@require_POST
+def mark_notification_read(request, notification_id):
+    notification = get_object_or_404(Notification, pk=notification_id, user=request.user)
+    notification.is_read = True
+    notification.save(update_fields=['is_read'])
+    next_url = request.POST.get('next') or notification.url or reverse('notifications')
+    return redirect(next_url)
+
+
+@login_required
+@require_POST
+def mark_all_notifications_read(request):
+    request.user.notifications.filter(is_read=False).update(is_read=True)
+    return redirect(request.POST.get('next') or 'notifications')

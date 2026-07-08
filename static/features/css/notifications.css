@@ -1,0 +1,212 @@
+.nav-notifications {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-notifications strong {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #d94848;
+  color: #fff;
+  display: inline-grid;
+  place-items: center;
+  font-size: 12px;
+}
+
+.nav-notifications.active strong {
+  background: #fff;
+  color: var(--accent);
+}
+
+.notifications-panel {
+  max-width: 1040px;
+  background:
+    linear-gradient(180deg, rgba(20, 107, 99, .05), rgba(255, 255, 255, 0) 160px),
+    var(--surface);
+}
+
+.notifications-head {
+  align-items: center;
+}
+
+.notifications-count {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.notification-list {
+  display: grid;
+  gap: 12px;
+}
+
+.notification-row {
+  --notification-accent: var(--accent);
+  --notification-soft: var(--accentSoft);
+  --notification-glow: rgba(20, 107, 99, .12);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 14px 14px 16px;
+  border: 1px solid rgba(196, 206, 216, .9);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, var(--notification-soft), rgba(255, 255, 255, .94) 34%),
+    #fff;
+  box-shadow: 0 10px 24px rgba(25, 37, 51, .06);
+  position: relative;
+  overflow: hidden;
+}
+
+.notification-row::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--notification-accent);
+}
+
+.notification-row.unread {
+  border-color: color-mix(in srgb, var(--notification-accent) 35%, var(--border));
+  box-shadow: 0 14px 32px var(--notification-glow);
+}
+
+.notification-row.task,
+.notification-row.client_task {
+  --notification-accent: #146b63;
+  --notification-soft: #e2f1ef;
+  --notification-glow: rgba(20, 107, 99, .16);
+}
+
+.notification-row.task_note,
+.notification-row.client_note {
+  --notification-accent: #7c4dff;
+  --notification-soft: #f0ebff;
+  --notification-glow: rgba(124, 77, 255, .14);
+}
+
+.notification-row.leave,
+.notification-row.leave_reminder {
+  --notification-accent: #234f8f;
+  --notification-soft: #eaf2ff;
+  --notification-glow: rgba(35, 79, 143, .15);
+}
+
+.notification-row.client_done {
+  --notification-accent: #168a52;
+  --notification-soft: #e9f7ef;
+  --notification-glow: rgba(22, 138, 82, .15);
+}
+
+.notification-row.task_deadline {
+  --notification-accent: #b85c00;
+  --notification-soft: #fff0df;
+  --notification-glow: rgba(184, 92, 0, .14);
+}
+
+.notification-row.system {
+  --notification-accent: #a76813;
+  --notification-soft: #fff3df;
+  --notification-glow: rgba(167, 104, 19, .14);
+}
+
+.notification-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  color: var(--notification-accent);
+  border: 1px solid rgba(255, 255, 255, .8);
+  box-shadow: inset 0 0 0 1px rgba(23, 33, 43, .04);
+  font-weight: 800;
+}
+
+.notification-content,
+.notification-content a {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.notification-content strong {
+  font-size: 15px;
+}
+
+.notification-content span {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.notification-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.notification-kind {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .78);
+  color: var(--notification-accent);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.notification-meta small {
+  color: var(--muted);
+}
+
+.notification-read-btn {
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  font-size: 16px;
+  border-color: color-mix(in srgb, var(--notification-accent) 30%, var(--border));
+  color: var(--notification-accent);
+  background: rgba(255, 255, 255, .82);
+}
+
+.notification-read-btn:hover {
+  background: var(--notification-accent);
+  border-color: var(--notification-accent);
+  color: #fff;
+}
+
+.read-pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .78);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 620px) {
+  .notifications-head {
+    align-items: flex-start;
+  }
+
+  .notification-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .notification-row form,
+  .read-pill {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
