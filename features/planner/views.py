@@ -7,10 +7,12 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from features.accounts.models import UserProfile, is_management, user_role
+from features.tasks.services import notify_management, notify_user
 from features.tasks.selectors import visible_tasks
 from features.time_tracking.models import TimeEntry
 
@@ -49,6 +51,13 @@ def calendar_view(request):
             leave_request = form.save(commit=False)
             leave_request.user = request.user
             leave_request.save()
+            notify_management(
+                'Nowy wniosek o wolne',
+                f'{request.user.get_full_name() or request.user.username}: {leave_request.start_date:%Y-%m-%d} - {leave_request.end_date:%Y-%m-%d}',
+                kind='leave',
+                url=f"{reverse('calendar')}?month={leave_request.start_date:%Y-%m}",
+                actor=request.user,
+            )
             messages.success(request, 'Wniosek o wolne został wysłany.')
             return redirect(f'{request.path}?month={month_date:%Y-%m}')
     else:
@@ -89,6 +98,15 @@ def update_leave_status(request, leave_id):
 
     leave_request = get_object_or_404(LeaveRequest, pk=leave_id)
     leave_request.set_status(status, request.user)
+    status_label = 'zaakceptowany' if status == LeaveRequest.Status.APPROVED else 'odrzucony'
+    notify_user(
+        leave_request.user,
+        'Status wniosku o wolne',
+        f'Twój wniosek {leave_request.start_date:%Y-%m-%d} - {leave_request.end_date:%Y-%m-%d} został {status_label}.',
+        kind='leave',
+        url=f"{reverse('calendar')}?month={leave_request.start_date:%Y-%m}",
+        actor=request.user,
+    )
     messages.success(request, 'Status wniosku został zaktualizowany.')
     return redirect(request.POST.get('next') or 'calendar')
 

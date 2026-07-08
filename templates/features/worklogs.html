@@ -26,7 +26,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Data</th><th>Zadanie</th><th>Projekt</th><th>Pracownik</th><th>Godziny</th><th>Klient</th><th></th></tr>
+          <tr><th>Data</th><th>Zadanie</th><th>Projekt</th><th>Pracownik</th><th>Godziny</th>{% if role != 'client' %}<th>Klient</th>{% endif %}<th></th></tr>
         </thead>
         <tbody>
           {% for item in worklogs %}
@@ -36,7 +36,7 @@
               <td>{{ item.task.project.name }}</td>
               <td>{% if item.user.get_full_name %}{{ item.user.get_full_name }}{% else %}{{ item.user.username }}{% endif %}</td>
               <td>{{ item.hours }}</td>
-              <td>{% if item.visible_to_client %}widzi{% else %}ukryte{% endif %}</td>
+              {% if role != 'client' %}<td>{% if item.visible_to_client %}widzi{% else %}ukryte{% endif %}</td>{% endif %}
               <td>
                 {% if item.can_edit %}
                   <a class="ghost-btn small-btn" href="{% url 'edit_worklog' item.id %}">Edytuj</a>
@@ -45,7 +45,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="7">Brak wpisow.</td></tr>
+            <tr><td colspan="{% if role != 'client' %}7{% else %}6{% endif %}">Brak wpisow.</td></tr>
           {% endfor %}
         </tbody>
       </table>

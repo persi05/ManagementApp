@@ -1,7 +1,15 @@
+from datetime import timedelta
+
+from django.contrib.auth import get_user_model
+from django.core.cache import cache
+from django.db.models import Q
+from django.urls import reverse
+from django.utils import timezone
+
 from features.accounts.models import UserProfile, is_management, user_role
 from features.projects.models import ProjectAssignment
 
-from .models import BoardColumn
+from .models import BoardColumn, Notification, Task
 
 
 DEFAULT_BOARD_COLUMNS = ['Do zrobienia', 'W trakcie', 'Review', 'Zakonczone']
@@ -96,3 +104,117 @@ def can_edit_task_labels(user, task):
     if is_management(user):
         return True
     return user.is_authenticated and task.assignee_id == user.id
+
+
+def notify_user(user, title, content, kind='system', url='', actor=None):
+    if not user or not getattr(user, 'is_active', True):
+        return None
+    if actor and getattr(actor, 'id', None) == user.id:
+        return None
+    return Notification.objects.create(
+        user=user,
+        title=title,
+        content=content,
+        kind=kind,
+        url=url,
+    )
+
+
+def notify_management(title, content, kind='system', url='', actor=None):
+    users = get_user_model().objects.filter(
+        Q(profile__role=UserProfile.Role.MANAGEMENT) | Q(is_superuser=True),
+        is_active=True,
+    ).distinct()
+    notifications = []
+    for user in users:
+        notification = notify_user(user, title, content, kind=kind, url=url, actor=actor)
+        if notification:
+            notifications.append(notification)
+    return notifications
+
+
+def project_client_users(project):
+    user_ids = set()
+    if project.client_id:
+        user_ids.add(project.client_id)
+    user_ids.update(ProjectAssignment.objects.filter(
+        project=project,
+        project_role=ProjectAssignment.ProjectRole.CLIENT,
+    ).values_list('user_id', flat=True))
+    return get_user_model().objects.filter(id__in=user_ids, is_active=True)
+
+
+def notify_project_clients(project, title, content, kind='client_task', url='', actor=None):
+    notifications = []
+    for user in project_client_users(project):
+        notification = notify_user(user, title, content, kind=kind, url=url, actor=actor)
+        if notification:
+            notifications.append(notification)
+    return notifications
+
+
+def is_first_project_column(task):
+    first_column = task.project.columns.order_by('position', 'id').first()
+    return bool(first_column and task.column_id == first_column.id)
+
+
+def is_last_project_column(project, column):
+    last_column = project.columns.order_by('-position', '-id').first()
+    return bool(last_column and column.id == last_column.id)
+
+
+def notification_exists_today(user, title, content, kind, url):
+    return Notification.objects.filter(
+        user=user,
+        title=title,
+        content=content,
+        kind=kind,
+        url=url,
+        created_at__date=timezone.localdate(),
+    ).exists()
+
+
+def notify_user_once_today(user, title, content, kind='system', url=''):
+    if notification_exists_today(user, title, content, kind, url):
+        return None
+    return notify_user(user, title, content, kind=kind, url=url)
+
+
+def create_daily_reminders(user):
+    if not user.is_authenticated or user_role(user) == UserProfile.Role.CLIENT:
+        return
+
+    today = timezone.localdate()
+    cache_key = f'daily-reminders:{user.id}:{today:%Y-%m-%d}'
+    reminder_kinds = ['task_deadline', 'leave_reminder']
+    if cache.get(cache_key) and Notification.objects.filter(user=user, kind__in=reminder_kinds, created_at__date=today).exists():
+        return
+
+    tomorrow = today + timedelta(days=1)
+    tasks = Task.objects.filter(assignee=user, due_date=tomorrow).select_related('project')[:20]
+    for task in tasks:
+        notify_user_once_today(
+            user,
+            'Deadline jutro',
+            f'Jutro mija termin zadania: {task.title}',
+            kind='task_deadline',
+            url=reverse('edit_task', args=[task.id]),
+        )
+
+    from features.planner.models import LeaveRequest
+
+    leaves = LeaveRequest.objects.filter(
+        user=user,
+        status=LeaveRequest.Status.APPROVED,
+        start_date=tomorrow,
+    )[:5]
+    for leave_request in leaves:
+        notify_user_once_today(
+            user,
+            'Wolne jutro',
+            f'Jutro zaczyna się Twoje wolne: {leave_request.start_date:%Y-%m-%d} - {leave_request.end_date:%Y-%m-%d}',
+            kind='leave_reminder',
+            url=f"{reverse('calendar')}?month={leave_request.start_date:%Y-%m}",
+        )
+
+    cache.set(cache_key, True, 60 * 60 * 12)

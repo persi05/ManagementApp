@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Powiadomienia - Dcode Management{% endblock %}
+{% block heading %}Powiadomienia{% endblock %}
+{% block eyebrow %}Centrum zdarzeń{% endblock %}
+{% block top_actions %}
+  {% if unread_count %}
+    <form method="post" action="{% url 'mark_all_notifications_read' %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.path }}">
+      <button class="primary-btn">Oznacz wszystkie jako przeczytane</button>
+    </form>
+  {% endif %}
+{% endblock %}
+{% block content %}
+<section class="panel notifications-panel">
+  <div class="panel-head notifications-head">
+    <div>
+      <h2>Ostatnie powiadomienia</h2>
+      <p>{% if unread_count %}Masz {{ unread_count }} nieprzeczytane.{% else %}Wszystko jest przeczytane.{% endif %}</p>
+    </div>
+    <span class="notifications-count">{{ notifications|length }} ostatnich</span>
+  </div>
+
+  <div class="notification-list">
+    {% for notification in notifications %}
+      <article class="notification-row {{ notification.kind }} {% if not notification.is_read %}unread{% endif %}">
+        <div class="notification-icon {{ notification.kind }}">
+          {% if notification.kind == 'leave' or notification.kind == 'leave_reminder' %}W{% elif notification.kind == 'task_note' or notification.kind == 'client_note' %}N{% elif notification.kind == 'client_done' %}G{% elif notification.kind == 'task_deadline' %}D{% elif notification.kind == 'task' or notification.kind == 'client_task' %}Z{% else %}I{% endif %}
+        </div>
+        <div class="notification-content">
+          <div class="notification-meta">
+            <span class="notification-kind">
+              {% if notification.kind == 'leave' %}Wniosek
+              {% elif notification.kind == 'leave_reminder' %}Wolne
+              {% elif notification.kind == 'task_note' or notification.kind == 'client_note' %}Notatka
+              {% elif notification.kind == 'client_done' %}Gotowe
+              {% elif notification.kind == 'task_deadline' %}Deadline
+              {% elif notification.kind == 'task' or notification.kind == 'client_task' %}Zadanie
+              {% else %}System{% endif %}
+            </span>
+            <small>{{ notification.created_at|date:"Y-m-d H:i" }}</small>
+          </div>
+          {% if notification.url %}
+            <a href="{{ notification.url }}">
+              <strong>{{ notification.title|default:"Powiadomienie" }}</strong>
+              <span>{{ notification.content }}</span>
+            </a>
+          {% else %}
+            <strong>{{ notification.title|default:"Powiadomienie" }}</strong>
+            <span>{{ notification.content }}</span>
+          {% endif %}
+        </div>
+        {% if not notification.is_read %}
+          <form method="post" action="{% url 'mark_notification_read' notification.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <button class="ghost-btn small-btn notification-read-btn" title="Oznacz jako przeczytane" aria-label="Oznacz jako przeczytane">&#10003;</button>
+          </form>
+        {% else %}
+          <span class="read-pill">Przeczytane</span>
+        {% endif %}
+      </article>
+    {% empty %}
+      <p class="empty">Nie masz jeszcze powiadomień.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
