@@ -13,6 +13,13 @@
       <p>Dostępne pola zależą od uprawnień. Notatka zmiany zapisze się w historii zadania.</p>
     </div>
   </div>
+  {% if project_label_rates %}
+    <datalist id="project-label-suggestions">
+      {% for rate in project_label_rates %}
+        <option value="{{ rate.label }}">{{ rate.label }} - {{ rate.hourly_rate|floatformat:2 }} {{ rate.currency }}/h</option>
+      {% endfor %}
+    </datalist>
+  {% endif %}
   <form method="post" class="grid-form">
     {% csrf_token %}
     {{ form.as_p }}

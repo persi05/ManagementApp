@@ -19,11 +19,11 @@ from features.tasks.services import (
     can_move_task_to_column,
     can_move_to_column,
     default_permissions_for_position,
-    is_first_project_column,
-    is_last_project_column,
     notify_project_clients,
     notify_user,
     normalize_column_positions,
+    task_effective_client_rate,
+    task_label_badges,
 )
 
 
@@ -48,6 +48,8 @@ def kanban(request, project_id=None):
                 previous_column = project.columns.order_by('-position', '-id').first()
                 if previous_column:
                     for field_name in BoardColumn.PERMISSION_FIELDS:
+                        setattr(column, field_name, getattr(previous_column, field_name))
+                    for field_name in BoardColumn.NOTIFICATION_FIELDS:
                         setattr(column, field_name, getattr(previous_column, field_name))
                 else:
                     for field_name, value in default_permissions_for_position(0).items():
@@ -97,7 +99,7 @@ def kanban(request, project_id=None):
                         url=reverse('edit_task', args=[task.id]),
                         actor=request.user,
                     )
-                    if is_first_project_column(task):
+                    if task.column.notify_client_on_task_create:
                         notify_project_clients(
                             task.project,
                             'Nowe zadanie w projekcie',
@@ -124,11 +126,13 @@ def kanban(request, project_id=None):
                 profile__role=UserProfile.Role.EMPLOYEE,
             ).distinct()
 
-    columns = project.columns.prefetch_related('tasks__assignee', 'tasks__worklogs', 'tasks__checklist')
+    columns = project.columns.prefetch_related('tasks__assignee', 'tasks__worklogs', 'tasks__checklist', 'tasks__project__label_rates')
     for column in columns:
         column.can_accept_tasks = can_move_to_column(request.user, project, column)
         for task in column.tasks.all():
             task.can_edit = can_edit_task(request.user, task)
+            task.label_badges = task_label_badges(task)
+            task.effective_client_rate = task_effective_client_rate(task)
 
     return render(request, 'features/kanban.html', {
         'project': project,
@@ -136,6 +140,7 @@ def kanban(request, project_id=None):
         'columns': columns,
         'form': form,
         'column_form': column_form,
+        'project_label_rates': project.label_rates.all(),
         'can_manage_board': is_management(request.user),
         'can_move_tasks': any(column.can_accept_tasks for column in columns),
         'is_client_view': user_role(request.user) == UserProfile.Role.CLIENT,
@@ -152,20 +157,21 @@ def move_task(request, task_id):
     previous_column_id = task.column_id
     task.column = column
     task.save(update_fields=['column', 'updated_at'])
-    notify_user(
-        task.assignee,
-        'Zmieniono status zadania',
-        f'{task.title} jest teraz w kolumnie {column.name}.',
-        kind='task',
-        url=reverse('edit_task', args=[task.id]),
-        actor=request.user,
-    )
-    if previous_column_id != column.id and is_last_project_column(task.project, column):
+    if previous_column_id != column.id and column.notify_assignee_on_move_to:
+        notify_user(
+            task.assignee,
+            'Zmieniono status zadania',
+            f'{task.title} jest teraz w kolumnie {column.name}.',
+            kind='task',
+            url=reverse('edit_task', args=[task.id]),
+            actor=request.user,
+        )
+    if previous_column_id != column.id and column.notify_client_on_move_to:
         notify_project_clients(
             task.project,
-            'Zadanie zakończone',
-            f'Zadanie jest gotowe: {task.title}',
-            kind='client_done',
+            'Zmieniono status zadania',
+            f'{task.title} jest teraz w kolumnie {column.name}.',
+            kind='client_task',
             url=reverse('kanban_project', args=[task.project_id]),
             actor=request.user,
         )
@@ -247,7 +253,7 @@ def edit_task(request, task_id):
                     url=reverse('edit_task', args=[updated_task.id]),
                     actor=request.user,
                 )
-                if is_first_project_column(updated_task):
+                if updated_task.column.notify_client_on_note:
                     notify_project_clients(
                         updated_task.project,
                         'Nowa notatka do zadania',
@@ -265,6 +271,7 @@ def edit_task(request, task_id):
     return render(request, 'features/task_edit.html', {
         'task': task,
         'form': form,
+        'project_label_rates': getattr(form, 'project_label_rates', []),
         'history': history,
         'can_delete_task': can_delete_task(request.user, task),
     })

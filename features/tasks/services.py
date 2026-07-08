@@ -218,3 +218,42 @@ def create_daily_reminders(user):
         )
 
     cache.set(cache_key, True, 60 * 60 * 12)
+
+
+def task_label_rate_map(task):
+    return {
+        rate.label.strip().lower(): rate
+        for rate in task.project.label_rates.all()
+    }
+
+
+def task_label_badges(task):
+    rates = task_label_rate_map(task)
+    badges = []
+    for label in task.labels_list:
+        rate = rates.get(label.strip().lower())
+        badges.append({
+            'name': label,
+            'rate': rate.hourly_rate if rate else None,
+            'currency': rate.currency if rate else task.project.client_rate_currency,
+        })
+    return badges
+
+
+def task_effective_client_rate(task):
+    rates = task_label_rate_map(task)
+    for label in task.labels_list:
+        rate = rates.get(label.strip().lower())
+        if rate:
+            return {
+                'label': rate.label,
+                'rate': rate.hourly_rate,
+                'currency': rate.currency,
+            }
+    if task.project.client_hourly_rate is not None:
+        return {
+            'label': '',
+            'rate': task.project.client_hourly_rate,
+            'currency': task.project.client_rate_currency,
+        }
+    return None

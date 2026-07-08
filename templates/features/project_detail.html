@@ -7,6 +7,69 @@
   <a class="primary-btn" href="{% url 'kanban_project' project.id %}">Kanban</a>
 {% endblock %}
 {% block content %}
+{% if can_manage %}
+<section class="content-split">
+  <form method="post" class="form-card compact">
+    {% csrf_token %}
+    <input type="hidden" name="form" value="project_settings">
+    <h2>Ustawienia projektu</h2>
+    <p class="empty">Domyślna stawka klienta jest używana, gdy zadanie nie ma labela ze swoją stawką.</p>
+    {{ project_form.as_p }}
+    <button class="primary-btn full">Zapisz projekt</button>
+  </form>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Stawki labeli</h2>
+        <p>Pierwszy label z zadania, który ma stawkę poniżej, wygrywa z domyślną stawką projektu.</p>
+      </div>
+    </div>
+    <form method="post" class="grid-form compact-rate-form">
+      {% csrf_token %}
+      <input type="hidden" name="form" value="label_rate">
+      {{ label_rate_form.as_p }}
+      <button class="primary-btn">Dodaj stawkę</button>
+    </form>
+    <div class="label-rate-list">
+      {% for rate in label_rates %}
+        <article class="label-rate-item">
+          <div class="label-rate-display">
+            <div>
+              <strong>{{ rate.label }}</strong>
+              <small>Stawka dla labela zadania</small>
+            </div>
+            <span>{{ rate.hourly_rate|floatformat:2 }} {{ rate.currency }}/h</span>
+          </div>
+          <details class="label-rate-edit">
+            <summary>Edytuj</summary>
+            <div class="label-rate-actions">
+              <form method="post" class="label-rate-row">
+                {% csrf_token %}
+                <input type="hidden" name="form" value="label_rate">
+                <input type="hidden" name="rate_id" value="{{ rate.id }}">
+                <input type="text" name="label" value="{{ rate.label }}" maxlength="80" required>
+                <div class="label-rate-price">
+                  <input type="text" name="hourly_rate" value="{{ rate.hourly_rate }}" required>
+                  <input type="text" name="currency" value="{{ rate.currency }}" maxlength="8" required>
+                </div>
+                <button class="ghost-btn small-btn">Zapisz zmiany</button>
+              </form>
+              <form method="post" action="{% url 'remove_project_label_rate' rate.id %}">
+                {% csrf_token %}
+                <button class="ghost-btn small-btn">Usuń</button>
+              </form>
+            </div>
+          </details>
+        </article>
+      {% empty %}
+        <p class="empty">Brak stawek labeli.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
 <section class="workspace-grid">
   <div class="panel">
     <div class="panel-head"><div><h2>Przypisane osoby</h2><p>Klienci i pracownicy przypisani do projektu.</p></div></div>

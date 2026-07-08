@@ -110,3 +110,89 @@ textarea {
 .history-row p {
   margin-top: 8px;
 }
+.compact-rate-form {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.label-rate-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.label-rate-price {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) 80px;
+  gap: 8px;
+}
+
+.label-rate-list {
+  display: grid;
+  gap: 8px;
+}
+
+.label-rate-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.label-rate-display {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.label-rate-display strong,
+.label-rate-display small {
+  display: block;
+}
+
+.label-rate-display small {
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.label-rate-display span {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--accentSoft);
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.label-rate-edit {
+  margin-top: 8px;
+}
+
+.label-rate-edit summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.label-rate-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 820px) {
+  .compact-rate-form,
+  .label-rate-row,
+  .label-rate-price {
+    grid-template-columns: 1fr;
+  }
+
+  .label-rate-display {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
