@@ -1,10 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Kanban - Dcode Management{% endblock %}
-{% block heading %}Kanban{% endblock %}
+{% block title %}Zadania - Dcode Management{% endblock %}
+{% block heading %}Zadania{% endblock %}
 {% block eyebrow %}{% if project %}{{ project.name }}{% else %}Brak projektu{% endif %}{% endblock %}
-{% block top_actions %}
-  {% if project %}<a class="ghost-btn" href="#new-task">Dodaj zadanie</a>{% endif %}
-{% endblock %}
 {% block content %}
 {% if not project %}
   <section class="panel"><p class="empty">Brak projektów dostępnych dla Twojej roli.</p></section>
@@ -36,57 +33,38 @@
       <header>
         <div class="column-title-wrap">
           <span class="column-title">{{ column.name }}</span>
+          <small class="column-count">{{ column.tasks.all|length }}</small>
         </div>
         <div class="column-actions">
-          <small class="column-count">{{ column.tasks.all|length }}</small>
+          <button type="button" class="column-add-task add-task-toggle" data-task-column="{{ column.id }}" aria-expanded="false" aria-controls="new-task-panel" aria-label="Dodaj zadanie do kolumny {{ column.name }}">+</button>
           {% if can_manage_board %}
-            <a class="ghost-btn tiny-btn" href="{% url 'update_column' column.id %}" data-open-modal="edit-column-{{ column.id }}">Edytuj</a>
+            <a class="column-edit-settings" href="{% url 'update_column' column.id %}" data-open-modal="edit-column-{{ column.id }}" aria-label="Edytuj kolumnę {{ column.name }}">⚙</a>
           {% endif %}
         </div>
       </header>
       <div class="kanban-dropzone">
         {% for task in column.tasks.all %}
-          <article class="kanban-card" draggable="{% if can_move_tasks %}true{% else %}false{% endif %}" data-task="{{ task.id }}" data-move-url="{% url 'move_task' task.id %}">
-            <div class="card-top"><span class="priority {{ task.priority }}"></span><strong>{{ task.title }}</strong></div>
-            <p>{{ task.description|truncatechars:110 }}</p>
+          <article class="kanban-card priority-card-{{ task.priority }}" draggable="{% if can_move_tasks %}true{% else %}false{% endif %}" data-task="{{ task.id }}" data-move-url="{% url 'move_task' task.id %}" data-open-modal="task-preview-{{ task.id }}" tabindex="0" role="button" aria-label="Otwórz podgląd zadania {{ task.title }}">
             {% if task.label_badges %}
-              <div class="tag-row">
-                {% for label in task.label_badges %}
-                  <span class="{% if label.rate %}priced{% endif %}">
-                    {{ label.name }}
-                    {% if label.rate %}<em>{{ label.rate|floatformat:2 }} {{ label.currency }}/h</em>{% endif %}
-                  </span>
+              <div class="tag-row card-labels-top">
+                {% for label in task.label_badges|slice:":2" %}
+                  <span>{{ label.name }}</span>
                 {% endfor %}
               </div>
             {% endif %}
-            {% if task.due_date or task.effective_client_rate %}
+            <div class="card-top">
+              <strong>{{ task.title }}</strong>
+              <span class="priority-chip {{ task.priority }}">{{ task.get_priority_display }}</span>
+            </div>
+            {% if task.due_date %}
               <div class="card-meta">
-                {% if task.due_date %}<span>Termin: {{ task.due_date|date:"Y-m-d" }}</span>{% endif %}
-                {% if task.effective_client_rate %}
-                  <span class="rate-pill">
-                    Stawka: {{ task.effective_client_rate.rate|floatformat:2 }} {{ task.effective_client_rate.currency }}/h
-                    {% if task.effective_client_rate.label %}<em>{{ task.effective_client_rate.label }}</em>{% endif %}
-                  </span>
-                {% endif %}
+                <span>{{ task.due_date|date:"Y-m-d" }}</span>
               </div>
             {% endif %}
+            <div class="card-progress-line"><span></span></div>
             <footer>
-              {% if not is_client_view %}
-                <small>
-                  {% if task.assignee %}
-                    {% if task.assignee.get_full_name %}{{ task.assignee.get_full_name }}{% else %}{{ task.assignee.username }}{% endif %}
-                  {% else %}
-                    Nieprzypisane
-                  {% endif %}
-                </small>
-              {% endif %}
               <small>{{ task.total_hours|floatformat:2 }}h</small>
             </footer>
-            {% if task.can_edit %}
-              <div class="card-actions">
-                <a class="ghost-btn tiny-btn" href="{% url 'edit_task' task.id %}">Edytuj</a>
-              </div>
-            {% endif %}
           </article>
         {% empty %}
         {% endfor %}
@@ -94,6 +72,141 @@
     </div>
   {% endfor %}
 </section>
+{% for column in columns %}
+  {% for task in column.tasks.all %}
+    <div class="kanban-modal is-hidden" id="task-preview-{{ task.id }}" role="dialog" aria-modal="true" aria-labelledby="task-preview-title-{{ task.id }}">
+      <div class="kanban-modal-backdrop" data-close-modal></div>
+      <section class="kanban-modal-card task-preview-card">
+        <button type="button" class="ghost-btn tiny-btn kanban-modal-close" data-close-modal aria-label="Zamknij">x</button>
+        <div class="task-preview-head">
+          <div>
+            <span class="task-preview-column">{{ task.project.name }} / {{ task.column.name }}</span>
+            <h2 id="task-preview-title-{{ task.id }}">{{ task.title }}</h2>
+          </div>
+          <div class="task-preview-head-actions">
+            <span class="priority-chip {{ task.priority }}">{{ task.get_priority_display }}</span>
+            {% if task.can_edit %}
+              <a class="ghost-btn small-btn" href="{% url 'edit_task' task.id %}">Edytuj</a>
+            {% endif %}
+          </div>
+        </div>
+        <div class="task-preview-grid">
+          <div>
+            <span>Status</span>
+            <strong>{{ task.column.name }}</strong>
+          </div>
+          <div class="task-preview-value-only">
+            <strong>{% if task.due_date %}{{ task.due_date|date:"Y-m-d" }}{% else %}-{% endif %}</strong>
+          </div>
+          {% if not is_client_view %}
+            <div>
+              <span>Przypisany</span>
+              <strong>{% if task.assignee %}{% if task.assignee.get_full_name %}{{ task.assignee.get_full_name }}{% else %}{{ task.assignee.username }}{% endif %}{% else %}Nieprzypisane{% endif %}</strong>
+            </div>
+          {% endif %}
+          <div>
+            <span>Czas</span>
+            <strong>{{ task.total_hours|floatformat:2 }}h</strong>
+          </div>
+          {% if task.effective_client_rate %}
+            <div class="task-preview-value-only">
+              <strong>{{ task.effective_client_rate.rate|floatformat:2 }} {{ task.effective_client_rate.currency }}/h</strong>
+            </div>
+          {% endif %}
+        </div>
+        {% if task.label_badges %}
+          <div class="task-preview-tags">
+            {% for label in task.label_badges %}
+              <span>
+                {{ label.name }}
+                {% if can_view_rates and label.rate %}<em>{{ label.rate|floatformat:2 }} {{ label.currency }}/h</em>{% endif %}
+              </span>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <div class="task-preview-description">
+          <span>Opis</span>
+          <p>{% if task.description %}{{ task.description|linebreaksbr }}{% else %}Brak opisu.{% endif %}</p>
+        </div>
+        <div class="task-preview-attachments">
+          <div class="task-preview-notes-head">
+            <span>Załączniki i dokumenty</span>
+            <small>{{ task.attachments.all|length }}</small>
+          </div>
+          <div class="task-attachment-list">
+            {% for attachment in task.attachments.all %}
+              {% if attachment.document %}
+                <a href="{% url 'documents' %}?selected={{ attachment.document.id }}">
+                  <span>{{ attachment.document.extension|slice:":4" }}</span>
+                  <strong>{{ attachment.name }}</strong>
+                  <small>Podgląd · {{ attachment.document.size_label }}</small>
+                </a>
+              {% elif attachment.file %}
+                <a href="{{ attachment.file.url }}">
+                  <span>PLIK</span>
+                  <strong>{{ attachment.name }}</strong>
+                  <small>Załącznik</small>
+                </a>
+              {% elif attachment.url %}
+                <a href="{{ attachment.url }}">
+                  <span>LINK</span>
+                  <strong>{{ attachment.name }}</strong>
+                  <small>Odnośnik</small>
+                </a>
+              {% endif %}
+            {% empty %}
+              <p class="empty compact">Brak załączników.</p>
+            {% endfor %}
+          </div>
+          {% if task.can_edit %}
+            <div class="task-attachment-forms">
+              <form method="post" action="{% url 'add_task_attachment' task.id %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="text" name="name" placeholder="Nazwa załącznika">
+                <input type="file" name="file" required>
+                <button class="ghost-btn small-btn">Dodaj załącznik</button>
+              </form>
+              <form method="post" action="{% url 'link_task_document' task.id %}">
+                {% csrf_token %}
+                <select name="document" required>
+                  <option value="">Powiąż istniejący dokument</option>
+                  {% for document in available_documents %}
+                    <option value="{{ document.id }}">{{ document.name }} · {{ document.get_kind_display }}</option>
+                  {% endfor %}
+                </select>
+                <button class="ghost-btn small-btn">Powiąż</button>
+              </form>
+            </div>
+          {% endif %}
+        </div>
+        <div class="task-preview-notes">
+          <div class="task-preview-notes-head">
+            <span>Notatki</span>
+            <small>{{ task.edit_notes.all|length }}</small>
+          </div>
+          <div class="task-note-list">
+            {% for note in task.edit_notes.all %}
+              <article>
+                <strong>{{ note.user.get_full_name|default:note.user.username }}</strong>
+                <small>{{ note.created_at|date:"Y-m-d H:i" }}</small>
+                <p>{{ note.content }}</p>
+              </article>
+            {% empty %}
+              <p class="empty compact">Brak notatek.</p>
+            {% endfor %}
+          </div>
+          {% if task.can_edit %}
+            <form method="post" action="{% url 'add_task_note' task.id %}" class="task-note-form">
+              {% csrf_token %}
+              <textarea name="content" rows="3" placeholder="Dodaj notatkę..." required></textarea>
+              <button class="primary-btn">Dodaj notatkę</button>
+            </form>
+          {% endif %}
+        </div>
+      </section>
+    </div>
+  {% endfor %}
+{% endfor %}
 {% if can_manage_board %}
   {% for column in columns %}
     <div class="kanban-modal is-hidden" id="edit-column-{{ column.id }}" role="dialog" aria-modal="true" aria-labelledby="edit-column-title-{{ column.id }}">
@@ -162,16 +275,20 @@
     </div>
   {% endfor %}
 {% endif %}
-<section class="panel" id="new-task">
-  <div class="panel-head"><div><h2>Utwórz nowe zadanie</h2><p>Wypełnij szczegóły i dodaj kartę do tablicy.</p></div></div>
-  {% if project_label_rates %}
-    <datalist id="project-label-suggestions">
-      {% for rate in project_label_rates %}
-        <option value="{{ rate.label }}">{{ rate.label }} - {{ rate.hourly_rate|floatformat:2 }} {{ rate.currency }}/h</option>
-      {% endfor %}
-    </datalist>
-  {% endif %}
-  <form method="post" class="grid-form">{% csrf_token %}{{ form.as_p }}<button class="primary-btn">Dodaj zadanie</button></form>
-</section>
+<div class="kanban-modal {% if not open_task_modal %}is-hidden{% endif %}" id="new-task-panel" role="dialog" aria-modal="true" aria-labelledby="new-task-title">
+  <div class="kanban-modal-backdrop" data-close-add-task></div>
+  <section class="kanban-modal-card task-modal-card">
+    <button type="button" class="ghost-btn tiny-btn kanban-modal-close" data-close-add-task aria-label="Zamknij">x</button>
+    <div class="panel-head"><div><h2 id="new-task-title">Utwórz nowe zadanie</h2><p>Wypełnij szczegóły i dodaj kartę do tablicy.</p></div></div>
+    {% if project_label_rates %}
+      <datalist id="project-label-suggestions">
+        {% for rate in project_label_rates %}
+          <option value="{{ rate.label }}">{% if can_view_rates %}{{ rate.label }} - {{ rate.hourly_rate|floatformat:2 }} {{ rate.currency }}/h{% else %}{{ rate.label }}{% endif %}</option>
+        {% endfor %}
+      </datalist>
+    {% endif %}
+    <form method="post" class="grid-form task-modal-form" data-task-form>{% csrf_token %}{{ form.as_p }}<button class="primary-btn">Dodaj zadanie</button></form>
+  </section>
+</div>
 {% endif %}
 {% endblock %}

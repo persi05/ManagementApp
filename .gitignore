@@ -4,8 +4,12 @@ __pycache__/
 *.py[cod]
 db.sqlite3
 staticfiles/
+media/
 .pytest_cache/
 .coverage
 .idea/
 
 dump.sql
+
+# Terminal Paste Image folder
+.cp-images/

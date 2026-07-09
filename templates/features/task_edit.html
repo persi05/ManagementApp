@@ -3,7 +3,7 @@
 {% block heading %}Edycja zadania{% endblock %}
 {% block eyebrow %}{{ task.project.name }} / {{ task.title }}{% endblock %}
 {% block top_actions %}
-  <a class="ghost-btn" href="{% url 'kanban_project' task.project_id %}">Wróć do Kanban</a>
+  <a class="ghost-btn" href="{% url 'kanban_project' task.project_id %}">Wróć do zadań</a>
 {% endblock %}
 {% block content %}
 <section class="panel">
@@ -16,7 +16,7 @@
   {% if project_label_rates %}
     <datalist id="project-label-suggestions">
       {% for rate in project_label_rates %}
-        <option value="{{ rate.label }}">{{ rate.label }} - {{ rate.hourly_rate|floatformat:2 }} {{ rate.currency }}/h</option>
+        <option value="{{ rate.label }}">{% if can_view_rates %}{{ rate.label }} - {{ rate.hourly_rate|floatformat:2 }} {{ rate.currency }}/h{% else %}{{ rate.label }}{% endif %}</option>
       {% endfor %}
     </datalist>
   {% endif %}

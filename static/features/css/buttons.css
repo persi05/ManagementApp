@@ -14,13 +14,14 @@
 
 .primary-btn {
   background: var(--accent);
-  color: #fff;
+  color: var(--surface);
   border-color: var(--accent);
 }
 
 .ghost-btn {
   background: var(--surface);
   color: var(--text);
+  border-color: var(--border);
 }
 
 .danger-btn {

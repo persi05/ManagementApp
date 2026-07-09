@@ -8,6 +8,10 @@
     height: auto;
   }
 
+  .topbar {
+    margin-top: 0;
+  }
+
   .metrics-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -19,6 +23,10 @@
   .client-overview-grid,
   .client-project-summary {
     grid-template-columns: 1fr;
+  }
+
+  .documents-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .kanban-board {
@@ -63,13 +71,36 @@
     flex-direction: column;
   }
 
+  .topbar-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .date-pill,
+  .icon-pill,
+  .account-pill {
+    min-height: 34px;
+    padding: 6px 9px;
+  }
+
   .calendar-hero {
     flex-direction: column;
   }
 
   .metrics-grid,
   .project-strip,
-  .grid-form {
+  .grid-form,
+  .documents-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .documents-toolbar,
+  .documents-search {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .documents-grid {
     grid-template-columns: 1fr;
   }
 

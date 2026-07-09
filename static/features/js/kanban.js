@@ -47,7 +47,23 @@
 
   const addColumnToggle = document.querySelector('.add-column-toggle');
   const addColumnPanel = document.querySelector('#add-column-panel');
+  const addTaskToggles = Array.from(document.querySelectorAll('.add-task-toggle'));
+  const addTaskPanel = document.querySelector('#new-task-panel');
+  const taskForm = document.querySelector('[data-task-form]');
   let activeModal = null;
+
+  document.querySelectorAll('form').forEach((form) => {
+    form.addEventListener('submit', () => {
+      const submitter = form.querySelector('button[type="submit"], button:not([type]), input[type="submit"]');
+      if (submitter) {
+        submitter.disabled = true;
+        submitter.dataset.originalText = submitter.textContent || submitter.value || '';
+        if (submitter.tagName === 'BUTTON') {
+          submitter.textContent = 'Zapisywanie...';
+        }
+      }
+    });
+  });
 
   function openModal(modal) {
     if (!modal) return;
@@ -67,14 +83,50 @@
     addColumnToggle.setAttribute('aria-expanded', 'true');
     openModal(addColumnPanel);
   });
+  function setTaskColumn(columnId) {
+    if (!taskForm || !columnId) return;
+    let field = taskForm.querySelector('[name="column"]');
+    if (!field) {
+      field = document.createElement('input');
+      field.type = 'hidden';
+      field.name = 'column';
+      taskForm.appendChild(field);
+    }
+    field.value = columnId;
+  }
+
+  addTaskToggles.forEach((toggle) => {
+    toggle.addEventListener('click', () => {
+      addTaskToggles.forEach((item) => item.setAttribute('aria-expanded', 'false'));
+      toggle.setAttribute('aria-expanded', 'true');
+      setTaskColumn(toggle.dataset.taskColumn);
+      openModal(addTaskPanel);
+    });
+  });
   document.querySelectorAll('[data-close-add-column]').forEach((item) => {
     item.addEventListener('click', () => {
       addColumnToggle?.setAttribute('aria-expanded', 'false');
       closeModal(addColumnPanel);
     });
   });
+  document.querySelectorAll('[data-close-add-task]').forEach((item) => {
+    item.addEventListener('click', () => {
+      addTaskToggles.forEach((toggle) => toggle.setAttribute('aria-expanded', 'false'));
+      closeModal(addTaskPanel);
+    });
+  });
   document.querySelectorAll('[data-open-modal]').forEach((button) => {
     button.addEventListener('click', (event) => {
+      if (button !== event.target && event.target.closest('a, button, input, textarea, select, label')) {
+        return;
+      }
+      event.preventDefault();
+      openModal(document.querySelector(`#${button.dataset.openModal}`));
+    });
+    button.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+      }
       event.preventDefault();
       openModal(document.querySelector(`#${button.dataset.openModal}`));
     });
@@ -86,6 +138,9 @@
     if (event.key === 'Escape') {
       if (activeModal === addColumnPanel) {
         addColumnToggle?.setAttribute('aria-expanded', 'false');
+      }
+      if (activeModal === addTaskPanel) {
+        addTaskToggles.forEach((toggle) => toggle.setAttribute('aria-expanded', 'false'));
       }
       closeModal();
     }

@@ -4,7 +4,7 @@
 {% block eyebrow %}Szczegóły projektu{% endblock %}
 {% block top_actions %}
   <a class="ghost-btn" href="{% url 'projects' %}">Powrót</a>
-  <a class="primary-btn" href="{% url 'kanban_project' project.id %}">Kanban</a>
+  <a class="primary-btn" href="{% url 'kanban_project' project.id %}">Zadania</a>
 {% endblock %}
 {% block content %}
 {% if can_manage %}

@@ -1,34 +1,37 @@
 .shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 252px 1fr;
 }
 
 .sidebar {
-  background: #111b22;
-  color: #eaf0f4;
-  padding: 18px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 14px 12px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 14px;
   position: sticky;
   top: 0;
   height: 100vh;
+  border-right: 1px solid var(--border);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   font-weight: 800;
+  min-height: 48px;
+  padding: 0 8px;
 }
 
 .brand-mark {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
-  background: #eaf0f4;
-  color: #111b22;
+  background: var(--accent);
+  color: var(--surface);
   display: grid;
   place-items: center;
 }
@@ -43,23 +46,39 @@
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  overflow-y: auto;
 }
 
 .nav a {
-  padding: 11px 12px;
-  border-radius: 8px;
-  color: #bdc9d3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  color: var(--muted);
+  font-weight: 650;
 }
 
 .nav a:hover {
-  background: #1d2a33;
-  color: #fff;
+  background: var(--accentSoft);
+  color: var(--text);
 }
 
 .nav a.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--surface);
+  font-weight: 800;
+}
+
+.nav-section {
+  padding: 12px 12px 4px;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: .12em;
   font-weight: 800;
 }
 
@@ -90,11 +109,11 @@
 }
 
 .user-chip small {
-  color: #aab7c2;
+  color: var(--muted);
 }
 
 .main {
-  padding: 24px;
+  padding: 18px 22px 26px;
   min-width: 0;
 }
 
@@ -103,22 +122,81 @@
   justify-content: space-between;
   gap: 16px;
   align-items: center;
-  margin-bottom: 20px;
+  margin: -18px -22px 18px;
+  min-height: 64px;
+  padding: 0 22px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 
 .topbar h1 {
-  font-size: 28px;
+  font-size: 22px;
   margin: 0;
   letter-spacing: 0;
+}
+
+.topbar-title {
+  min-width: 0;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .eyebrow {
   margin: 0 0 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
   font-weight: 700;
   letter-spacing: .08em;
+}
+
+.date-pill,
+.icon-pill,
+.account-pill {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text);
+  padding: 8px 11px;
+  font-weight: 750;
+}
+
+.icon-pill strong,
+.nav-notifications strong {
+  min-width: 19px;
+  height: 19px;
+  border-radius: 99px;
+  background: var(--bad);
+  color: #fff;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 5px;
+  font-size: 11px;
+}
+
+.account-pill > span {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--surface);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+}
+
+.account-pill em {
+  font-style: normal;
 }
 
 .messages {
