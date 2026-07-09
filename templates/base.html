@@ -1,4 +1,5 @@
 {% load static %}
+{% load l10n %}
 <!doctype html>
 <html lang="pl">
 <head>
@@ -6,8 +7,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{% block title %}Dcode Management{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'features/app.css' %}?v=20260708-10">
-  <script defer src="{% static 'features/js/kanban.js' %}?v=20260707-3"></script>
+  <link rel="stylesheet" href="{% static 'features/app.css' %}?v=20260709-task-full-divider">
+  <script defer src="{% static 'features/js/kanban.js' %}?v=20260709-task-full-divider"></script>
   <script defer src="{% static 'features/js/timer.js' %}?v=20260707-5"></script>
   <script defer src="{% static 'features/js/calendar.js' %}?v=20260707-7"></script>
 </head>
@@ -22,45 +23,48 @@
       {% if user.is_authenticated %}
         <nav class="nav">
           {% with current=request.resolver_match.url_name namespace=request.resolver_match.namespace %}
+          <span class="nav-section">Główne</span>
           <a class="{% if current == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">Pulpit</a>
           <a class="{% if current == 'projects' or current == 'project_detail' %}active{% endif %}" href="{% url 'projects' %}">Projekty</a>
           {% if user.is_superuser or user.profile.role == 'management' %}<a class="{% if current == 'employees' or current == 'employee_detail' %}active{% endif %}" href="{% url 'employees' %}">Pracownicy</a>{% endif %}
-          <a class="{% if current == 'kanban' or current == 'kanban_project' or current == 'edit_task' or current == 'update_column' %}active{% endif %}" href="{% url 'kanban' %}">Kanban</a>
-          <a class="nav-notifications {% if current == 'notifications' %}active{% endif %}" href="{% url 'notifications' %}">
-            <span>Powiadomienia</span>
-            {% if unread_notifications_count %}<strong>{{ unread_notifications_count }}</strong>{% endif %}
-          </a>
+          <a class="{% if current == 'kanban' or current == 'kanban_project' or current == 'edit_task' or current == 'update_column' %}active{% endif %}" href="{% url 'kanban' %}">Zadania</a>
+          <a class="{% if current == 'documents' %}active{% endif %}" href="{% url 'documents' %}">Dokumenty i pliki</a>
           <a class="{% if current == 'calendar' %}active{% endif %}" href="{% url 'calendar' %}">Kalendarz</a>
           {% if user.profile.role != 'client' %}
+            <span class="nav-section">Praca</span>
             <a class="{% if current == 'time_entries' or current == 'edit_time_entry' %}active{% endif %}" href="{% url 'time_entries' %}">Mój czas pracy</a>
             <a class="{% if current == 'worklogs' or current == 'edit_worklog' %}active{% endif %}" href="{% url 'worklogs' %}">Czas zadań projektowych</a>
           {% endif %}
+          <span class="nav-section">System</span>
           <a class="{% if current == 'reports' %}active{% endif %}" href="{% url 'reports' %}">Raporty</a>
-          <a class="{% if namespace == 'accounts' and current == 'settings' %}active{% endif %}" href="{% url 'accounts:settings' %}">Moje konto</a>
           {% if user.profile.role == 'management' %}<a class="{% if request.path == '/admin/' %}active{% endif %}" href="/admin/">Admin</a>{% endif %}
           {% endwith %}
         </nav>
       {% endif %}
       <div class="sidebar-footer">
         {% if user.is_authenticated %}
-          <div class="user-chip">
-            <span>{{ user.first_name|default:user.username|slice:":1" }}</span>
-            <div>
-              <strong>{{ user.get_full_name|default:user.username }}</strong>
-              <small>{{ user.profile.get_role_display|default:"Pracownik" }}</small>
-            </div>
-          </div>
           <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button class="ghost-btn full">Wyloguj</button></form>
         {% endif %}
       </div>
     </aside>
     <main class="main">
       <header class="topbar">
-        <div>
+        <div class="topbar-title">
           <p class="eyebrow">{% block eyebrow %}Workspace{% endblock %}</p>
           <h1>{% block heading %}Dcode Management{% endblock %}</h1>
         </div>
-        {% block top_actions %}{% endblock %}
+        <div class="topbar-actions">
+          <span class="date-pill">{% now "d.m.Y" %}</span>
+          <a class="icon-pill nav-notifications {% if request.resolver_match.url_name == 'notifications' %}active{% endif %}" href="{% url 'notifications' %}" aria-label="Powiadomienia">
+            <span>Powiadomienia</span>
+            {% if unread_notifications_count %}<strong>{{ unread_notifications_count }}</strong>{% endif %}
+          </a>
+          <a class="account-pill {% if request.resolver_match.namespace == 'accounts' and request.resolver_match.url_name == 'settings' %}active{% endif %}" href="{% url 'accounts:settings' %}">
+            <span>{{ user.first_name|default:user.username|slice:":1"|upper }}</span>
+            <em>Moje konto</em>
+          </a>
+          {% block top_actions %}{% endblock %}
+        </div>
       </header>
       {% if messages %}
         <div class="messages">

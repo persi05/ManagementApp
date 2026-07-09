@@ -9,9 +9,10 @@ from django.views.decorators.http import require_POST
 
 from features.accounts.models import UserProfile, is_management, user_role
 from features.accounts.permissions import optional_pk, worker_required
+from features.documents.models import DocumentAccess, DocumentItem
 from features.projects.selectors import visible_projects
 from features.tasks.forms import BoardColumnForm, BoardColumnSettingsForm, TaskEditForm, TaskForm, WorklogForm
-from features.tasks.models import BoardColumn, Notification, TaskEditNote, TaskWorklog
+from features.tasks.models import Attachment, BoardColumn, Notification, TaskEditNote, TaskWorklog
 from features.tasks.selectors import visible_tasks
 from features.tasks.services import (
     can_delete_task,
@@ -27,12 +28,31 @@ from features.tasks.services import (
 )
 
 
+def classify_task_upload(uploaded_file):
+    content_type = getattr(uploaded_file, 'content_type', '') or ''
+    if content_type.startswith('image/'):
+        return DocumentItem.Kind.IMAGE
+    return DocumentItem.Kind.FILE
+
+
+def grant_task_document_access(document, task):
+    user_ids = set(task.project.members.values_list('id', flat=True))
+    if task.project.client_id:
+        user_ids.add(task.project.client_id)
+    user_ids.discard(document.owner_id)
+    for user_id in user_ids:
+        DocumentAccess.objects.get_or_create(item=document, user_id=user_id, defaults={'can_edit': False, 'can_manage': False})
+
+
 @login_required
 def kanban(request, project_id=None):
     projects_qs = visible_projects(request.user)
     project = get_object_or_404(projects_qs, pk=project_id) if project_id else projects_qs.first()
+    role = user_role(request.user)
+    can_view_rates = is_management(request.user) or role == UserProfile.Role.CLIENT
+    open_task_modal = False
     if not project:
-        return render(request, 'features/kanban.html', {'project': None, 'projects': projects_qs})
+        return render(request, 'features/kanban.html', {'project': None, 'projects': projects_qs, 'can_view_rates': can_view_rates})
 
     selected_project = project
     if request.method == 'POST':
@@ -84,7 +104,8 @@ def kanban(request, project_id=None):
                 task = form.save(commit=False)
                 task.project = selected_project
                 if 'column' not in form.fields:
-                    task.column = selected_project.columns.order_by('position', 'id').first()
+                    posted_column_id = optional_pk(request.POST.get('column'))
+                    task.column = selected_project.columns.filter(pk=posted_column_id).first() or selected_project.columns.order_by('position', 'id').first()
                 if task.column_id is None:
                     form.add_error(None, 'Projekt nie ma jeszcze zadnej kolumny.')
                     project = selected_project
@@ -110,6 +131,7 @@ def kanban(request, project_id=None):
                         )
                     messages.success(request, 'Zadanie zostalo dodane.')
                     return redirect('kanban_project', project_id=task.project_id)
+            open_task_modal = True
             project = selected_project
     else:
         form = TaskForm(
@@ -126,13 +148,20 @@ def kanban(request, project_id=None):
                 profile__role=UserProfile.Role.EMPLOYEE,
             ).distinct()
 
-    columns = project.columns.prefetch_related('tasks__assignee', 'tasks__worklogs', 'tasks__checklist', 'tasks__project__label_rates')
+    columns = project.columns.prefetch_related(
+        'tasks__assignee',
+        'tasks__worklogs',
+        'tasks__checklist',
+        'tasks__edit_notes__user',
+        'tasks__attachments__document',
+        'tasks__project__label_rates',
+    )
     for column in columns:
         column.can_accept_tasks = can_move_to_column(request.user, project, column)
         for task in column.tasks.all():
             task.can_edit = can_edit_task(request.user, task)
             task.label_badges = task_label_badges(task)
-            task.effective_client_rate = task_effective_client_rate(task)
+            task.effective_client_rate = task_effective_client_rate(task) if can_view_rates else None
 
     return render(request, 'features/kanban.html', {
         'project': project,
@@ -141,9 +170,12 @@ def kanban(request, project_id=None):
         'form': form,
         'column_form': column_form,
         'project_label_rates': project.label_rates.all(),
+        'can_view_rates': can_view_rates,
+        'open_task_modal': open_task_modal,
         'can_manage_board': is_management(request.user),
         'can_move_tasks': any(column.can_accept_tasks for column in columns),
-        'is_client_view': user_role(request.user) == UserProfile.Role.CLIENT,
+        'is_client_view': role == UserProfile.Role.CLIENT,
+        'available_documents': DocumentItem.visible_to(request.user).filter(is_archived=False).exclude(kind=DocumentItem.Kind.FOLDER).order_by('kind', 'name')[:120],
     })
 
 
@@ -223,6 +255,83 @@ def delete_column(request, column_id):
 
 
 @login_required
+@require_POST
+def add_task_note(request, task_id):
+    task = get_object_or_404(visible_tasks(request.user), pk=task_id)
+    if not can_edit_task(request.user, task):
+        return HttpResponseForbidden('Brak uprawnien do dodania notatki.')
+
+    note = (request.POST.get('content') or '').strip()
+    if note:
+        TaskEditNote.objects.create(task=task, user=request.user, content=note)
+        notify_user(
+            task.assignee,
+            'Nowa notatka do zadania',
+            f'Dodano notatke do zadania: {task.title}',
+            kind='task_note',
+            url=reverse('edit_task', args=[task.id]),
+            actor=request.user,
+        )
+        if task.column.notify_client_on_note:
+            notify_project_clients(
+                task.project,
+                'Nowa notatka do zadania',
+                f'Dodano notatke do zadania: {task.title}',
+                kind='client_note',
+                url=reverse('edit_task', args=[task.id]),
+                actor=request.user,
+            )
+        messages.success(request, 'Notatka zostala dodana.')
+    else:
+        messages.error(request, 'Wpisz tresc notatki.')
+    return redirect('kanban_project', project_id=task.project_id)
+
+
+@login_required
+@require_POST
+def add_task_attachment(request, task_id):
+    task = get_object_or_404(visible_tasks(request.user), pk=task_id)
+    if not can_edit_task(request.user, task):
+        return HttpResponseForbidden('Brak uprawnien do dodania zalacznika.')
+
+    uploaded = request.FILES.get('file')
+    name = (request.POST.get('name') or '').strip()
+    if uploaded:
+        document = DocumentItem.objects.create(
+            owner=request.user,
+            name=name or uploaded.name,
+            kind=classify_task_upload(uploaded),
+            file=uploaded,
+        )
+        grant_task_document_access(document, task)
+        Attachment.objects.create(task=task, name=document.name, document=document)
+        messages.success(request, 'Zalacznik zostal dodany.')
+    else:
+        messages.error(request, 'Wybierz plik do zalaczenia.')
+    return redirect('kanban_project', project_id=task.project_id)
+
+
+@login_required
+@require_POST
+def link_task_document(request, task_id):
+    task = get_object_or_404(visible_tasks(request.user), pk=task_id)
+    if not can_edit_task(request.user, task):
+        return HttpResponseForbidden('Brak uprawnien do powiazania dokumentu.')
+
+    document = get_object_or_404(
+        DocumentItem.visible_to(request.user).exclude(kind=DocumentItem.Kind.FOLDER),
+        pk=request.POST.get('document'),
+    )
+    Attachment.objects.get_or_create(
+        task=task,
+        document=document,
+        defaults={'name': document.name},
+    )
+    messages.success(request, 'Dokument zostal powiazany z zadaniem.')
+    return redirect('kanban_project', project_id=task.project_id)
+
+
+@login_required
 def edit_task(request, task_id):
     task = get_object_or_404(visible_tasks(request.user), pk=task_id)
     if not can_edit_task(request.user, task):
@@ -272,6 +381,7 @@ def edit_task(request, task_id):
         'task': task,
         'form': form,
         'project_label_rates': getattr(form, 'project_label_rates', []),
+        'can_view_rates': is_management(request.user),
         'history': history,
         'can_delete_task': can_delete_task(request.user, task),
     })

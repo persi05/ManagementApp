@@ -4,8 +4,10 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.db.models import Sum
 from django.shortcuts import render
+from django.utils import timezone
 
 from features.accounts.models import UserProfile, ensure_profile, is_management, user_role
+from features.documents.models import DocumentItem
 from features.projects.selectors import visible_projects
 from features.reports.services import employee_month_summaries, month_bounds, payroll_amount
 from features.tasks.models import TaskWorklog
@@ -68,10 +70,28 @@ def dashboard(request):
     current_rate = request.user.hourly_rates.order_by('-valid_from').first()
     payroll = None if is_management(request.user) or user_role(request.user) == UserProfile.Role.CLIENT else payroll_amount(request.user, entries, start_date, next_month)
     team_hours = sum(row['hours'] for row in employee_summaries) if employee_summaries else Decimal('0')
+    today = timezone.localdate()
+    today_tasks = tasks.filter(due_date=today).select_related('project', 'column')[:4]
+    upcoming_deadlines = tasks.filter(due_date__gte=today).select_related('project', 'column').order_by('due_date', '-priority')[:5]
+    recent_documents = DocumentItem.visible_to(request.user).filter(is_archived=False).exclude(kind=DocumentItem.Kind.FOLDER).select_related('owner').order_by('-updated_at')[:5]
+    project_rows = []
+    for project in projects[:6]:
+        project_task_count = tasks.filter(project=project).count()
+        project_done_count = tasks.filter(project=project, column__is_done_column=True).count()
+        project_rows.append({
+            'project': project,
+            'task_count': project_task_count,
+            'done_count': project_done_count,
+            'progress': int((project_done_count / project_task_count) * 100) if project_task_count else 0,
+        })
 
     context = {
         'projects': projects[:6],
         'tasks': tasks[:8],
+        'today_tasks': today_tasks,
+        'upcoming_deadlines': upcoming_deadlines,
+        'recent_documents': recent_documents,
+        'project_rows': project_rows,
         'active_session': active_session,
         'active_session_seconds': active_session_seconds,
         'active_session_display': format_timer_seconds(active_session_seconds),
@@ -89,5 +109,6 @@ def dashboard(request):
         'team_hours': team_hours,
         'team_count': User.objects.filter(profile__role=UserProfile.Role.EMPLOYEE).count(),
         'role': user_role(request.user),
+        'today': today,
     }
     return render(request, 'features/dashboard.html', context)

@@ -13,5 +13,8 @@
   --ok: #168a52;
   --warn: #a76813;
   --bad: #b83b3b;
+  --okBg: #e7f4ec;
+  --warnBg: #f8eddc;
+  --badBg: #f7e7e7;
   --shadow: 0 16px 36px rgba(25, 37, 51, .08);
 }

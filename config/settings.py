@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'features.projects.apps.ProjectsConfig',
     'features.employees.apps.EmployeesConfig',
     'features.tasks.apps.TasksConfig',
+    'features.documents.apps.DocumentsConfig',
     'features.time_tracking.apps.TimeTrackingConfig',
     'features.reports.apps.ReportsConfig',
     'features.planner.apps.PlannerConfig',
@@ -123,6 +124,8 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

@@ -8,27 +8,204 @@
   {% elif role == 'client' %}
     <a class="primary-btn" href="{% url 'reports' %}">Raport projektów</a>
   {% else %}
-    <a class="primary-btn" href="{% url 'kanban' %}">Otwórz Kanban</a>
-  {% endif %}
+    <a class="primary-btn" href="{% url 'kanban' %}">Otwórz zadania</a>
+{% endif %}
 {% endblock %}
 {% block content %}
+<section class="dashboard-page role-{{ role }}">
+  <section class="dashboard-hero">
+    <div>
+      <span class="dashboard-kicker">Dcode Management</span>
+      <h2>Dzień dobry{% if user.first_name %}, {{ user.first_name }}{% endif %}</h2>
+    </div>
+    <div class="dashboard-hero-actions">
+      <a class="ghost-btn" href="{{ request.path }}">Odśwież</a>
+      <button class="primary-btn" type="button" data-dashboard-settings-toggle>Edytuj układ</button>
+    </div>
+  </section>
+
+  <section class="dashboard-settings" data-dashboard-settings hidden>
+    <div>
+      <strong>Widoczne kafelki</strong>
+      <small>Odznaczone bloki znikną tylko u Ciebie na tym urządzeniu.</small>
+    </div>
+    <label><input type="checkbox" data-widget-toggle value="today" checked> Zadania na dziś</label>
+    <label><input type="checkbox" data-widget-toggle value="deadlines" checked> Najbliższe terminy</label>
+    <label><input type="checkbox" data-widget-toggle value="status" checked> {% if role == 'client' %}Postęp projektów{% elif role == 'management' %}Status zespołu{% else %}Status pracy{% endif %}</label>
+    <label><input type="checkbox" data-widget-toggle value="projects" checked> Aktywne projekty</label>
+    <label><input type="checkbox" data-widget-toggle value="documents" checked> Ostatnie dokumenty</label>
+    <label><input type="checkbox" data-widget-toggle value="notifications" checked> Ważne powiadomienia</label>
+    <label><input type="checkbox" data-widget-toggle value="summary" checked> Podsumowanie</label>
+    {% if role == 'client' %}
+      <label><input type="checkbox" data-widget-toggle value="client-combined" checked> Podsumowanie łączone</label>
+      <label><input type="checkbox" data-widget-toggle value="client-project" checked> Podsumowanie projektu</label>
+    {% elif role == 'employee' %}
+      <label><input type="checkbox" data-widget-toggle value="recent-tasks" checked> Ostatnie zadania</label>
+      <label><input type="checkbox" data-widget-toggle value="project-list" checked> Projekty</label>
+    {% else %}
+      <label><input type="checkbox" data-widget-toggle value="team" checked> Pracownicy</label>
+      <label><input type="checkbox" data-widget-toggle value="project-list" checked> Projekty</label>
+    {% endif %}
+    <button class="ghost-btn small-btn" type="button" data-dashboard-settings-reset>Reset</button>
+  </section>
+
+  <section class="dashboard-widget-grid">
+    <article class="dashboard-widget dashboard-widget-wide" data-dashboard-widget="today">
+      <div class="widget-head">
+        <span class="widget-icon">✓</span>
+        <div>
+          <h3>Zadania na dziś</h3>
+          <p>{{ today_tasks|length }} zadań</p>
+        </div>
+        <a href="{% url 'kanban' %}">Wszystkie →</a>
+      </div>
+      <div class="widget-list">
+        {% for task in today_tasks %}
+          <a class="widget-row" href="{% url 'kanban_project' task.project_id %}">
+            <span class="priority {{ task.priority }}"></span>
+            <strong>{{ task.title }}</strong>
+            <em>{{ task.get_priority_display }}</em>
+          </a>
+        {% empty %}
+          <p class="empty compact">Brak zadań na dziś.</p>
+        {% endfor %}
+      </div>
+    </article>
+
+    <article class="dashboard-widget" data-dashboard-widget="deadlines">
+      <div class="widget-head">
+        <span class="widget-icon">⏱</span>
+        <div>
+          <h3>Najbliższe terminy</h3>
+          <p>{{ upcoming_deadlines|length }} terminów</p>
+        </div>
+      </div>
+      <div class="widget-list">
+        {% for task in upcoming_deadlines %}
+          <a class="widget-row" href="{% url 'kanban_project' task.project_id %}">
+            <span class="deadline-dot {{ task.priority }}"></span>
+            <strong>{{ task.title }}</strong>
+            <em>{% if task.due_date == today %}dziś{% else %}{{ task.due_date|date:"d.m" }}{% endif %}</em>
+          </a>
+        {% empty %}
+          <p class="empty compact">Brak nadchodzących terminów.</p>
+        {% endfor %}
+      </div>
+    </article>
+
+    {% if role == 'client' %}
+    <article class="dashboard-widget" data-dashboard-widget="status">
+      <div class="widget-head">
+        <span class="widget-icon">%</span>
+        <div>
+          <h3>Postęp projektów</h3>
+          <p>łączne podsumowanie</p>
+        </div>
+      </div>
+      <div class="widget-status">
+        <span class="status-pill ok">{{ client_done_count }} / {{ client_task_count }} zadań</span>
+        <strong>{% if client_task_count %}{% widthratio client_done_count client_task_count 100 %}{% else %}0{% endif %}%</strong>
+        <small>zakończone względem zadań widocznych dla klienta</small>
+      </div>
+    </article>
+    {% else %}
+    <article class="dashboard-widget" data-dashboard-widget="status">
+      <div class="widget-head">
+        <span class="widget-icon">◎</span>
+        <div>
+          <h3>{% if role == 'management' %}Status zespołu{% else %}Status pracy{% endif %}</h3>
+          <p>{% if active_session %}{{ active_session.get_state_display }}{% else %}Nieaktywny{% endif %}</p>
+        </div>
+      </div>
+      <div class="widget-status">
+        <span class="status-pill {% if active_session %}ok{% endif %}">{% if active_session %}Aktywny{% else %}Nieaktywny{% endif %}</span>
+        <strong>{% if role == 'management' %}{{ team_hours|floatformat:2 }}h{% else %}{{ total_hours|floatformat:2 }}h{% endif %}</strong>
+        <small>{% if role == 'management' %}czas zespołu w miesiącu{% else %}Twój czas w miesiącu{% endif %}</small>
+      </div>
+    </article>
+    {% endif %}
+
+    <article class="dashboard-widget" data-dashboard-widget="projects">
+      <div class="widget-head">
+        <span class="widget-icon">□</span>
+        <div>
+          <h3>Aktywne projekty</h3>
+          <p>{{ project_rows|length }} widocznych</p>
+        </div>
+        <a href="{% url 'projects' %}">Wszystkie →</a>
+      </div>
+      <div class="project-mini-list">
+        {% for row in project_rows|slice:":3" %}
+          <a href="{% url 'kanban_project' row.project.id %}">
+            <span>{{ row.project.name }}</span>
+            <div><i style="width: {{ row.progress }}%"></i></div>
+            <em>{{ row.progress }}%</em>
+          </a>
+        {% empty %}
+          <p class="empty compact">Brak projektów.</p>
+        {% endfor %}
+      </div>
+    </article>
+
+    <article class="dashboard-widget" data-dashboard-widget="documents">
+      <div class="widget-head">
+        <span class="widget-icon">◰</span>
+        <div>
+          <h3>Ostatnie dokumenty</h3>
+          <p>{{ recent_documents|length }} plików</p>
+        </div>
+        <a href="{% url 'documents' %}">Pliki →</a>
+      </div>
+      <div class="widget-list">
+        {% for document in recent_documents|slice:":3" %}
+          <a class="widget-row" href="{% url 'documents' %}?selected={{ document.id }}">
+            <span class="file-badge">{{ document.extension|slice:":3" }}</span>
+            <strong>{{ document.name }}</strong>
+            <em>{{ document.modified_label }}</em>
+          </a>
+        {% empty %}
+          <p class="empty compact">Brak dokumentów.</p>
+        {% endfor %}
+      </div>
+    </article>
+
+    <article class="dashboard-widget" data-dashboard-widget="notifications">
+      <div class="widget-head">
+        <span class="widget-icon">!</span>
+        <div>
+          <h3>Ważne powiadomienia</h3>
+          <p>{{ notifications|length }} nowe</p>
+        </div>
+        <a href="{% url 'notifications' %}">Zobacz →</a>
+      </div>
+      <div class="notification-mini-list">
+        {% for notification in notifications|slice:":3" %}
+          <a href="{{ notification.url|default:'#' }}">{{ notification.content }}</a>
+        {% empty %}
+          <p class="empty compact">Brak nowych powiadomień.</p>
+        {% endfor %}
+      </div>
+    </article>
+  </section>
 
 {% if role == 'client' %}
-<section class="metrics-grid">
+<section class="metrics-grid dashboard-metrics dashboard-section" data-dashboard-widget="summary">
   <article class="metric"><span>Twoje projekty</span><strong>{{ client_project_rows|length }}</strong><small>przypisane do Twojej firmy</small></article>
   <article class="metric"><span>Praca zespołu</span><strong>{{ task_hours|floatformat:2 }}h</strong><small>godziny poświęcone na Twoje projekty</small></article>
   <article class="metric"><span>Zadania</span><strong>{{ client_task_count }}</strong><small>w Twoich projektach</small></article>
   <article class="metric"><span>Zakończone</span><strong>{{ client_done_count }}</strong><small>zadania oznaczone jako zakończone</small></article>
 </section>
 
-<section class="panel client-overview-panel">
+<section class="dashboard-client-layout">
+<div class="dashboard-main-column">
+<section class="panel client-overview-panel dashboard-section" data-dashboard-widget="client-combined">
   <div class="panel-head">
-    <div><h2>Podsumowanie laczone</h2><p>Laczny obraz wszystkich projektow przypisanych do Twojej firmy.</p></div>
-    <a class="ghost-btn" href="{% url 'reports' %}">Pelny raport</a>
+    <div><h2>Podsumowanie łączone</h2><p>Łączny obraz wszystkich projektów przypisanych do Twojej firmy.</p></div>
+    <a class="ghost-btn" href="{% url 'reports' %}">Pełny raport</a>
   </div>
   <div class="client-overview-grid">
     <div>
-      <span>Postep laczny</span>
+      <span>Postęp łączny</span>
       <strong>{% if client_task_count %}{% widthratio client_done_count client_task_count 100 %}{% else %}0{% endif %}%</strong>
       <div class="client-progress large">
         <span style="width: {% if client_task_count %}{% widthratio client_done_count client_task_count 100 %}{% else %}0{% endif %}%"></span>
@@ -37,19 +214,19 @@
     <div>
       <span>Zadania</span>
       <strong>{{ client_done_count }} / {{ client_task_count }}</strong>
-      <small>zakonczone wzgledem wszystkich zadan</small>
+      <small>zakończone względem wszystkich zadań</small>
     </div>
     <div>
       <span>Godziny</span>
       <strong>{{ task_hours|floatformat:2 }}h</strong>
-      <small>wpisy widoczne dla klienta w tym miesiacu</small>
+      <small>wpisy widoczne dla klienta w tym miesiącu</small>
     </div>
   </div>
 </section>
 
-<section class="panel">
+<section class="panel dashboard-section" data-dashboard-widget="client-project">
   <div class="panel-head">
-    <div><h2>Podsumowanie projektu</h2><p>Przelacz projekt, zeby zobaczyc jego postep, godziny i ostatnie zadania.</p></div>
+    <div><h2>Podsumowanie projektu</h2><p>Przełącz projekt, żeby zobaczyć jego postęp, godziny i ostatnie zadania.</p></div>
     {% if client_selected_project_row %}
       <a class="ghost-btn" href="{% url 'kanban_project' client_selected_project_row.project.id %}">Zadania projektu</a>
     {% endif %}
@@ -62,7 +239,7 @@
         <small>{{ row.done_count }}/{{ row.task_count }}</small>
       </a>
     {% empty %}
-      <p class="empty">Nie masz jeszcze przypisanych projektow.</p>
+      <p class="empty">Nie masz jeszcze przypisanych projektów.</p>
     {% endfor %}
   </div>
 
@@ -90,7 +267,7 @@
     </div>
 
     <div class="client-project-actions project-actions-bar">
-      <a class="ghost-btn small-btn" href="{% url 'kanban_project' client_selected_project_row.project.id %}">Kanban</a>
+      <a class="ghost-btn small-btn" href="{% url 'kanban_project' client_selected_project_row.project.id %}">Zadania</a>
       <a class="ghost-btn small-btn" href="{% url 'reports' %}?project={{ client_selected_project_row.project.id }}">Raport projektu</a>
     </div>
 
@@ -102,10 +279,12 @@
           <em>{{ task.client_hours|floatformat:2 }}h</em>
         </a>
       {% empty %}
-        <p class="empty">Brak zadan w tym projekcie.</p>
+        <p class="empty">Brak zadań w tym projekcie.</p>
       {% endfor %}
     </div>
   {% endif %}
+</section>
+</div>
 </section>
 
 {% comment %}
@@ -156,7 +335,7 @@
 {% endcomment %}
 
 {% else %}
-<section class="metrics-grid">
+<section class="metrics-grid dashboard-metrics dashboard-section" data-dashboard-widget="summary">
   {% if role == 'management' %}
     <article class="metric"><span>Pracownicy</span><strong>{{ team_count }}</strong><small>aktywni w systemie</small></article>
     <article class="metric"><span>Czas zespołu</span><strong>{{ team_hours|floatformat:2 }}h</strong><small>w bieżącym miesiącu</small></article>
@@ -171,7 +350,7 @@
 </section>
 
 {% if role == 'management' %}
-<section class="workspace-grid">
+<section class="workspace-grid dashboard-workspace dashboard-section" data-dashboard-widget="team">
   {% include "features/_timer_panel.html" %}
 
   <article class="panel">
@@ -199,7 +378,7 @@
 </article>
 </section>
 {% else %}
-<section class="workspace-grid">
+<section class="workspace-grid dashboard-workspace">
   <article class="panel timer-panel" data-timer-root data-status-url="{% url 'timer_status' %}" data-active-seconds="{{ active_session_seconds|default:0 }}" data-started-at="{% if active_session %}{{ active_session.started_at|date:'c' }}{% endif %}" data-paused-at="{% if active_session.paused_at %}{{ active_session.paused_at|date:'c' }}{% endif %}" data-inactive-seconds="{% if active_session %}{{ active_session.total_inactive_seconds }}{% else %}0{% endif %}" data-state="{% if active_session %}{{ active_session.state }}{% else %}stopped{% endif %}">
     <div class="panel-head">
       <div><h2>Licznik pracy</h2><p>Start, pauza i zapis sesji do historii czasu.</p></div>
@@ -230,7 +409,7 @@
     {% endif %}
   </article>
 
-  <article class="panel">
+  <article class="panel dashboard-section" data-dashboard-widget="recent-tasks">
     <div class="panel-head"><div><h2>Ostatnie zadania</h2><p>Twoje zadania i zadania z dostępnych projektów.</p></div></div>
     <div class="task-list">
       {% for task in tasks %}
@@ -247,7 +426,7 @@
 </section>
 {% endif %}
 
-<section class="panel">
+<section class="panel dashboard-section" data-dashboard-widget="project-list">
   <div class="panel-head"><div><h2>Projekty</h2><p>Zakres widoczny zgodnie z rolą.</p></div><a class="ghost-btn" href="{% url 'projects' %}">Zobacz wszystkie</a></div>
   <div class="project-strip">
     {% for project in projects %}
@@ -260,4 +439,57 @@
   </div>
 </section>
 {% endif %}
+</section>
+<script>
+  (() => {
+    const root = document.querySelector('.dashboard-page');
+    if (!root) return;
+
+    const storageKey = `dashboard-widgets:${root.className.replace(/\s+/g, ':')}`;
+    const widgets = Array.from(root.querySelectorAll('[data-dashboard-widget]'));
+    const toggles = Array.from(root.querySelectorAll('[data-widget-toggle]'));
+    const settings = root.querySelector('[data-dashboard-settings]');
+    const toggleButton = root.querySelector('[data-dashboard-settings-toggle]');
+    const resetButton = root.querySelector('[data-dashboard-settings-reset]');
+
+    const defaults = Object.fromEntries(toggles.map((input) => [input.value, true]));
+    const readState = () => {
+      try {
+        return { ...defaults, ...JSON.parse(localStorage.getItem(storageKey) || '{}') };
+      } catch {
+        return defaults;
+      }
+    };
+    const writeState = (state) => localStorage.setItem(storageKey, JSON.stringify(state));
+    const applyState = (state) => {
+      widgets.forEach((widget) => {
+        widget.hidden = state[widget.dataset.dashboardWidget] === false;
+      });
+      toggles.forEach((input) => {
+        input.checked = state[input.value] !== false;
+      });
+    };
+
+    let state = readState();
+    applyState(state);
+
+    toggleButton?.addEventListener('click', () => {
+      settings.hidden = !settings.hidden;
+    });
+
+    toggles.forEach((input) => {
+      input.addEventListener('change', () => {
+        state = { ...state, [input.value]: input.checked };
+        writeState(state);
+        applyState(state);
+      });
+    });
+
+    resetButton?.addEventListener('click', () => {
+      state = defaults;
+      localStorage.removeItem(storageKey);
+      applyState(state);
+    });
+  })();
+</script>
 {% endblock %}

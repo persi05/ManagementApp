@@ -3,11 +3,13 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from features.accounts.models import UserProfile
+from features.documents.models import DocumentItem
 from features.employees.forms import EmployeeProfileForm, HourlyRateForm
 from features.employees.models import HourlyRate
 from features.employees.services import save_hourly_rate
@@ -16,7 +18,7 @@ from features.projects.models import Project, ProjectAssignment, ProjectLabelRat
 from features.projects.selectors import visible_projects
 from features.planner.models import LeaveRequest
 from features.reports.services import payroll_amount
-from features.tasks.models import BoardColumn, Notification, Task, TaskEditNote, TaskWorklog
+from features.tasks.models import Attachment, BoardColumn, Notification, Task, TaskEditNote, TaskWorklog
 from features.time_tracking.models import TimeEntry, WorkSession
 
 
@@ -29,6 +31,7 @@ class RoutingTests(TestCase):
     def test_workspace_routes_live_under_app_prefix(self):
         self.assertEqual(reverse('projects'), '/app/projects/')
         self.assertEqual(reverse('employees'), '/app/employees/')
+        self.assertEqual(reverse('documents'), '/app/documents/')
         self.assertEqual(reverse('time_entries'), '/app/time-entries/')
         self.assertEqual(reverse('calendar'), '/app/calendar/')
 
@@ -108,6 +111,14 @@ class ProjectVisibilityTests(TestCase):
             list(visible_projects(self.manager).order_by('name')),
             [self.client_project, self.employee_project, self.hidden_project],
         )
+
+    def test_client_dashboard_hides_work_status_widget(self):
+        self.client.force_login(self.client_user)
+        response = self.client.get(reverse('dashboard'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Postęp projektów')
+        self.assertNotContains(response, 'Status pracy')
 
 
 class TimerTests(TestCase):
@@ -1255,7 +1266,7 @@ class KanbanRenderingTests(TestCase):
         response = self.client.get(reverse('dashboard'), {'project': second_project.id})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Podsumowanie laczone')
+        self.assertContains(response, 'Podsumowanie łączone')
         self.assertContains(response, 'Podsumowanie projektu')
         self.assertContains(response, f'?project={second_project.id}')
         self.assertContains(response, 'Second task')
@@ -1763,7 +1774,84 @@ class KanbanRenderingTests(TestCase):
         self.assertContains(response, 'backend - 220,00 PLN/h')
         self.assertContains(response, 'backend')
         self.assertContains(response, '220,00 PLN/h')
-        self.assertContains(response, 'Stawka: 220,00 PLN/h')
+        self.assertNotContains(response, 'Stawka: 220,00 PLN/h')
+
+    def test_kanban_hides_task_rates_from_employee(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Project', client_hourly_rate=Decimal('100.00'))
+        ProjectAssignment.objects.create(project=project, user=employee)
+        column = BoardColumn.objects.create(project=project, name='Start', position=0)
+        ProjectLabelRate.objects.create(project=project, label='backend', hourly_rate=Decimal('220.00'))
+        Task.objects.create(project=project, column=column, title='Priced task', labels='backend')
+
+        self.client.force_login(employee)
+        response = self.client.get(reverse('kanban_project', args=[project.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'backend')
+        self.assertNotContains(response, '220,00 PLN/h')
+        self.assertNotContains(response, 'Stawka:')
+
+    def test_kanban_preview_can_add_task_note(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        column = BoardColumn.objects.create(project=project, name='Start', position=0)
+        task = Task.objects.create(project=project, column=column, title='Task with note', assignee=employee)
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('add_task_note', args=[task.id]), {'content': 'Nowa notatka z popupu'})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(TaskEditNote.objects.filter(task=task, user=employee, content='Nowa notatka z popupu').exists())
+
+    def test_kanban_preview_can_add_task_attachment(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        outsider = User.objects.create_user(username='outsider', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        outsider.profile.role = UserProfile.Role.EMPLOYEE
+        outsider.profile.save()
+        project = Project.objects.create(name='Project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        column = BoardColumn.objects.create(project=project, name='Start', position=0)
+        task = Task.objects.create(project=project, column=column, title='Task with attachment', assignee=employee)
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('add_task_attachment', args=[task.id]), {
+            'name': 'Spec',
+            'file': SimpleUploadedFile('spec.txt', b'abc', content_type='text/plain'),
+        })
+
+        self.assertEqual(response.status_code, 302)
+        attachment = Attachment.objects.get(task=task)
+        self.assertEqual(attachment.name, 'Spec')
+        self.assertIsNotNone(attachment.document)
+        self.assertEqual(attachment.document.name, 'Spec')
+        self.assertTrue(attachment.document.file.name.endswith('.txt'))
+        self.assertTrue(DocumentItem.objects.filter(name='Spec', owner=employee).exists())
+        self.assertIn(attachment.document, DocumentItem.visible_to(employee))
+        self.assertNotIn(attachment.document, DocumentItem.visible_to(outsider))
+
+    def test_kanban_preview_can_link_existing_document(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        column = BoardColumn.objects.create(project=project, name='Start', position=0)
+        task = Task.objects.create(project=project, column=column, title='Task with document', assignee=employee)
+        document = DocumentItem.objects.create(owner=employee, name='Brief', kind=DocumentItem.Kind.DOCUMENT, content='Opis')
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('link_task_document', args=[task.id]), {'document': document.id})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Attachment.objects.filter(task=task, document=document, name='Brief').exists())
 
     def test_management_report_defaults_to_client_visible_scope(self):
         manager = User.objects.create_user(username='manager', password='pass')
