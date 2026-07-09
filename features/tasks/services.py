@@ -12,7 +12,7 @@ from features.projects.models import ProjectAssignment
 from .models import BoardColumn, Notification, Task
 
 
-DEFAULT_BOARD_COLUMNS = ['Do zrobienia', 'W trakcie', 'Review', 'Zakonczone']
+DEFAULT_BOARD_COLUMNS = ['Do zrobienia', 'W trakcie', 'Review', 'Zakończone']
 
 
 def default_permissions_for_position(position):
@@ -24,7 +24,11 @@ def ensure_default_columns(project):
         BoardColumn.objects.get_or_create(
             project=project,
             name=name,
-            defaults={'position': position, **default_permissions_for_position(position)},
+            defaults={
+                'position': position,
+                'is_done_column': position == len(DEFAULT_BOARD_COLUMNS) - 1,
+                **default_permissions_for_position(position),
+            },
         )
 
 

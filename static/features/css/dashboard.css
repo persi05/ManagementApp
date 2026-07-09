@@ -198,3 +198,98 @@
   justify-content: flex-end;
   flex-wrap: wrap;
 }
+
+.client-overview-panel {
+  margin-bottom: 16px;
+}
+
+.client-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) repeat(2, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.client-overview-grid > div,
+.client-project-summary {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface2);
+  padding: 14px;
+}
+
+.client-overview-grid span,
+.client-overview-grid small,
+.client-project-summary span {
+  display: block;
+  color: var(--muted);
+}
+
+.client-overview-grid strong {
+  display: block;
+  margin: 6px 0;
+  font-size: 24px;
+}
+
+.client-progress.large {
+  height: 11px;
+  margin-top: 10px;
+}
+
+.client-project-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.client-project-tabs a {
+  min-width: 150px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface2);
+}
+
+.client-project-tabs a.active {
+  border-color: var(--accent);
+  background: #eef6ff;
+}
+
+.client-project-tabs strong,
+.client-project-tabs small {
+  display: block;
+}
+
+.client-project-tabs small {
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.client-project-summary {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(110px, .7fr));
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.client-project-summary-main strong {
+  display: block;
+  margin: 4px 0;
+  font-size: 22px;
+}
+
+.client-project-summary-stat {
+  text-align: right;
+}
+
+.client-project-summary-stat strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+}
+
+.project-actions-bar {
+  justify-content: flex-start;
+  margin-bottom: 12px;
+}

@@ -16,11 +16,99 @@
 {% if role == 'client' %}
 <section class="metrics-grid">
   <article class="metric"><span>Twoje projekty</span><strong>{{ client_project_rows|length }}</strong><small>przypisane do Twojej firmy</small></article>
-  <article class="metric"><span>Praca zespołu</span><strong>{{ task_hours|floatformat:2 }}h</strong><small>godziny widoczne dla klienta</small></article>
+  <article class="metric"><span>Praca zespołu</span><strong>{{ task_hours|floatformat:2 }}h</strong><small>godziny poświęcone na Twoje projekty</small></article>
   <article class="metric"><span>Zadania</span><strong>{{ client_task_count }}</strong><small>w Twoich projektach</small></article>
-  <article class="metric"><span>Zakończone</span><strong>{{ client_done_count }}</strong><small>zadania w kolumnie końcowej</small></article>
+  <article class="metric"><span>Zakończone</span><strong>{{ client_done_count }}</strong><small>zadania oznaczone jako zakończone</small></article>
 </section>
 
+<section class="panel client-overview-panel">
+  <div class="panel-head">
+    <div><h2>Podsumowanie laczone</h2><p>Laczny obraz wszystkich projektow przypisanych do Twojej firmy.</p></div>
+    <a class="ghost-btn" href="{% url 'reports' %}">Pelny raport</a>
+  </div>
+  <div class="client-overview-grid">
+    <div>
+      <span>Postep laczny</span>
+      <strong>{% if client_task_count %}{% widthratio client_done_count client_task_count 100 %}{% else %}0{% endif %}%</strong>
+      <div class="client-progress large">
+        <span style="width: {% if client_task_count %}{% widthratio client_done_count client_task_count 100 %}{% else %}0{% endif %}%"></span>
+      </div>
+    </div>
+    <div>
+      <span>Zadania</span>
+      <strong>{{ client_done_count }} / {{ client_task_count }}</strong>
+      <small>zakonczone wzgledem wszystkich zadan</small>
+    </div>
+    <div>
+      <span>Godziny</span>
+      <strong>{{ task_hours|floatformat:2 }}h</strong>
+      <small>wpisy widoczne dla klienta w tym miesiacu</small>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div><h2>Podsumowanie projektu</h2><p>Przelacz projekt, zeby zobaczyc jego postep, godziny i ostatnie zadania.</p></div>
+    {% if client_selected_project_row %}
+      <a class="ghost-btn" href="{% url 'kanban_project' client_selected_project_row.project.id %}">Zadania projektu</a>
+    {% endif %}
+  </div>
+
+  <div class="client-project-tabs">
+    {% for row in client_project_rows %}
+      <a class="{% if client_selected_project_row and row.project.id == client_selected_project_row.project.id %}active{% endif %}" href="{% url 'dashboard' %}?project={{ row.project.id }}">
+        <strong>{{ row.project.name }}</strong>
+        <small>{{ row.done_count }}/{{ row.task_count }}</small>
+      </a>
+    {% empty %}
+      <p class="empty">Nie masz jeszcze przypisanych projektow.</p>
+    {% endfor %}
+  </div>
+
+  {% if client_selected_project_row %}
+    <div class="client-project-summary">
+      <div class="client-project-summary-main">
+        <span>{{ client_selected_project_row.project.get_status_display }}</span>
+        <strong>{{ client_selected_project_row.project.name }}</strong>
+        <div class="client-progress large">
+          <span style="width: {% if client_selected_project_row.task_count %}{% widthratio client_selected_project_row.done_count client_selected_project_row.task_count 100 %}{% else %}0{% endif %}%"></span>
+        </div>
+      </div>
+      <div class="client-project-summary-stat">
+        <span>Postep</span>
+        <strong>{% if client_selected_project_row.task_count %}{% widthratio client_selected_project_row.done_count client_selected_project_row.task_count 100 %}{% else %}0{% endif %}%</strong>
+      </div>
+      <div class="client-project-summary-stat">
+        <span>Zadania</span>
+        <strong>{{ client_selected_project_row.done_count }} / {{ client_selected_project_row.task_count }}</strong>
+      </div>
+      <div class="client-project-summary-stat">
+        <span>Godziny</span>
+        <strong>{{ client_selected_project_row.hours|floatformat:2 }}h</strong>
+      </div>
+    </div>
+
+    <div class="client-project-actions project-actions-bar">
+      <a class="ghost-btn small-btn" href="{% url 'kanban_project' client_selected_project_row.project.id %}">Kanban</a>
+      <a class="ghost-btn small-btn" href="{% url 'reports' %}?project={{ client_selected_project_row.project.id }}">Raport projektu</a>
+    </div>
+
+    <div class="task-list">
+      {% for task in client_project_tasks %}
+        <a href="{% url 'kanban_project' task.project_id %}" class="task-row">
+          <span class="priority {{ task.priority }}"></span>
+          <div><strong>{{ task.title }}</strong><small>{{ task.project.name }} / {{ task.column.name }}</small></div>
+          <em>{{ task.client_hours|floatformat:2 }}h</em>
+        </a>
+      {% empty %}
+        <p class="empty">Brak zadan w tym projekcie.</p>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+
+{% comment %}
 <section class="panel">
   <div class="panel-head">
     <div><h2>Projekty klienta</h2><p>Podsumowanie prac widocznych dla Ciebie. Kwoty, stawki i prywatny czas pracowników nie są tutaj pokazywane.</p></div>
@@ -65,6 +153,7 @@
     {% endfor %}
   </div>
 </section>
+{% endcomment %}
 
 {% else %}
 <section class="metrics-grid">

@@ -80,8 +80,11 @@ class TaskForm(forms.ModelForm):
 class BoardColumnForm(forms.ModelForm):
     class Meta:
         model = BoardColumn
-        fields = ('name',)
-        labels = {'name': 'Nazwa kolumny'}
+        fields = ('name', 'is_done_column')
+        labels = {
+            'name': 'Nazwa kolumny',
+            'is_done_column': 'Tu trafiaja zadania zakonczone',
+        }
 
 
 class BoardColumnSettingsForm(forms.ModelForm):
@@ -89,6 +92,7 @@ class BoardColumnSettingsForm(forms.ModelForm):
         model = BoardColumn
         fields = (
             'name',
+            'is_done_column',
             'client_can_move_to',
             'client_can_edit_tasks',
             'client_can_delete_tasks',
@@ -105,6 +109,7 @@ class BoardColumnSettingsForm(forms.ModelForm):
         )
         labels = {
             'name': 'Nazwa kolumny',
+            'is_done_column': 'Tu trafiaja zadania zakonczone',
             'client_can_move_to': 'Klient: przenoszenie',
             'client_can_edit_tasks': 'Klient: edycja',
             'client_can_delete_tasks': 'Klient: usuwanie',

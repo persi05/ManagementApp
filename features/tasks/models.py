@@ -31,6 +31,7 @@ class BoardColumn(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='columns')
     name = models.CharField(max_length=80)
     position = models.PositiveIntegerField(default=0)
+    is_done_column = models.BooleanField(default=False)
     client_can_move_to = models.BooleanField(default=False)
     client_can_edit_tasks = models.BooleanField(default=False)
     client_can_delete_tasks = models.BooleanField(default=False)

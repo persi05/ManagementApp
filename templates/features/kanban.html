@@ -112,6 +112,13 @@
             <label for="column-name-{{ column.id }}">Nazwa kolumny</label>
             <input id="column-name-{{ column.id }}" type="text" name="name" value="{{ column.name }}" maxlength="80" required>
           </p>
+          <div class="column-done-setting">
+            <label>
+              <input type="checkbox" name="is_done_column" {% if column.is_done_column %}checked{% endif %}>
+              <span>Tu trafiaja zadania zakonczone</span>
+            </label>
+            <small>Zadania z tej kolumny beda liczone w pasku postepu klienta jako zakonczone.</small>
+          </div>
           <div class="column-permissions-grid">
             <div class="column-permissions-head">Rola</div>
             <div class="column-permissions-head">Przenoszenie</div>
