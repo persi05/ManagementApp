@@ -263,6 +263,28 @@
   width: 100%;
 }
 
+.column-done-setting {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface2);
+}
+
+.column-done-setting label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 800;
+}
+
+.column-done-setting small {
+  color: var(--muted);
+}
+
 .column-permissions-grid {
   display: grid;
   grid-template-columns: minmax(110px, 1.2fr) repeat(3, minmax(110px, 1fr));

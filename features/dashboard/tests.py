@@ -1193,6 +1193,7 @@ class KanbanRenderingTests(TestCase):
         self.client.force_login(manager)
         response = self.client.post(reverse('update_column', args=[column.id]), {
             'name': 'Backlog klienta',
+            'is_done_column': 'on',
             'employee_can_move_to': 'on',
             'employee_can_edit_tasks': 'on',
             'lead_can_move_to': 'on',
@@ -1201,6 +1202,7 @@ class KanbanRenderingTests(TestCase):
         self.assertEqual(response.status_code, 302)
         column.refresh_from_db()
         self.assertEqual(column.name, 'Backlog klienta')
+        self.assertTrue(column.is_done_column)
         self.assertTrue(column.employee_can_move_to)
         self.assertFalse(column.client_can_edit_tasks)
 
@@ -1216,9 +1218,48 @@ class KanbanRenderingTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="name"')
+        self.assertContains(response, 'name="is_done_column"')
         self.assertContains(response, 'name="client_can_move_to"')
         self.assertContains(response, 'name="employee_can_edit_tasks"')
         self.assertContains(response, 'name="lead_can_delete_tasks"')
+
+    def test_client_progress_uses_done_column_flag_not_column_name(self):
+        client = User.objects.create_user(username='client', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Client project', client=client)
+        todo = BoardColumn.objects.create(project=project, name='Do zrobienia', position=0)
+        done = BoardColumn.objects.create(project=project, name='Zrobione', position=1, is_done_column=True)
+        Task.objects.create(project=project, column=todo, title='Open task')
+        Task.objects.create(project=project, column=done, title='Finished task')
+
+        self.client.force_login(client)
+        response = self.client.get(reverse('dashboard'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Zakończone')
+        self.assertContains(response, '1 / 2')
+
+    def test_client_dashboard_can_switch_project_summary(self):
+        client = User.objects.create_user(username='client', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        first_project = Project.objects.create(name='First project', client=client)
+        second_project = Project.objects.create(name='Second project', client=client)
+        first_column = BoardColumn.objects.create(project=first_project, name='Start', position=0)
+        second_column = BoardColumn.objects.create(project=second_project, name='Done', position=0, is_done_column=True)
+        Task.objects.create(project=first_project, column=first_column, title='First task')
+        Task.objects.create(project=second_project, column=second_column, title='Second task')
+
+        self.client.force_login(client)
+        response = self.client.get(reverse('dashboard'), {'project': second_project.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Podsumowanie laczone')
+        self.assertContains(response, 'Podsumowanie projektu')
+        self.assertContains(response, f'?project={second_project.id}')
+        self.assertContains(response, 'Second task')
+        self.assertNotContains(response, 'First task</strong>')
 
     def test_management_can_allow_employee_to_move_to_custom_column(self):
         manager = User.objects.create_user(username='manager', password='pass')

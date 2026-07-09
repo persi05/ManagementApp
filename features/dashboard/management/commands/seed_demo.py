@@ -34,8 +34,13 @@ class Command(BaseCommand):
         for project in (atlas, orbit):
             for user, role in ((client, ProjectAssignment.ProjectRole.CLIENT), (employee, ProjectAssignment.ProjectRole.EMPLOYEE), (employee2, ProjectAssignment.ProjectRole.LEAD)):
                 ProjectAssignment.objects.get_or_create(project=project, user=user, defaults={'project_role': role})
-            for idx, name in enumerate(['Do zrobienia', 'W trakcie', 'Review', 'Zakończone']):
-                BoardColumn.objects.get_or_create(project=project, name=name, defaults={'position': idx})
+            column_names = ['Do zrobienia', 'W trakcie', 'Review', 'Zakończone']
+            for idx, name in enumerate(column_names):
+                BoardColumn.objects.get_or_create(
+                    project=project,
+                    name=name,
+                    defaults={'position': idx, 'is_done_column': idx == len(column_names) - 1},
+                )
 
         todo = atlas.columns.get(name='Do zrobienia')
         doing = atlas.columns.get(name='W trakcie')

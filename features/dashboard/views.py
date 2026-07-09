@@ -42,18 +42,28 @@ def dashboard(request):
     total_minutes = sum(entry.duration_minutes for entry in entries)
     task_hours = worklogs.aggregate(total=Sum('hours'))['total'] or Decimal('0')
     client_project_rows = []
+    client_selected_project_row = None
+    client_project_tasks = []
     if user_role(request.user) == UserProfile.Role.CLIENT:
+        selected_project_id = request.GET.get('project')
         for project in projects:
             project_worklogs = worklogs.filter(task__project=project)
             project_hours = project_worklogs.aggregate(total=Sum('hours'))['total'] or Decimal('0')
             task_count = tasks.filter(project=project).count()
-            done_count = tasks.filter(project=project, column__name__iexact='Zakonczone').count() + tasks.filter(project=project, column__name__iexact='Zakończone').count()
-            client_project_rows.append({
+            done_count = tasks.filter(project=project, column__is_done_column=True).count()
+            row = {
                 'project': project,
                 'hours': project_hours,
                 'task_count': task_count,
                 'done_count': done_count,
-            })
+            }
+            client_project_rows.append(row)
+            if selected_project_id and str(project.id) == selected_project_id:
+                client_selected_project_row = row
+        if client_selected_project_row is None and client_project_rows:
+            client_selected_project_row = client_project_rows[0]
+        if client_selected_project_row:
+            client_project_tasks = tasks.filter(project=client_selected_project_row['project'])[:8]
     notifications = request.user.notifications.filter(is_read=False)[:5]
     current_rate = request.user.hourly_rates.order_by('-valid_from').first()
     payroll = None if is_management(request.user) or user_role(request.user) == UserProfile.Role.CLIENT else payroll_amount(request.user, entries, start_date, next_month)
@@ -68,6 +78,8 @@ def dashboard(request):
         'total_hours': Decimal(total_minutes) / Decimal(60),
         'task_hours': task_hours,
         'client_project_rows': client_project_rows,
+        'client_selected_project_row': client_selected_project_row,
+        'client_project_tasks': client_project_tasks,
         'client_task_count': sum(row['task_count'] for row in client_project_rows),
         'client_done_count': sum(row['done_count'] for row in client_project_rows),
         'notifications': notifications,

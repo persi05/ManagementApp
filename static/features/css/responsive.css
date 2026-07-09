@@ -15,7 +15,9 @@
   .workspace-grid,
   .content-split,
   .calendar-side-grid,
-  .leave-range-grid {
+  .leave-range-grid,
+  .client-overview-grid,
+  .client-project-summary {
     grid-template-columns: 1fr;
   }
 
@@ -44,6 +46,10 @@
 
   .client-project-actions {
     justify-content: flex-start;
+  }
+
+  .client-project-summary-stat {
+    text-align: left;
   }
 }
 
