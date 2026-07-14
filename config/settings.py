@@ -16,6 +16,13 @@ def env_list(name, default=''):
     return [item.strip() for item in os.getenv(name, default).split(',') if item.strip()]
 
 
+def env_int(name, default):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return int(value)
+
+
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dev-only-change-me')
 DEBUG = env_bool('DJANGO_DEBUG', True)
 ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost,testserver')
@@ -126,6 +133,16 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+DOCUMENTS_MAX_UPLOAD_SIZE_BYTES = env_int('DOCUMENTS_MAX_UPLOAD_SIZE_BYTES', 50 * 1024 * 1024)
+DOCUMENTS_MAX_FILES_PER_USER = env_int('DOCUMENTS_MAX_FILES_PER_USER', 1000)
+DOCUMENTS_ALLOWED_UPLOAD_EXTENSIONS = {
+    extension.lower().lstrip('.')
+    for extension in env_list(
+        'DOCUMENTS_ALLOWED_UPLOAD_EXTENSIONS',
+        'pdf,jpg,jpeg,png,webp,gif,doc,docx,xls,xlsx,csv,txt,rtf,odt,ods,ppt,pptx',
+    )
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
