@@ -41,11 +41,30 @@ class RoutingTests(TestCase):
         self.assertEqual(reverse('accounts:settings'), '/accounts/settings/')
 
     def test_workspace_routes_live_under_app_prefix(self):
+        self.assertEqual(reverse('dashboard'), '/app/dashboard/')
         self.assertEqual(reverse('projects'), '/app/projects/')
         self.assertEqual(reverse('employees'), '/app/employees/')
         self.assertEqual(reverse('documents'), '/app/documents/')
         self.assertEqual(reverse('time_entries'), '/app/time-entries/')
         self.assertEqual(reverse('calendar'), '/app/calendar/')
+
+    def test_root_renders_landing_page(self):
+        response = self.client.get(reverse('landing'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'landing.html')
+        self.assertContains(response, 'Dcode Management')
+        self.assertContains(response, reverse('accounts:login'))
+
+    def test_login_page_hides_authenticated_header_actions(self):
+        response = self.client.get(reverse('accounts:login'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Powiadomienia')
+        self.assertNotContains(response, 'Moje konto')
+        self.assertContains(response, 'Rejestracja')
+        self.assertContains(response, f'href="{reverse("landing")}"')
+        self.assertNotContains(response, 'next=/app/dashboard/')
 
     @override_settings(DEBUG=False)
     def test_not_found_uses_shared_error_page(self):
