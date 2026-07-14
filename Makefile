@@ -1,4 +1,4 @@
-.PHONY: up down build rebuild restart logs shell migrate migrations test clean
+.PHONY: up down build rebuild restart logs shell migrate migrations test reset
 
 up:
 	docker compose up -d
