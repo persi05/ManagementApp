@@ -47,9 +47,12 @@
           <article class="kanban-card priority-card-{{ task.priority }}" draggable="{% if can_move_tasks %}true{% else %}false{% endif %}" data-task="{{ task.id }}" data-move-url="{% url 'move_task' task.id %}" data-open-modal="task-preview-{{ task.id }}" tabindex="0" role="button" aria-label="Otwórz podgląd zadania {{ task.title }}">
             {% if task.label_badges %}
               <div class="tag-row card-labels-top">
-                {% for label in task.label_badges|slice:":2" %}
+                {% for label in task.visible_label_badges %}
                   <span>{{ label.name }}</span>
                 {% endfor %}
+                {% if task.hidden_label_badges_count %}
+                  <span class="label-more-chip">+{{ task.hidden_label_badges_count }}</span>
+                {% endif %}
               </div>
             {% endif %}
             <div class="card-top">
@@ -223,9 +226,9 @@
           <div class="column-done-setting">
             <label>
               <input type="checkbox" name="is_done_column" {% if column.is_done_column %}checked{% endif %}>
-              <span>Tu trafiaja zadania zakonczone</span>
+              <span>Tu trafiają zadania zakończone</span>
             </label>
-            <small>Zadania z tej kolumny beda liczone w pasku postepu klienta jako zakonczone.</small>
+            <small>Zadania z tej kolumny będą liczone w pasku postępu klienta jako zakończone.</small>
           </div>
           <div class="column-permissions-grid">
             <div class="column-permissions-head">Rola</div>
@@ -275,13 +278,6 @@
   <section class="kanban-modal-card task-modal-card">
     <button type="button" class="ghost-btn tiny-btn kanban-modal-close" data-close-add-task aria-label="Zamknij">x</button>
     <div class="panel-head"><div><h2 id="new-task-title">Utwórz nowe zadanie</h2><p>Wypełnij szczegóły i dodaj kartę do tablicy.</p></div></div>
-    {% if project_label_rates %}
-      <datalist id="project-label-suggestions">
-        {% for rate in project_label_rates %}
-          <option value="{{ rate.label }}">{% if can_view_rates %}{{ rate.label }} - {{ rate.hourly_rate|floatformat:2 }} {{ rate.currency }}/h{% else %}{{ rate.label }}{% endif %}</option>
-        {% endfor %}
-      </datalist>
-    {% endif %}
     <form method="post" class="grid-form task-modal-form" data-task-form>{% csrf_token %}{{ form.as_p }}<button class="primary-btn">Dodaj zadanie</button></form>
   </section>
 </div>

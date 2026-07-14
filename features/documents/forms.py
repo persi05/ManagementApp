@@ -14,7 +14,6 @@ def format_file_size(size):
         return f'{size / 1024:.0f} KB'
     return f'{size} B'
 
-
 def validate_document_upload(uploaded_file):
     max_size = settings.DOCUMENTS_MAX_UPLOAD_SIZE_BYTES
     if uploaded_file.size > max_size:

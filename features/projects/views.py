@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from features.accounts.models import is_management
+from features.accounts.models import UserProfile, is_management, user_role
 from features.accounts.permissions import management_required
 from features.projects.forms import ProjectAssignmentForm, ProjectForm, ProjectLabelRateForm
 from features.projects.models import ProjectAssignment, ProjectLabelRate
@@ -13,6 +13,7 @@ from features.tasks.services import ensure_default_columns
 
 @login_required
 def projects(request):
+    can_view_client_rates = is_management(request.user) or user_role(request.user) == UserProfile.Role.CLIENT
     if request.method == 'POST':
         if not is_management(request.user):
             return management_required(request.user)
@@ -34,12 +35,14 @@ def projects(request):
         'projects': visible_projects(request.user),
         'form': form,
         'can_manage': is_management(request.user),
+        'can_view_client_rates': can_view_client_rates,
     })
 
 
 @login_required
 def project_detail(request, project_id):
     project = get_object_or_404(visible_projects(request.user), pk=project_id)
+    can_view_client_rates = is_management(request.user) or user_role(request.user) == UserProfile.Role.CLIENT
     assignment_form = ProjectAssignmentForm(project=project)
     project_form = ProjectForm(instance=project)
     label_rate_form = ProjectLabelRateForm(project=project)
@@ -100,6 +103,7 @@ def project_detail(request, project_id):
         'label_rate_form': label_rate_form,
         'label_rates': project.label_rates.all(),
         'can_manage': is_management(request.user),
+        'can_view_client_rates': can_view_client_rates,
     })
 
 

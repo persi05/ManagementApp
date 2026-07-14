@@ -21,7 +21,7 @@
     </small>
     </div>
   </div>
-  <form class="documents-search">
+  <form class="documents-search" data-documents-search>
     {% if parent %}<input type="hidden" name="folder" value="{{ parent.id }}">{% endif %}
     {% if show_archived %}<input type="hidden" name="archived" value="1">{% endif %}
     <input type="search" name="q" value="{{ query }}" placeholder="Szukaj folderów, dokumentów i zdjęć">
@@ -93,8 +93,9 @@
 
     <section class="documents-grid">
       {% for item in items %}
-        <article class="document-card {% if panel_item and panel_item.id == item.id %}active{% endif %}">
-          <a class="document-card-body" href="{% if item.kind == 'folder' %}{% url 'documents' %}?folder={{ item.id }}{% else %}{% url 'documents' %}?{% if parent and not show_archived %}folder={{ parent.id }}&{% endif %}{% if show_archived %}archived=1&{% endif %}selected={{ item.id }}{% endif %}">
+        <article class="document-card {% if panel_item and panel_item.id == item.id %}active{% endif %}" data-document-name="{{ item.name|lower }}">
+          <div class="document-card-body">
+          <a class="document-card-main" href="{% if item.kind == 'folder' %}{% url 'documents' %}?folder={{ item.id }}{% else %}{% url 'documents' %}?{% if query %}q={{ query|urlencode }}&{% elif parent and not show_archived %}folder={{ parent.id }}&{% endif %}{% if show_archived %}archived=1&{% endif %}selected={{ item.id }}{% endif %}">
             {% include "features/partials/document_icon.html" with icon_kind=item.kind %}
             <div>
               <strong>{{ item.name }}</strong>
@@ -107,6 +108,10 @@
               </small>
             </div>
           </a>
+          {% if query %}
+            <a class="document-search-path" href="{% url 'documents' %}{% if item.search_folder %}?folder={{ item.search_folder.id }}{% endif %}">Lokalizacja: {{ item.search_folder_path }}</a>
+          {% endif %}
+          </div>
           <form method="post" class="document-pin {% if item.is_pinned %}active{% endif %}">
             {% csrf_token %}
             <input type="hidden" name="form" value="action">
@@ -139,12 +144,13 @@
       {% empty %}
         <p class="empty">Brak dokumentów w tym miejscu.</p>
       {% endfor %}
+      <p class="empty documents-filter-empty" hidden>Brak dokumentow pasujacych do wyszukiwania.</p>
     </section>
   </div>
 
   {% if panel_item %}
     <div class="documents-preview-shell">
-      <a class="documents-preview-backdrop" href="{% url 'documents' %}{% if parent and not show_archived %}?folder={{ parent.id }}{% elif show_archived %}?archived=1{% endif %}" aria-label="Zamknij podgląd"></a>
+      <a class="documents-preview-backdrop" href="{% url 'documents' %}{% if query %}?q={{ query|urlencode }}{% elif parent and not show_archived %}?folder={{ parent.id }}{% elif show_archived %}?archived=1{% endif %}" aria-label="Zamknij podgląd"></a>
       <aside class="documents-preview">
       <div class="preview-head">
         {% include "features/partials/document_icon.html" with icon_kind=panel_item.kind %}
@@ -152,7 +158,7 @@
           <h2>{{ panel_item.name }}</h2>
           <p>{{ panel_item.get_kind_display }} / {{ panel_item.size_label }}</p>
         </div>
-        <a class="preview-close" href="{% url 'documents' %}{% if parent and not show_archived %}?folder={{ parent.id }}{% elif show_archived %}?archived=1{% endif %}" aria-label="Zamknij"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12"/><path d="M18 6 6 18"/></svg></a>
+        <a class="preview-close" href="{% url 'documents' %}{% if query %}?q={{ query|urlencode }}{% elif parent and not show_archived %}?folder={{ parent.id }}{% elif show_archived %}?archived=1{% endif %}" aria-label="Zamknij"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12"/><path d="M18 6 6 18"/></svg></a>
       </div>
       {% if selected %}
         <div class="preview-frame">
@@ -239,6 +245,47 @@
   {% endif %}
 </section>
 <script>
+  const searchForm = document.querySelector('[data-documents-search]');
+  const searchInput = searchForm?.querySelector('input[name="q"]');
+  if (searchForm && searchInput) {
+    let searchTimer;
+    let searchRequest;
+    const updateDocumentGrid = async () => {
+      searchRequest?.abort();
+      searchRequest = new AbortController();
+      const params = new URLSearchParams(new FormData(searchForm));
+      const action = searchForm.getAttribute('action') || window.location.pathname;
+      if (!searchInput.value.trim()) {
+        params.delete('q');
+      }
+      const queryString = params.toString();
+      const url = queryString ? `${action}?${queryString}` : action;
+      try {
+        const response = await fetch(url, {
+          headers: {'X-Requested-With': 'XMLHttpRequest'},
+          signal: searchRequest.signal,
+        });
+        if (!response.ok) return;
+        const html = await response.text();
+        const nextDocument = new DOMParser().parseFromString(html, 'text/html');
+        const nextGrid = nextDocument.querySelector('.documents-grid');
+        const currentGrid = document.querySelector('.documents-grid');
+        if (nextGrid && currentGrid) {
+          currentGrid.replaceWith(nextGrid);
+          window.history.replaceState({}, '', url);
+        }
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error(error);
+        }
+      }
+    };
+    searchInput.setAttribute('autocomplete', 'off');
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(updateDocumentGrid, 250);
+    });
+  }
   document.querySelectorAll('.documents-create-drawer details').forEach((details) => {
     details.addEventListener('toggle', () => {
       if (!details.open) return;

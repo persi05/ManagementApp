@@ -166,4 +166,112 @@
       await moveCard(card, column);
     });
   });
+
+  document.querySelectorAll('[data-label-transfer]').forEach((root) => {
+    const form = root.closest('form');
+    const hidden = form?.querySelector('input[type="hidden"][name="labels"]');
+    const selectedBox = root.querySelector('[data-label-selected]');
+    const availableBox = root.querySelector('[data-label-available]');
+    const newInput = root.querySelector('[data-label-new]');
+    const addButton = root.querySelector('[data-label-add]');
+
+    function labelsIn(box) {
+      return Array.from(box.querySelectorAll('[data-label-item]')).map((item) => item.dataset.labelValue);
+    }
+
+    function syncHidden() {
+      if (hidden) {
+        hidden.value = labelsIn(selectedBox).join(', ');
+      }
+    }
+
+    function ensureEmptyState(box) {
+      const hasItems = Boolean(box.querySelector('[data-label-item]'));
+      let empty = box.querySelector('.label-transfer-empty');
+      if (hasItems && empty) {
+        empty.remove();
+      }
+      if (!hasItems && !empty) {
+        empty = document.createElement('button');
+        empty.type = 'button';
+        empty.disabled = true;
+        empty.className = 'label-transfer-empty';
+        empty.textContent = 'Brak';
+        box.appendChild(empty);
+      }
+    }
+
+    function normalizeLabel(value) {
+      return value.trim().toLowerCase();
+    }
+
+    function createItem(label, group) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'label-transfer-item';
+      item.dataset.labelItem = '';
+      item.dataset.labelGroup = group;
+      item.dataset.labelValue = label;
+      item.textContent = label;
+      return item;
+    }
+
+    function moveItem(item, targetBox, group) {
+      if (!item || targetBox.querySelector(`[data-label-value="${CSS.escape(item.dataset.labelValue)}"]`)) return;
+      item.classList.remove('active');
+      item.dataset.labelGroup = group;
+      targetBox.appendChild(item);
+    }
+
+    function moveActiveItems(sourceBox, targetBox, group) {
+      const activeItems = Array.from(sourceBox.querySelectorAll('[data-label-item].active'));
+      activeItems.forEach((item) => moveItem(item, targetBox, group));
+      ensureEmptyState(selectedBox);
+      ensureEmptyState(availableBox);
+      syncHidden();
+    }
+
+    root.addEventListener('click', (event) => {
+      const item = event.target.closest('[data-label-item]');
+      if (item && root.contains(item)) {
+        item.classList.toggle('active');
+        return;
+      }
+
+      const move = event.target.closest('[data-label-move]')?.dataset.labelMove;
+      if (move === 'left') {
+        moveActiveItems(availableBox, selectedBox, 'selected');
+      }
+      if (move === 'right') {
+        moveActiveItems(selectedBox, availableBox, 'available');
+      }
+    });
+
+    addButton?.addEventListener('click', () => {
+      const label = normalizeLabel(newInput?.value || '');
+      if (!label) return;
+      if (!availableBox.querySelector(`[data-label-value="${CSS.escape(label)}"]`) && !selectedBox.querySelector(`[data-label-value="${CSS.escape(label)}"]`)) {
+        availableBox.appendChild(createItem(label, 'available'));
+      }
+      if (newInput) {
+        newInput.value = '';
+        newInput.focus();
+      }
+      ensureEmptyState(availableBox);
+    });
+
+    newInput?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        addButton?.click();
+      }
+    });
+    newInput?.addEventListener('click', (event) => event.stopPropagation());
+    newInput?.addEventListener('pointerdown', (event) => event.stopPropagation());
+
+    ensureEmptyState(selectedBox);
+    ensureEmptyState(availableBox);
+    syncHidden();
+    form?.addEventListener('submit', syncHidden, { capture: true });
+  });
 })();

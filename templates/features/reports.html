@@ -14,33 +14,37 @@
       <p>{% if report_visibility == 'management' %}Raport pokazuje wszystkie wpisy zadan. Dolna tabela zawiera rowniez pozycje ukryte przed klientem.{% elif is_client_report %}Wybierz okres i projekt. Raport pokazuje tylko prace udostepnione klientowi.{% else %}Raport podlicza tylko wpisy widoczne dla klienta.{% endif %}</p>
     </div>
   </div>
-  <form class="filter-bar">
+  <form class="filter-bar" data-report-filter-form>
     <input type="hidden" name="visibility" value="{{ report_visibility }}">
-    <input type="date" name="date_from" value="{{ date_from }}">
-    <input type="date" name="date_to" value="{{ date_to }}">
-    {% if can_manage %}
-      <select name="client">
-        <option value="">Wszyscy klienci</option>
-        {% for client in clients %}
-          <option value="{{ client.id }}" {% if selected_client == client.id|stringformat:"s" %}selected{% endif %}>{% if client.get_full_name %}{{ client.get_full_name }}{% else %}{{ client.username }}{% endif %}</option>
+    <div class="filter-row filter-date-row">
+      <input type="date" name="date_from" value="{{ date_from }}">
+      <input type="date" name="date_to" value="{{ date_to }}">
+      <button class="ghost-btn">Filtruj daty</button>
+    </div>
+    <div class="filter-row filter-select-row">
+      {% if can_manage %}
+        <select name="client" data-auto-submit-filter>
+          <option value="">Wszyscy klienci</option>
+          {% for client in clients %}
+            <option value="{{ client.id }}" {% if selected_client == client.id|stringformat:"s" %}selected{% endif %}>{% if client.get_full_name %}{{ client.get_full_name }}{% else %}{{ client.username }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      {% endif %}
+      <select name="project" data-auto-submit-filter>
+        <option value="">Wszystkie projekty</option>
+        {% for project in projects %}
+          <option value="{{ project.id }}" {% if selected_project == project.id|stringformat:"s" %}selected{% endif %}>{{ project.name }}</option>
         {% endfor %}
       </select>
-    {% endif %}
-    <select name="project">
-      <option value="">Wszystkie projekty</option>
-      {% for project in projects %}
-        <option value="{{ project.id }}" {% if selected_project == project.id|stringformat:"s" %}selected{% endif %}>{{ project.name }}</option>
-      {% endfor %}
-    </select>
-    {% if can_manage %}
-      <select name="employee">
-        <option value="">Wszyscy pracownicy</option>
-        {% for employee in employees %}
-          <option value="{{ employee.id }}" {% if selected_employee == employee.id|stringformat:"s" %}selected{% endif %}>{% if employee.get_full_name %}{{ employee.get_full_name }}{% else %}{{ employee.username }}{% endif %}</option>
-        {% endfor %}
-      </select>
-    {% endif %}
-    <button class="ghost-btn">Filtruj</button>
+      {% if can_manage %}
+        <select name="employee" data-auto-submit-filter>
+          <option value="">Wszyscy pracownicy</option>
+          {% for employee in employees %}
+            <option value="{{ employee.id }}" {% if selected_employee == employee.id|stringformat:"s" %}selected{% endif %}>{% if employee.get_full_name %}{{ employee.get_full_name }}{% else %}{{ employee.username }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      {% endif %}
+    </div>
   </form>
 </section>
 
@@ -168,4 +172,11 @@
     </table>
   </div>
 </section>
+<script>
+  document.querySelectorAll('[data-report-filter-form] [data-auto-submit-filter]').forEach((field) => {
+    field.addEventListener('change', () => {
+      field.form?.requestSubmit();
+    });
+  });
+</script>
 {% endblock %}

@@ -60,7 +60,7 @@ def kanban(request, project_id=None):
     if request.method == 'POST':
         if request.POST.get('form') == 'board_column':
             if not is_management(request.user):
-                return HttpResponseForbidden('Brak uprawnien do dodania kolumny.')
+                return HttpResponseForbidden('Brak uprawnień do dodania kolumny.')
             column_form = BoardColumnForm(request.POST)
             if column_form.is_valid():
                 column = column_form.save(commit=False)
@@ -77,7 +77,7 @@ def kanban(request, project_id=None):
                     for field_name, value in default_permissions_for_position(0).items():
                         setattr(column, field_name, value)
                 column.save()
-                messages.success(request, 'Kolumna zostala dodana.')
+                messages.success(request, 'Kolumna została dodana.')
                 return redirect('kanban_project', project_id=project.id)
             form = TaskForm(
                 initial={'project': project},
@@ -131,7 +131,7 @@ def kanban(request, project_id=None):
                             url=reverse('edit_task', args=[task.id]),
                             actor=request.user,
                         )
-                    messages.success(request, 'Zadanie zostalo dodane.')
+                    messages.success(request, 'Zadanie zostało dodane.')
                     return redirect('kanban_project', project_id=task.project_id)
             open_task_modal = True
             project = selected_project
@@ -163,6 +163,8 @@ def kanban(request, project_id=None):
         for task in column.tasks.all():
             task.can_edit = can_edit_task(request.user, task)
             task.label_badges = task_label_badges(task)
+            task.visible_label_badges = task.label_badges[:2]
+            task.hidden_label_badges_count = max(len(task.label_badges) - len(task.visible_label_badges), 0)
             task.effective_client_rate = task_effective_client_rate(task) if can_view_rates else None
 
     return render(request, 'features/kanban.html', {
@@ -187,7 +189,7 @@ def move_task(request, task_id):
     task = get_object_or_404(visible_tasks(request.user), pk=task_id)
     column = get_object_or_404(BoardColumn, pk=request.POST.get('column'), project=task.project)
     if not can_move_task_to_column(request.user, task, column):
-        return HttpResponseForbidden('Brak uprawnien do zmiany statusu zadania.')
+        return HttpResponseForbidden('Brak uprawnień do zmiany statusu zadania.')
     previous_column_id = task.column_id
     task.column = column
     task.save(update_fields=['column', 'updated_at'])
@@ -214,7 +216,7 @@ def move_task(request, task_id):
 
 def update_column(request, column_id):
     if not is_management(request.user):
-        return HttpResponseForbidden('Brak uprawnien do edycji kolumny.')
+        return HttpResponseForbidden('Brak uprawnień do edycji kolumny.')
 
     column = get_object_or_404(BoardColumn, pk=column_id, project__in=visible_projects(request.user))
     if request.method == 'POST':
@@ -239,7 +241,7 @@ def update_column(request, column_id):
 @require_POST
 def delete_column(request, column_id):
     if not is_management(request.user):
-        return HttpResponseForbidden('Brak uprawnien do usuniecia kolumny.')
+        return HttpResponseForbidden('Brak uprawnień do usunięcia kolumny.')
 
     column = get_object_or_404(BoardColumn, pk=column_id, project__in=visible_projects(request.user))
     project = column.project
@@ -247,12 +249,12 @@ def delete_column(request, column_id):
         messages.error(request, 'Projekt musi miec przynajmniej jedna kolumne.')
         return redirect('kanban_project', project_id=project.id)
     if column.tasks.exists():
-        messages.error(request, 'Nie mozna usunac kolumny, ktora ma zadania.')
+        messages.error(request, 'Nie można usunąć kolumny, która ma zadania.')
         return redirect('kanban_project', project_id=project.id)
 
     column.delete()
     normalize_column_positions(project)
-    messages.success(request, 'Kolumna zostala usunieta.')
+    messages.success(request, 'Kolumna została usunięta.')
     return redirect('kanban_project', project_id=project.id)
 
 
@@ -261,7 +263,7 @@ def delete_column(request, column_id):
 def add_task_note(request, task_id):
     task = get_object_or_404(visible_tasks(request.user), pk=task_id)
     if not can_edit_task(request.user, task):
-        return HttpResponseForbidden('Brak uprawnien do dodania notatki.')
+        return HttpResponseForbidden('Brak uprawnień do dodania notatki.')
 
     note = (request.POST.get('content') or '').strip()
     if note:
@@ -283,7 +285,7 @@ def add_task_note(request, task_id):
                 url=reverse('edit_task', args=[task.id]),
                 actor=request.user,
             )
-        messages.success(request, 'Notatka zostala dodana.')
+        messages.success(request, 'Notatka została dodana.')
     else:
         messages.error(request, 'Wpisz tresc notatki.')
     return redirect('kanban_project', project_id=task.project_id)
@@ -294,7 +296,7 @@ def add_task_note(request, task_id):
 def add_task_attachment(request, task_id):
     task = get_object_or_404(visible_tasks(request.user), pk=task_id)
     if not can_edit_task(request.user, task):
-        return HttpResponseForbidden('Brak uprawnien do dodania zalacznika.')
+        return HttpResponseForbidden('Brak uprawnień do dodania załącznika.')
 
     uploaded = request.FILES.get('file')
     name = (request.POST.get('name') or '').strip()
@@ -325,7 +327,7 @@ def add_task_attachment(request, task_id):
 def link_task_document(request, task_id):
     task = get_object_or_404(visible_tasks(request.user), pk=task_id)
     if not can_edit_task(request.user, task):
-        return HttpResponseForbidden('Brak uprawnien do powiazania dokumentu.')
+        return HttpResponseForbidden('Brak uprawnień do powiązania dokumentu.')
 
     document = get_object_or_404(
         DocumentItem.visible_to(request.user).exclude(kind=DocumentItem.Kind.FOLDER),
@@ -344,7 +346,7 @@ def link_task_document(request, task_id):
 def edit_task(request, task_id):
     task = get_object_or_404(visible_tasks(request.user), pk=task_id)
     if not can_edit_task(request.user, task):
-        return HttpResponseForbidden('Brak uprawnien do edycji zadania.')
+        return HttpResponseForbidden('Brak uprawnień do edycji zadania.')
 
     if request.method == 'POST':
         previous_assignee_id = task.assignee_id
@@ -380,8 +382,8 @@ def edit_task(request, task_id):
                         url=reverse('edit_task', args=[updated_task.id]),
                         actor=request.user,
                     )
-            messages.success(request, 'Zadanie zostalo zapisane.')
-            return redirect('kanban_project', project_id=task.project_id)
+            messages.success(request, 'Zadanie zostało zapisane.')
+            return redirect('edit_task', task_id=task.id)
     else:
         form = TaskEditForm(instance=task, user=request.user, project=task.project)
 
@@ -401,11 +403,11 @@ def edit_task(request, task_id):
 def delete_task(request, task_id):
     task = get_object_or_404(visible_tasks(request.user), pk=task_id)
     if not can_delete_task(request.user, task):
-        return HttpResponseForbidden('Brak uprawnien do usuniecia zadania.')
+        return HttpResponseForbidden('Brak uprawnień do usunięcia zadania.')
 
     project_id = task.project_id
     task.delete()
-    messages.success(request, 'Zadanie zostalo usuniete.')
+    messages.success(request, 'Zadanie zostało usunięte.')
     return redirect('kanban_project', project_id=project_id)
 
 
@@ -475,7 +477,7 @@ def edit_worklog(request, worklog_id):
         qs = qs.filter(user=request.user)
     worklog = get_object_or_404(qs, pk=worklog_id)
     if not worklog.can_be_edited_by(request.user):
-        return HttpResponseForbidden('Nie mozna juz edytowac tego czasu zadania.')
+        return HttpResponseForbidden('Nie można już edytować tego czasu zadania.')
 
     if request.method == 'POST':
         form = WorklogForm(request.POST, instance=worklog)
@@ -497,7 +499,7 @@ def toggle_worklog_visibility(request, worklog_id):
     qs = TaskWorklog.objects.all() if is_management(request.user) else TaskWorklog.objects.filter(user=request.user)
     worklog = get_object_or_404(qs, pk=worklog_id)
     if not worklog.can_be_edited_by(request.user):
-        return HttpResponseForbidden('Nie mozna juz edytowac tego czasu zadania.')
+        return HttpResponseForbidden('Nie można już edytować tego czasu zadania.')
     worklog.visible_to_client = not worklog.visible_to_client
     worklog.save(update_fields=['visible_to_client'])
     return redirect('worklogs')

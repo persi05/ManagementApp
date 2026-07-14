@@ -8,13 +8,16 @@
     <div class="panel-head"><div><h2>Lista projektów</h2><p>Management widzi wszystkie projekty, klient i pracownik tylko przypisane.</p></div></div>
     <div class="table-wrap">
       <table class="projects-table">
-        <thead><tr><th>Nazwa</th><th>Klient</th><th>Status</th><th>Godziny klienta</th><th>Akcje</th></tr></thead>
+        <thead><tr><th>Nazwa</th><th>Klient</th><th>Status</th>{% if can_view_client_rates %}<th>Stawka podstawowa</th>{% endif %}<th>Godziny klienta</th><th>Akcje</th></tr></thead>
         <tbody>
         {% for project in projects %}
           <tr>
             <td>{{ project.name }}</td>
             <td>{% if project.client %}{{ project.client.get_full_name|default:project.client.username }}{% else %}-{% endif %}</td>
             <td>{{ project.get_status_display }}</td>
+            {% if can_view_client_rates %}
+              <td>{% if project.client_hourly_rate %}{{ project.client_hourly_rate|floatformat:2 }} {{ project.client_rate_currency }}/h{% else %}-{% endif %}</td>
+            {% endif %}
             <td>{{ project.visible_hours|floatformat:2 }}h</td>
             <td>
               <a class="ghost-btn small-btn" href="{% url 'project_detail' project.id %}">Szczegóły</a>

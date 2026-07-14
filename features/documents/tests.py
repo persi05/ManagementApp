@@ -372,6 +372,23 @@ class DocumentTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], f'{reverse("documents")}?folder={folder.id}&selected={document.id}')
 
+    def test_pin_document_does_not_open_preview(self):
+        user = User.objects.create_user(username='owner', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        folder = DocumentItem.objects.create(owner=user, name='Folder', kind=DocumentItem.Kind.FOLDER)
+        document = DocumentItem.objects.create(owner=user, name='Oferta', kind=DocumentItem.Kind.DOCUMENT, parent=folder)
+
+        self.client.force_login(user)
+        response = self.client.post(reverse('documents'), {
+            'form': 'action',
+            'item': document.id,
+            'action': 'pin',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], f'{reverse("documents")}?folder={folder.id}')
+
     def test_folder_can_open_management_panel_without_preview(self):
         user = User.objects.create_user(username='owner', password='pass')
         user.profile.role = UserProfile.Role.EMPLOYEE
@@ -421,3 +438,24 @@ class DocumentTests(TestCase):
 
         self.assertLess(body.index('<strong>sort-folder</strong>'), body.index('<strong>sort-dokument</strong>'))
         self.assertLess(body.index('<strong>sort-dokument</strong>'), body.index('<strong>sort-plik</strong>'))
+
+    def test_search_result_shows_nested_folder_path(self):
+        user = User.objects.create_user(username='owner', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        parent = DocumentItem.objects.create(owner=user, name='Projekt', kind=DocumentItem.Kind.FOLDER)
+        child = DocumentItem.objects.create(owner=user, name='Umowy', kind=DocumentItem.Kind.FOLDER, parent=parent)
+        item = DocumentItem.objects.create(owner=user, name='faktura-lipiec.pdf', kind=DocumentItem.Kind.FILE, parent=child, file=SimpleUploadedFile('faktura-lipiec.pdf', b'abc', content_type='application/pdf'))
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('documents'), {'q': 'faktura'})
+
+        self.assertContains(response, 'faktura-lipiec.pdf')
+        self.assertContains(response, 'Lokalizacja: Projekt / Umowy')
+        self.assertContains(response, f'?q=faktura&selected=')
+        self.assertContains(response, f'?folder={child.id}')
+
+        preview_response = self.client.get(reverse('documents'), {'q': 'faktura', 'selected': item.id})
+
+        self.assertContains(preview_response, 'documents-preview-shell')
+        self.assertContains(preview_response, f'href="{reverse("documents")}?q=faktura"')
