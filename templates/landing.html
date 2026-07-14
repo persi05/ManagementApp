@@ -1,0 +1,55 @@
+{% load static %}
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dcode Management</title>
+  <link rel="stylesheet" href="{% static 'features/app.css' %}?v=20260714-landing">
+</head>
+<body class="landing-body">
+  <main class="landing-page">
+    <nav class="landing-nav" aria-label="Nawigacja">
+      <a class="brand" href="{% url 'landing' %}">
+        <span class="brand-mark">D</span>
+        <span>Dcode Management</span>
+      </a>
+      <div class="landing-nav-actions">
+        {% if user.is_authenticated %}
+          <a class="ghost-btn" href="{% url 'dashboard' %}">Przejdź do panelu</a>
+        {% else %}
+          <a class="ghost-btn" href="{% url 'accounts:login' %}">Logowanie</a>
+          <a class="primary-btn" href="{% url 'accounts:register' %}">Rejestracja</a>
+        {% endif %}
+      </div>
+    </nav>
+
+    <section class="landing-hero">
+      <div class="landing-copy">
+        <p class="eyebrow">Panel dla projektów, zadań i dokumentów</p>
+        <h1>Dcode Management</h1>
+        <p>
+          Jedno miejsce do obsługi klientów, projektów, zadań, czasu pracy,
+          dokumentów i raportów.
+        </p>
+        <div class="landing-actions">
+          {% if user.is_authenticated %}
+            <a class="primary-btn" href="{% url 'dashboard' %}">Otwórz panel</a>
+            <a class="ghost-btn" href="{% url 'documents' %}">Dokumenty</a>
+          {% else %}
+            <a class="primary-btn" href="{% url 'accounts:login' %}">Zaloguj się</a>
+            <a class="ghost-btn" href="{% url 'accounts:register' %}">Utwórz konto</a>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="landing-panel" aria-label="Skróty systemu">
+        <div><span>01</span><strong>Projekty</strong><small>Statusy, klienci i stawki</small></div>
+        <div><span>02</span><strong>Zadania</strong><small>Tablice, etykiety i terminy</small></div>
+        <div><span>03</span><strong>Dokumenty</strong><small>Pliki, foldery i dostęp</small></div>
+        <div><span>04</span><strong>Raporty</strong><small>Czas pracy i rozliczenia</small></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -20,6 +20,10 @@ def format_timer_seconds(seconds):
     return f'{seconds // 3600:02}:{(seconds % 3600) // 60:02}:{seconds % 60:02}'
 
 
+def landing(request):
+    return render(request, 'landing.html')
+
+
 @login_required
 def dashboard(request):
     ensure_profile(request.user)
