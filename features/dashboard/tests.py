@@ -590,7 +590,22 @@ class CalendarTests(TestCase):
         response = self.client.get(reverse('calendar'), {'month': day.strftime('%Y-%m')})
 
         self.assertContains(response, '8,00h')
+        self.assertNotContains(response, 'przepracowane')
         self.assertContains(response, 'Deadline task')
+
+    def test_calendar_week_view_shows_single_week_navigation(self):
+        user = User.objects.create_user(username='employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('calendar'), {'view': 'week', 'week': '2026-07-14'})
+
+        self.assertContains(response, 'Widok tygodniowy')
+        self.assertContains(response, '2026-07-13 - 2026-07-19')
+        self.assertContains(response, '?view=week&amp;week=2026-07-06')
+        self.assertContains(response, '?view=week&amp;week=2026-07-20')
+        self.assertContains(response, 'week-board')
 
     def test_employee_can_request_leave(self):
         user = User.objects.create_user(username='employee', password='pass')
@@ -624,7 +639,7 @@ class CalendarTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(LeaveRequest.objects.filter(user=user).exists())
-        self.assertContains(response, 'Nie mozna brac wolnego w przeszlosci.')
+        self.assertContains(response, 'Nie można brać wolnego w przeszłości.')
 
     def test_calendar_shows_leave_days_summary_without_weekends(self):
         user = User.objects.create_user(username='employee', password='pass')
@@ -698,6 +713,30 @@ class CalendarTests(TestCase):
 
         self.assertContains(response, 'Jan Nowak')
         self.assertContains(response, '6,00h')
+
+    def test_management_calendar_hides_rejected_leave_from_month_board(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee = User.objects.create_user(username='employee', first_name='Jan', last_name='Nowak', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        LeaveRequest.objects.create(
+            user=employee,
+            start_date=date(2026, 7, 20),
+            end_date=date(2026, 7, 20),
+            status=LeaveRequest.Status.REJECTED,
+            reviewed_by=manager,
+            reviewed_at=timezone.now(),
+            reason='Nie pasuje',
+        )
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('calendar'), {'month': '2026-07'})
+
+        self.assertContains(response, 'Odrzucony')
+        self.assertContains(response, 'Nie pasuje')
+        self.assertNotContains(response, 'note-leave rejected')
 
     def test_client_calendar_does_not_show_leave_request_form(self):
         client = User.objects.create_user(username='client', password='pass')
@@ -1988,7 +2027,7 @@ class KanbanRenderingTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Zakres raportu managementu')
-        self.assertContains(response, 'Godziny laczne')
+        self.assertContains(response, 'Godziny łączne')
         self.assertContains(response, '5,00h')
         self.assertContains(response, 'Godziny klienta')
         self.assertContains(response, '2,00h')

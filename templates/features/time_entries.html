@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Mój czas pracy - Dcode Management{% endblock %}
 {% block heading %}Mój czas pracy{% endblock %}
-{% block eyebrow %}Realny czas pracy do rozliczen{% endblock %}
+{% block eyebrow %}Realny czas pracy do rozliczeń{% endblock %}
 {% block content %}
 <div class="tabs">
   <a class="active" href="{% url 'time_entries' %}">Mój czas pracy</a>
@@ -12,7 +12,7 @@
     <div class="panel-head">
       <div>
         <h2>Historia</h2>
-        <p>Ten czas sluzy do rozliczania pracownika i nie jest czasem raportowanym klientowi przy zadaniach.</p>
+        <p>Ten czas służy do rozliczania pracownika i nie jest czasem raportowanym klientowi przy zadaniach.</p>
       </div>
       <p class="panel-summary"><strong>Suma godzin:</strong> {{ total_hours|floatformat:2 }}h</p>
     </div>
@@ -23,7 +23,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Data</th><th>Od</th><th>Do</th><th>Godziny</th><th>Projekt</th><th>Zrodlo</th><th></th></tr>
+          <tr><th>Data</th><th>Od</th><th>Do</th><th>Godziny</th><th>Projekt</th><th>Źródło</th><th></th></tr>
         </thead>
         <tbody>
           {% for entry in entries %}
@@ -37,7 +37,7 @@
               <td>{% if entry.can_edit %}<a class="ghost-btn small-btn" href="{% url 'edit_time_entry' entry.id %}">Edytuj</a>{% endif %}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="7">Brak wpisow.</td></tr>
+            <tr><td colspan="7">Brak wpisów.</td></tr>
           {% endfor %}
         </tbody>
       </table>

@@ -1,20 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Kalendarz - Dcode Management{% endblock %}
 {% block heading %}Kalendarz{% endblock %}
-{% block eyebrow %}Plan miesiaca{% endblock %}
+{% block eyebrow %}Plan miesiąca{% endblock %}
 {% block top_actions %}
   <div class="calendar-nav">
-    <a class="ghost-btn" href="?month={{ previous_month }}">Poprzedni</a>
-    <a class="ghost-btn" href="?month={{ next_month }}">Nastepny</a>
+    <a class="ghost-btn" href="{{ previous_period_url }}">Poprzedni</a>
+    <a class="ghost-btn" href="{{ next_period_url }}">Następny</a>
   </div>
 {% endblock %}
 {% block content %}
 <section class="calendar-page">
   <div class="calendar-hero">
     <div>
-      <span class="calendar-kicker">Widok miesieczny</span>
+      <span class="calendar-kicker">{% if view_mode == 'week' %}Widok tygodniowy{% else %}Widok miesięczny{% endif %}</span>
       <h2>
-        <span class="month-code">{{ month }}</span>
+        <span class="month-code">{% if view_mode == 'week' %}{{ period_label }}{% else %}{{ month }}{% endif %}</span>
         <span class="month-name">{{ month_name }}</span>
         {% if not is_client_view and not is_management_view %}
           <span class="month-leave-summary">Wolne: {{ leave_summary.month_days }} dni roboczych</span>
@@ -22,36 +22,48 @@
       </h2>
       <p>
         {% if is_client_view %}
-          Deadline'y zadan w Twoich projektach.
+          Deadline'y zadań w Twoich projektach.
         {% elif is_management_view %}
-          Obecnosc zespolu, wnioski o wolne i deadline'y zadan.
+          Obecność zespołu, wnioski o wolne i deadline'y zadań.
         {% else %}
-          Twoje godziny pracy, deadline'y zadan i wnioski o wolne.
+          Twoje godziny pracy, deadline'y zadań i wnioski o wolne.
         {% endif %}
       </p>
     </div>
     <form class="calendar-month-form">
+      <input type="hidden" name="view" value="month">
       <input type="month" name="month" value="{{ month }}">
-      <button class="primary-btn">Pokaz</button>
+      <button class="primary-btn">Pokaż</button>
     </form>
+  </div>
+
+  <div class="calendar-view-switch">
+    <a class="ghost-btn small-btn {% if view_mode == 'month' %}active{% endif %}" href="{{ month_view_url }}">Miesiąc</a>
+    <a class="ghost-btn small-btn {% if view_mode == 'week' %}active{% endif %}" href="{{ week_view_url }}">Tydzień</a>
   </div>
 
   {% if can_request_leave %}
     <div class="calendar-help">
-      <strong>Chcesz zlozyc wniosek o wolne?</strong>
-      Kliknij dzien, zeby zobaczyc szczegoly i od razu wziac wolne, albo przeciagaj po kalendarzu, zeby zaznaczyc zakres.
+      <strong>Chcesz złożyć wniosek o wolne?</strong>
+      Kliknij dzień, żeby zobaczyć szczegóły i od razu wziąć wolne, albo przeciągaj po kalendarzu, żeby zaznaczyć zakres.
     </div>
   {% endif %}
 
   <div class="calendar-legend">
-    <span><i class="legend-dot work"></i> Czas pracy</span>
+    {% if not is_client_view %}<span><i class="legend-dot work"></i> Czas pracy</span>{% endif %}
     <span><i class="legend-dot task"></i> Deadline</span>
-    <span><i class="legend-dot leave"></i> Wolne</span>
+    {% if not is_client_view %}<span><i class="legend-dot leave"></i> Wolne</span>{% endif %}
     <span><i class="legend-dot today"></i> Dzisiaj</span>
     {% if can_request_leave %}<span><i class="legend-dot selected"></i> Wybrane dni</span>{% endif %}
   </div>
 
-  <section class="month-board" aria-label="Kalendarz miesieczny" data-calendar-today="{{ today|date:'Y-m-d' }}">
+  <div class="calendar-board-nav">
+    <a class="ghost-btn small-btn" href="{{ previous_period_url }}" aria-label="Poprzedni okres">←</a>
+    <span>{{ period_label }}</span>
+    <a class="ghost-btn small-btn" href="{{ next_period_url }}" aria-label="Następny okres">→</a>
+  </div>
+
+  <section class="month-board {% if view_mode == 'week' %}week-board{% endif %}" aria-label="Kalendarz miesięczny" data-calendar-today="{{ today|date:'Y-m-d' }}">
     {% for weekday in weekdays %}
       <div class="month-weekday">{{ weekday }}</div>
     {% endfor %}
@@ -73,43 +85,37 @@
           </header>
 
           <div class="day-notes">
-            {% if is_management_view and day.people %}
-              {% for row in day.people|slice:":3" %}
-                <span class="note-card note-work">
-                  <b>{{ row.hours|floatformat:2 }}h</b>
-                  {{ row.user.get_full_name|default:row.user.username }}
-                </span>
-              {% endfor %}
-              {% if day.people|length > 3 %}
-                <span class="note-more">+{{ day.people|length|add:"-3" }} osob</span>
-              {% endif %}
-            {% elif day.hours %}
-              <span class="note-card note-work">
-                <b>{{ day.hours|floatformat:2 }}h</b>
-                przepracowane
-              </span>
-            {% endif %}
-
-            {% if day.tasks %}
-              {% for task in day.tasks|slice:":3" %}
-                <a class="note-card note-task" href="{% url 'kanban_project' task.project_id %}">
-                  <b>{{ task.project.name }}</b>
-                  {{ task.title }}
+            {% for note in day.preview_notes %}
+              {% if note.type == 'task' %}
+                <a class="note-card note-task" href="{{ note.url }}">
+                  <b>{{ note.title }}</b>
+                  {{ note.body }}
                 </a>
-              {% endfor %}
-              {% if day.tasks|length > 3 %}
-                <span class="note-more">+{{ day.tasks|length|add:"-3" }} zadan</span>
-              {% endif %}
-            {% endif %}
-
-            {% if day.leaves %}
-              {% for leave in day.leaves|slice:":2" %}
-                <span class="note-card note-leave {{ leave.status }} {% if leave.is_past %}past{% endif %}">
-                  <b>{{ leave.get_status_display }}</b>
-                  {{ leave.user.get_full_name|default:leave.user.username }}
+              {% else %}
+                <span class="note-card note-{{ note.type }} {{ note.status }} {% if note.is_past %}past{% endif %}">
+                  <b>{{ note.title }}</b>
+                  {{ note.body }}
                 </span>
-              {% endfor %}
+              {% endif %}
+            {% endfor %}
+            {% if day.hidden_notes_count %}
+              <span class="note-more">+{{ day.hidden_notes_count }} więcej</span>
             {% endif %}
+          </div>
+          <div class="day-notes day-notes-full" hidden>
+            {% for note in day.notes %}
+              {% if note.type == 'task' %}
+                <a class="note-card note-task" href="{{ note.url }}">
+                  <b>{{ note.title }}</b>
+                  {{ note.body }}
+                </a>
+              {% else %}
+                <span class="note-card note-{{ note.type }} {{ note.status }} {% if note.is_past %}past{% endif %}">
+                  <b>{{ note.title }}</b>
+                  {{ note.body }}
+                </span>
+              {% endif %}
+            {% endfor %}
           </div>
         </article>
       {% endfor %}
@@ -124,12 +130,12 @@
       <input type="hidden" name="form" value="leave_request">
       <div class="panel-head">
         <div>
-          <h2>Zloz wniosek o wolne</h2>
-          <p data-selected-range>Wybierz dni w kalendarzu, zeby uzupelnic zakres.</p>
+          <h2>Złóż wniosek o wolne</h2>
+          <p data-selected-range>Wybierz dni w kalendarzu, żeby uzupełnić zakres.</p>
         </div>
       </div>
       {{ leave_form.as_p }}
-      <button class="primary-btn full">Wyslij wniosek</button>
+      <button class="primary-btn full">Wyślij wniosek</button>
     </form>
   {% endif %}
 
@@ -138,7 +144,7 @@
       <div class="panel-head">
         <div>
           <h2>Zakres wolnego</h2>
-          <p>Ten filtr dotyczy listy wnioskow i podsumowania dni roboczych.</p>
+          <p>Ten filtr dotyczy listy wniosków i podsumowania dni roboczych.</p>
         </div>
         <form class="filter-bar">
           <input type="hidden" name="month" value="{{ month }}">
@@ -167,7 +173,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
                     <button class="ghost-btn small-btn" name="status" value="approved">Akceptuj</button>
-                    <button class="danger-btn small-btn" name="status" value="rejected">Odrzuc</button>
+                    <button class="danger-btn small-btn" name="status" value="rejected">Odrzuć</button>
                   </form>
                 {% elif not can_review_leave and leave.status == 'rejected' and not leave.read_at %}
                   <form method="post" action="{% url 'mark_leave_as_read' leave.id %}" class="inline-form" data-preserve-scroll>
@@ -178,7 +184,7 @@
                 {% endif %}
               </div>
             {% empty %}
-              <p class="empty">Brak wnioskow w tym okresie.</p>
+              <p class="empty">Brak wniosków w tym okresie.</p>
             {% endfor %}
           </div>
         </section>
@@ -186,7 +192,7 @@
         {% if is_management_view %}
         <section>
           <div class="subsection-head">
-            <h3>Wolne pracownikow</h3>
+            <h3>Wolne pracowników</h3>
             <p>Zaakceptowane dni robocze w zakresie.</p>
           </div>
           {% if leave_summary.employees %}

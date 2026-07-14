@@ -104,8 +104,14 @@
           </div>
           {% if not is_client_view %}
             <div>
-              <span>Przypisany</span>
-              <strong>{% if task.assignee %}{% if task.assignee.get_full_name %}{{ task.assignee.get_full_name }}{% else %}{{ task.assignee.username }}{% endif %}{% else %}Nieprzypisane{% endif %}</strong>
+              <span>Przypisani</span>
+              <strong>
+                {% for assignee in task.assignees_list %}
+                  {% if not forloop.first %}, {% endif %}{% if assignee.get_full_name %}{{ assignee.get_full_name }}{% else %}{{ assignee.username }}{% endif %}
+                {% empty %}
+                  Nieprzypisane
+                {% endfor %}
+              </strong>
             </div>
           {% endif %}
           <div>

@@ -94,11 +94,12 @@
   };
 
   const daySummary = (card) => {
-    const notes = card.querySelector('.day-notes')?.cloneNode(true);
+    const notes = (card.querySelector('.day-notes-full') || card.querySelector('.day-notes'))?.cloneNode(true);
+    notes?.removeAttribute('hidden');
     if (!notes || !notes.textContent.trim()) {
       const empty = document.createElement('p');
       empty.className = 'empty';
-      empty.textContent = 'Brak wpisow na ten dzien.';
+      empty.textContent = 'Brak wpisów na ten dzień.';
       return empty;
     }
     return notes;
@@ -116,7 +117,7 @@
     dayModal.className = 'calendar-day-modal';
     dayModal.innerHTML = `
       <div class="calendar-day-modal-backdrop" data-close-day-modal></div>
-      <section class="calendar-day-modal-card" role="dialog" aria-modal="true" aria-label="Szczegoly dnia">
+      <section class="calendar-day-modal-card" role="dialog" aria-modal="true" aria-label="Szczegóły dnia">
         <button class="ghost-btn small-btn calendar-day-modal-close" type="button" data-close-day-modal>Zamknij</button>
         <div class="panel-head">
           <div>
@@ -127,8 +128,8 @@
         <div class="calendar-day-modal-content"></div>
         ${
           isPast || hasApprovedLeave
-            ? `<p class="calendar-day-modal-note">${hasApprovedLeave ? 'Ten dzien ma juz zaakceptowane wolne.' : 'Nie mozna brac wolnego w przeszlosci.'}</p>`
-            : '<button class="primary-btn full" type="button" data-take-day-leave>Wez wolne</button>'
+            ? `<p class="calendar-day-modal-note">${hasApprovedLeave ? 'Ten dzień ma już zaakceptowane wolne.' : 'Nie można brać wolnego w przeszłości.'}</p>`
+            : '<button class="primary-btn full" type="button" data-take-day-leave>Weź wolne</button>'
         }
       </section>
     `;

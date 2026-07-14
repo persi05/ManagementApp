@@ -7,6 +7,7 @@
 .calendar-page {
   display: grid;
   gap: 14px;
+  font-family: "Segoe UI", Inter, Roboto, Arial, sans-serif;
 }
 
 .calendar-hero {
@@ -25,7 +26,7 @@
   display: block;
   color: var(--accent);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 650;
   text-transform: uppercase;
   letter-spacing: .08em;
   margin-bottom: 4px;
@@ -46,7 +47,7 @@
 }
 
 .month-code {
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .month-name {
@@ -55,7 +56,7 @@
   border-radius: 999px;
   padding: 5px 10px;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: .08em;
 }
 
@@ -66,7 +67,7 @@
   border-radius: 999px;
   padding: 5px 10px;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 650;
 }
 
 .calendar-help {
@@ -89,6 +90,30 @@
   flex-wrap: wrap;
 }
 
+.calendar-view-switch,
+.calendar-board-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-view-switch .active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.calendar-board-nav {
+  justify-content: flex-end;
+  margin: -4px 0 2px;
+}
+
+.calendar-board-nav span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .calendar-legend {
   display: flex;
   gap: 8px;
@@ -105,7 +130,7 @@
   align-items: center;
   gap: 7px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .legend-dot {
@@ -116,24 +141,25 @@
 }
 
 .legend-dot.work {
-  background: var(--ok);
+  background: #2f8f5b;
 }
 
 .legend-dot.task {
-  background: var(--accent2);
+  background: #3b82f6;
 }
 
 .legend-dot.leave {
-  background: var(--warn);
+  background: #8b5cf6;
 }
 
 .legend-dot.today {
-  background: #20ff7a;
-  box-shadow: 0 0 0 3px rgba(32, 255, 122, .22);
+  background: #fff;
+  border: 2px solid #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
 }
 
 .legend-dot.selected {
-  background: #111b22;
+  background: #1e40af;
 }
 
 .month-board {
@@ -151,7 +177,7 @@
   background: #f8fafc;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 650;
   letter-spacing: .06em;
   text-transform: uppercase;
   padding: 11px 12px;
@@ -177,8 +203,8 @@
   content: "";
   position: absolute;
   inset: 0;
-  border: 3px solid #20ff7a;
-  box-shadow: inset 0 0 0 1px #ffffff, 0 0 18px rgba(32, 255, 122, .68);
+  border: 3px solid #2563eb;
+  box-shadow: inset 0 0 0 1px #ffffff, 0 0 0 2px rgba(37, 99, 235, .12);
   pointer-events: none;
 }
 
@@ -189,12 +215,12 @@
 }
 
 .day-card.selectable-day:hover {
-  background: #f8fffb;
+  background: #f8fbff;
 }
 
 .day-card.is-selected {
-  background: #effff5;
-  box-shadow: inset 0 0 0 3px #111b22, 0 12px 26px rgba(17, 27, 34, .12);
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 3px #1e40af, 0 12px 26px rgba(30, 64, 175, .12);
 }
 
 .day-card.is-selected::after {
@@ -202,12 +228,12 @@
   position: absolute;
   right: 8px;
   bottom: 8px;
-  background: #111b22;
+  background: #1e40af;
   color: #fff;
   border-radius: 999px;
   padding: 3px 7px;
   font-size: 10px;
-  font-weight: 900;
+  font-weight: 650;
   letter-spacing: .04em;
 }
 
@@ -216,15 +242,15 @@
 }
 
 .day-card.has-tasks {
-  box-shadow: inset 4px 0 0 #9fb8df;
+  background: #f8fbff;
 }
 
 .day-card.has-leave {
-  box-shadow: inset 4px 0 0 #e4ba5e;
+  background: #fbfcff;
 }
 
 .day-card.has-tasks.has-leave {
-  box-shadow: inset 4px 0 0 #9fb8df, inset 8px 0 0 #e4ba5e;
+  background: #f8fbff;
 }
 
 .day-card-header {
@@ -237,6 +263,7 @@
 .day-card-header strong {
   display: block;
   font-size: 18px;
+  font-weight: 600;
   line-height: 1;
 }
 
@@ -246,16 +273,16 @@
   margin-top: 3px;
   font-size: 11px;
   text-transform: uppercase;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .day-total {
-  background: var(--accent);
+  background: #2f8f5b;
   color: #fff;
   border-radius: 999px;
-  padding: 4px 7px;
-  font-size: 11px;
-  font-weight: 900;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 400;
   white-space: nowrap;
 }
 
@@ -265,13 +292,17 @@
   min-height: 0;
 }
 
+.day-notes-full[hidden] {
+  display: none;
+}
+
 .note-card {
   display: block;
   border-radius: 7px;
   padding: 6px 8px;
   font-size: 11px;
   line-height: 1.25;
-  font-weight: 700;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -282,6 +313,7 @@
   text-transform: uppercase;
   letter-spacing: .04em;
   margin-bottom: 2px;
+  font-weight: 600;
 }
 
 .note-work {
@@ -295,19 +327,18 @@
 }
 
 .note-leave {
-  background: #fff3d4;
-  color: #83510c;
+  background: #edf4fb;
+  color: #24577f;
 }
 
 .note-leave.approved {
-  background: #e8f7ee;
-  color: var(--ok);
+  background: #e9f6ef;
+  color: #247046;
 }
 
 .note-leave.past {
-  background: #d4dfd7;
-  color: #4f6458;
-  border: 1px solid #b5c5ba;
+  background: #eef2f0;
+  color: #56645d;
 }
 
 .note-leave.rejected {
@@ -318,7 +349,7 @@
 .note-more {
   color: var(--muted);
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 600;
   padding-left: 2px;
 }
 
@@ -393,7 +424,7 @@
   border-radius: 8px;
   background: #fff6f6;
   color: var(--bad);
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .leave-list {

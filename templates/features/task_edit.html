@@ -22,7 +22,7 @@
     {% if form.priority %}<p>{{ form.priority.label_tag }}{{ form.priority }}{{ form.priority.errors }}</p>{% endif %}
     {% if form.labels %}<div class="task-label-field">{{ form.labels.errors }}{{ form.labels }}</div>{% endif %}
     {% if form.description %}<p>{{ form.description.label_tag }}{{ form.description }}{{ form.description.errors }}</p>{% endif %}
-    {% if form.assignee %}<p>{{ form.assignee.label_tag }}{{ form.assignee }}{{ form.assignee.errors }}</p>{% endif %}
+    {% if form.assignees %}<div class="task-label-field">{{ form.assignees.errors }}{{ form.assignees }}</div>{% endif %}
     {% if form.change_note %}<p>{{ form.change_note.label_tag }}{{ form.change_note }}{{ form.change_note.errors }}</p>{% endif %}
     <button class="primary-btn">Zapisz zmiany</button>
   </form>
