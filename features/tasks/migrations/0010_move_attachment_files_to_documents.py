@@ -65,6 +65,7 @@ def migrate_attachment_files(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    atomic = False
 
     dependencies = [
         ('tasks', '0009_task_attachment_files_documents'),

@@ -95,7 +95,8 @@
             <span>Status</span>
             <strong>{{ task.column.name }}</strong>
           </div>
-          <div class="task-preview-value-only">
+          <div>
+            <span>Data</span>
             <strong>{% if task.due_date %}{{ task.due_date|date:"Y-m-d" }}{% else %}-{% endif %}</strong>
           </div>
           {% if not is_client_view %}

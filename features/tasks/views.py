@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.db.models import Max, Sum
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -9,6 +10,7 @@ from django.views.decorators.http import require_POST
 
 from features.accounts.models import UserProfile, is_management, user_role
 from features.accounts.permissions import optional_pk, worker_required
+from features.documents.forms import validate_document_upload, validate_user_file_limit
 from features.documents.models import DocumentAccess, DocumentItem
 from features.projects.selectors import visible_projects
 from features.tasks.forms import BoardColumnForm, BoardColumnSettingsForm, TaskEditForm, TaskForm, WorklogForm
@@ -297,6 +299,13 @@ def add_task_attachment(request, task_id):
     uploaded = request.FILES.get('file')
     name = (request.POST.get('name') or '').strip()
     if uploaded:
+        try:
+            validate_document_upload(uploaded)
+            validate_user_file_limit(request.user)
+        except ValidationError as error:
+            for message in error.messages:
+                messages.error(request, message)
+            return redirect('kanban_project', project_id=task.project_id)
         document = DocumentItem.objects.create(
             owner=request.user,
             name=name or uploaded.name,
