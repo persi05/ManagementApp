@@ -1837,6 +1837,25 @@ class KanbanRenderingTests(TestCase):
         self.assertIn(attachment.document, DocumentItem.visible_to(employee))
         self.assertNotIn(attachment.document, DocumentItem.visible_to(outsider))
 
+    def test_kanban_preview_rejects_disallowed_attachment_extension(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        column = BoardColumn.objects.create(project=project, name='Start', position=0)
+        task = Task.objects.create(project=project, column=column, title='Task with attachment', assignee=employee)
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('add_task_attachment', args=[task.id]), {
+            'name': 'Setup',
+            'file': SimpleUploadedFile('setup.exe', b'abc', content_type='application/octet-stream'),
+        }, follow=True)
+
+        self.assertContains(response, 'Nie mozna dodac pliku z rozszerzeniem .exe')
+        self.assertFalse(Attachment.objects.filter(task=task).exists())
+        self.assertFalse(DocumentItem.objects.filter(name='Setup', owner=employee).exists())
+
     def test_kanban_preview_can_link_existing_document(self):
         employee = User.objects.create_user(username='employee', password='pass')
         employee.profile.role = UserProfile.Role.EMPLOYEE
