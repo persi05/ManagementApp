@@ -92,6 +92,27 @@ class DocumentTests(TestCase):
         self.assertEqual(download.status_code, 200)
         self.assertEqual(b''.join(download.streaming_content), b'abc')
 
+    def test_uploaded_file_can_be_opened_through_protected_view(self):
+        user = User.objects.create_user(username='owner', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        item = DocumentItem.objects.create(
+            owner=user,
+            name='umowa.pdf',
+            kind=DocumentItem.Kind.FILE,
+            file=SimpleUploadedFile('umowa.pdf', b'%PDF-1.4', content_type='application/pdf'),
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('document_file', args=[item.id]))
+        open_response = self.client.get(reverse('open_document', args=[item.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(b''.join(response.streaming_content), b'%PDF-1.4')
+        self.assertEqual(open_response.status_code, 302)
+        self.assertEqual(open_response['Location'], reverse('document_file', args=[item.id]))
+
     def test_folder_download_is_zip_with_nested_structure(self):
         user = User.objects.create_user(username='owner', password='pass')
         user.profile.role = UserProfile.Role.EMPLOYEE
