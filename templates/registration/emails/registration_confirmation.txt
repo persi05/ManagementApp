@@ -1,0 +1,8 @@
+Cześć {{ user.first_name|default:user.username }},
+
+Twoje konto w Dcode Management zostało utworzone.
+
+Kliknij link, żeby potwierdzić rejestrację i aktywować konto:
+{{ activation_url }}
+
+Jeśli to nie Ty zakładałeś konto, zignoruj tę wiadomość.

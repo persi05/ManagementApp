@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="pl">
+<body>
+  <p>Cześć {{ user.first_name|default:user.username }},</p>
+  <p>Twoje konto w <strong>Dcode Management</strong> zostało utworzone.</p>
+  <p><a href="{{ activation_url }}">Potwierdź rejestrację</a></p>
+  <p>Jeśli to nie Ty zakładałeś konto, zignoruj tę wiadomość.</p>
+</body>
+</html>
