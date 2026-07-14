@@ -222,7 +222,6 @@ class Attachment(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='attachments')
     name = models.CharField(max_length=160)
     url = models.URLField(blank=True)
-    file = models.FileField(upload_to='task_attachments/%Y/%m/', blank=True)
     document = models.ForeignKey('documents.DocumentItem', on_delete=models.SET_NULL, null=True, blank=True, related_name='task_attachments')
 
     def __str__(self):
