@@ -3,7 +3,6 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth.models import AnonymousUser, User
-from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import path, reverse
@@ -99,8 +98,7 @@ class RoutingTests(TestCase):
 
 
 class RegistrationTests(TestCase):
-    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
-    def test_registered_user_gets_client_role(self):
+    def test_registered_user_gets_client_role_and_is_logged_in(self):
         response = self.client.post(reverse('accounts:register'), {
             'username': 'newclient',
             'email': 'client@example.com',
@@ -111,41 +109,16 @@ class RegistrationTests(TestCase):
         })
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('accounts:activation_sent'))
+        self.assertEqual(response.url, reverse('dashboard'))
         user = User.objects.get(username='newclient')
         self.assertEqual(user.profile.role, UserProfile.Role.CLIENT)
-        self.assertFalse(user.is_active)
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].to, ['client@example.com'])
-        self.assertIn('Potwierdź rejestrację', mail.outbox[0].subject)
-        self.assertIn('/accounts/activate/', mail.outbox[0].body)
-
-        activation_path = mail.outbox[0].body.split('/accounts/activate/', 1)[1].split()[0]
-        response = self.client.get(f'/accounts/activate/{activation_path}')
-        user.refresh_from_db()
-
-        self.assertEqual(response.status_code, 302)
         self.assertTrue(user.is_active)
+        self.assertEqual(int(self.client.session['_auth_user_id']), user.id)
 
-    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
-    def test_password_reset_sends_email(self):
-        User.objects.create_user(
-            username='client',
-            email='client@example.com',
-            password='OldPass123!',
-        )
+    def test_password_reset_route_is_removed(self):
+        response = self.client.get('/accounts/password-reset/')
 
-        response = self.client.post(reverse('accounts:password_reset'), {
-            'email': 'client@example.com',
-        })
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, 'done/')
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].to, ['client@example.com'])
-        self.assertIn('Reset hasła', mail.outbox[0].subject)
-        self.assertIn('/accounts/reset/', mail.outbox[0].body)
-
+        self.assertEqual(response.status_code, 404)
 
 class AdminAccessTests(TestCase):
     def test_admin_is_forbidden_for_non_superuser(self):
