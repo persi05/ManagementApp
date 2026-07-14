@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Nieprawidłowy link - Dcode Management{% endblock %}
+{% block heading %}Link jest nieprawidłowy{% endblock %}
+{% block eyebrow %}Potwierdzenie rejestracji{% endblock %}
+{% block content %}
+<section class="auth-panel">
+  <div class="form-card">
+    <p class="empty">Ten link aktywacyjny jest nieprawidłowy albo wygasł.</p>
+    <a class="primary-btn full" href="{% url 'accounts:register' %}">Utwórz konto ponownie</a>
+  </div>
+</section>
+{% endblock %}

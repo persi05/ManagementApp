@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth.models import AnonymousUser, User
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import path, reverse
@@ -79,6 +80,7 @@ class RoutingTests(TestCase):
 
 
 class RegistrationTests(TestCase):
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
     def test_registered_user_gets_client_role(self):
         response = self.client.post(reverse('accounts:register'), {
             'username': 'newclient',
@@ -90,8 +92,40 @@ class RegistrationTests(TestCase):
         })
 
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('accounts:activation_sent'))
         user = User.objects.get(username='newclient')
         self.assertEqual(user.profile.role, UserProfile.Role.CLIENT)
+        self.assertFalse(user.is_active)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['client@example.com'])
+        self.assertIn('Potwierdź rejestrację', mail.outbox[0].subject)
+        self.assertIn('/accounts/activate/', mail.outbox[0].body)
+
+        activation_path = mail.outbox[0].body.split('/accounts/activate/', 1)[1].split()[0]
+        response = self.client.get(f'/accounts/activate/{activation_path}')
+        user.refresh_from_db()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(user.is_active)
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_password_reset_sends_email(self):
+        User.objects.create_user(
+            username='client',
+            email='client@example.com',
+            password='OldPass123!',
+        )
+
+        response = self.client.post(reverse('accounts:password_reset'), {
+            'email': 'client@example.com',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, 'done/')
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['client@example.com'])
+        self.assertIn('Reset hasła', mail.outbox[0].subject)
+        self.assertIn('/accounts/reset/', mail.outbox[0].body)
 
 
 class AdminAccessTests(TestCase):

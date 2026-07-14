@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Potwierdź konto - Dcode Management{% endblock %}
+{% block heading %}Sprawdź e-mail{% endblock %}
+{% block eyebrow %}Potwierdzenie rejestracji{% endblock %}
+{% block content %}
+<section class="auth-panel">
+  <div class="form-card">
+    <p class="empty">Wysłaliśmy link aktywacyjny. Kliknij go, żeby potwierdzić konto i wejść do systemu.</p>
+    <a class="primary-btn full" href="{% url 'accounts:login' %}">Wróć do logowania</a>
+  </div>
+</section>
+{% endblock %}
