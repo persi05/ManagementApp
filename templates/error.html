@@ -1,0 +1,27 @@
+{% load static %}
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ status_code }} - {{ error_title }} - Dcode Management</title>
+  <link rel="stylesheet" href="{% static 'features/app.css' %}?v=20260714-error-pages">
+</head>
+<body class="error-body">
+  <main class="error-page">
+    <section class="error-card">
+      <span class="error-code">{{ status_code }}</span>
+      <h1>{{ error_title }}</h1>
+      <p>{{ error_message }}</p>
+      <div class="error-actions">
+        {% if user.is_authenticated %}
+          <a class="primary-btn" href="/">Wróć do pulpitu</a>
+        {% else %}
+          <a class="primary-btn" href="/accounts/login/">Przejdź do logowania</a>
+        {% endif %}
+        <button class="ghost-btn" type="button" onclick="history.back()">Wróć</button>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

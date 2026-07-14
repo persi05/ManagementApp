@@ -2,10 +2,10 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
-from django.urls import reverse
+from django.test import Client, RequestFactory, TestCase, override_settings
+from django.urls import path, reverse
 from django.utils import timezone
 
 from features.accounts.models import UserProfile
@@ -22,6 +22,17 @@ from features.tasks.models import Attachment, BoardColumn, Notification, Task, T
 from features.time_tracking.models import TimeEntry, WorkSession
 
 
+def raise_error(request):
+    raise RuntimeError('test error')
+
+
+urlpatterns = [
+    path('raise-error/', raise_error),
+]
+
+handler500 = 'config.error_views.server_error'
+
+
 class RoutingTests(TestCase):
     def test_account_routes_are_namespaced(self):
         self.assertEqual(reverse('accounts:login'), '/accounts/login/')
@@ -34,6 +45,37 @@ class RoutingTests(TestCase):
         self.assertEqual(reverse('documents'), '/app/documents/')
         self.assertEqual(reverse('time_entries'), '/app/time-entries/')
         self.assertEqual(reverse('calendar'), '/app/calendar/')
+
+    @override_settings(DEBUG=False)
+    def test_not_found_uses_shared_error_page(self):
+        response = self.client.get('/missing-page/')
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTemplateUsed(response, 'error.html')
+        self.assertContains(response, '404', status_code=404)
+        self.assertContains(response, 'Nie znaleziono strony', status_code=404)
+
+    def test_permission_denied_uses_shared_error_page(self):
+        from config.error_views import permission_denied
+
+        request = RequestFactory().get('/forbidden/')
+        request.user = AnonymousUser()
+        response = permission_denied(request, PermissionError('nope'))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, '403', status_code=403)
+        self.assertContains(response, 'Brak dostępu', status_code=403)
+
+    @override_settings(DEBUG=False, ROOT_URLCONF='features.dashboard.tests')
+    def test_server_error_uses_shared_error_page(self):
+        client = Client()
+        client.raise_request_exception = False
+        response = client.get('/raise-error/')
+
+        self.assertEqual(response.status_code, 500)
+        self.assertTemplateUsed(response, 'error.html')
+        self.assertContains(response, '500', status_code=500)
+        self.assertContains(response, 'Błąd aplikacji', status_code=500)
 
 
 class RegistrationTests(TestCase):
