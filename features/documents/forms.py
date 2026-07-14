@@ -1,9 +1,18 @@
 from django import forms
+from django.conf import settings
 from django.contrib.auth.models import User
 
 from features.accounts.models import UserProfile
 
 from .models import DocumentAccess, DocumentItem
+
+
+def format_file_size(size):
+    if size >= 1024 * 1024:
+        return f'{size / (1024 * 1024):.0f} MB'
+    if size >= 1024:
+        return f'{size / 1024:.0f} KB'
+    return f'{size} B'
 
 
 class FolderForm(forms.ModelForm):
@@ -27,9 +36,38 @@ class UploadDocumentForm(forms.ModelForm):
         fields = ('name', 'file')
         labels = {'name': 'Nazwa', 'file': 'Plik lub zdjęcie'}
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.user = user
         self.fields['name'].required = False
+
+    def clean_file(self):
+        uploaded_file = self.cleaned_data.get('file')
+        if not uploaded_file:
+            return uploaded_file
+
+        max_size = settings.DOCUMENTS_MAX_UPLOAD_SIZE_BYTES
+        if uploaded_file.size > max_size:
+            raise forms.ValidationError(f'Plik jest za duzy. Maksymalny rozmiar pliku to {format_file_size(max_size)}.')
+
+        extension = uploaded_file.name.rsplit('.', 1)[-1].lower() if '.' in uploaded_file.name else ''
+        allowed_extensions = settings.DOCUMENTS_ALLOWED_UPLOAD_EXTENSIONS
+        if extension not in allowed_extensions:
+            allowed_label = ', '.join(sorted(allowed_extensions))
+            extension_label = f'.{extension}' if extension else 'bez rozszerzenia'
+            raise forms.ValidationError(f'Nie mozna dodac pliku z rozszerzeniem {extension_label}. Dozwolone rozszerzenia: {allowed_label}.')
+
+        return uploaded_file
+
+    def clean(self):
+        cleaned = super().clean()
+        if not self.user or not cleaned.get('file'):
+            return cleaned
+
+        current_files_count = DocumentItem.objects.filter(owner=self.user).exclude(file='').count()
+        if current_files_count >= settings.DOCUMENTS_MAX_FILES_PER_USER:
+            raise forms.ValidationError(f'Osiagnieto limit {settings.DOCUMENTS_MAX_FILES_PER_USER} plikow dla tego uzytkownika.')
+        return cleaned
 
 
 class RenameDocumentForm(forms.ModelForm):

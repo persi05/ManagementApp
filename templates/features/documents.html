@@ -255,12 +255,35 @@
       link.closest('details')?.removeAttribute('open');
     });
   });
+  const maxUploadSize = Number('{{ max_upload_size_bytes|default:0 }}');
+  const allowedUploadExtensions = '{{ allowed_upload_extensions|join:"," }}'.split(',').filter(Boolean);
+  const formatUploadSize = (size) => {
+    if (size >= 1024 * 1024) return `${Math.round(size / (1024 * 1024))} MB`;
+    if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+    return `${size} B`;
+  };
   document.querySelectorAll('.documents-upload-form input[type="file"]').forEach((input) => {
     input.addEventListener('change', () => {
       const form = input.closest('form');
       const nameInput = form?.querySelector('input[name="name"]');
-      if (nameInput && input.files?.[0] && !nameInput.value.trim()) {
-        nameInput.value = input.files[0].name;
+      const file = input.files?.[0];
+      if (!file) return;
+      if (maxUploadSize && file.size > maxUploadSize) {
+        alert(`Plik jest za duzy. Maksymalny rozmiar pliku to ${formatUploadSize(maxUploadSize)}.`);
+        input.value = '';
+        if (nameInput) nameInput.value = '';
+        return;
+      }
+      const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+      if (!allowedUploadExtensions.includes(extension)) {
+        const extensionLabel = extension ? `.${extension}` : 'bez rozszerzenia';
+        alert(`Nie mozna dodac pliku z rozszerzeniem ${extensionLabel}.`);
+        input.value = '';
+        if (nameInput) nameInput.value = '';
+        return;
+      }
+      if (nameInput && !nameInput.value.trim()) {
+        nameInput.value = file.name;
       }
     });
   });

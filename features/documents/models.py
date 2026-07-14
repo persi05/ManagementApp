@@ -97,6 +97,12 @@ class DocumentItem(models.Model):
             return True
         return self.accesses.filter(Q(user=user) | Q(role=user_role(user)), can_edit=True).exists()
 
+    def delete(self, *args, **kwargs):
+        file_name = self.file.name if self.file else ''
+        super().delete(*args, **kwargs)
+        if file_name and not type(self).objects.filter(file=file_name).exists():
+            self.file.storage.delete(file_name)
+
 
 class DocumentAccess(models.Model):
     item = models.ForeignKey(DocumentItem, on_delete=models.CASCADE, related_name='accesses')

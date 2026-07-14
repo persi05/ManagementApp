@@ -1,9 +1,12 @@
 from io import BytesIO
+import shutil
+import tempfile
 import zipfile
 
 from django.contrib.auth.models import User
+from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from features.accounts.models import UserProfile
@@ -12,6 +15,19 @@ from .models import DocumentAccess, DocumentItem
 
 
 class DocumentTests(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._media_root = tempfile.mkdtemp()
+        cls._override_media_root = override_settings(MEDIA_ROOT=cls._media_root)
+        cls._override_media_root.enable()
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        cls._override_media_root.disable()
+        shutil.rmtree(cls._media_root, ignore_errors=True)
+
     def test_user_can_create_folder_and_document(self):
         user = User.objects.create_user(username='owner', password='pass')
         user.profile.role = UserProfile.Role.EMPLOYEE
@@ -127,6 +143,62 @@ class DocumentTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(DocumentItem.objects.filter(name='oryginal.pdf').exists())
 
+    def test_upload_rejects_disallowed_extension(self):
+        user = User.objects.create_user(username='owner', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+
+        self.client.force_login(user)
+        response = self.client.post(reverse('documents'), {
+            'form': 'upload',
+            'name': 'setup.exe',
+            'file': SimpleUploadedFile('setup.exe', b'abc', content_type='application/octet-stream'),
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Nie mozna dodac pliku z rozszerzeniem .exe')
+        self.assertFalse(DocumentItem.objects.filter(name='setup.exe').exists())
+
+    @override_settings(DOCUMENTS_MAX_UPLOAD_SIZE_BYTES=2)
+    def test_upload_rejects_file_over_size_limit(self):
+        user = User.objects.create_user(username='owner', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+
+        self.client.force_login(user)
+        response = self.client.post(reverse('documents'), {
+            'form': 'upload',
+            'name': 'duzy.pdf',
+            'file': SimpleUploadedFile('duzy.pdf', b'abc', content_type='application/pdf'),
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Plik jest za duzy')
+        self.assertFalse(DocumentItem.objects.filter(name='duzy.pdf').exists())
+
+    @override_settings(DOCUMENTS_MAX_FILES_PER_USER=1)
+    def test_upload_rejects_when_user_file_limit_is_reached(self):
+        user = User.objects.create_user(username='owner', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        DocumentItem.objects.create(
+            owner=user,
+            name='istniejacy.pdf',
+            kind=DocumentItem.Kind.FILE,
+            file=SimpleUploadedFile('istniejacy.pdf', b'abc', content_type='application/pdf'),
+        )
+
+        self.client.force_login(user)
+        response = self.client.post(reverse('documents'), {
+            'form': 'upload',
+            'name': 'kolejny.pdf',
+            'file': SimpleUploadedFile('kolejny.pdf', b'abc', content_type='application/pdf'),
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Osiagnieto limit 1 plikow')
+        self.assertFalse(DocumentItem.objects.filter(name='kolejny.pdf').exists())
+
     def test_client_cannot_manage_access_even_for_owned_document(self):
         client = User.objects.create_user(username='client', password='pass')
         employee = User.objects.create_user(username='employee', password='pass')
@@ -236,6 +308,52 @@ class DocumentTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], f'{reverse("documents")}?folder={folder.id}')
+
+    def test_delete_uploaded_document_removes_file_from_storage(self):
+        user = User.objects.create_user(username='owner', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        item = DocumentItem.objects.create(
+            owner=user,
+            name='do_usuniecia.pdf',
+            kind=DocumentItem.Kind.FILE,
+            file=SimpleUploadedFile('do_usuniecia.pdf', b'abc', content_type='application/pdf'),
+        )
+        file_name = item.file.name
+
+        self.client.force_login(user)
+        response = self.client.post(reverse('documents'), {
+            'form': 'action',
+            'item': item.id,
+            'action': 'delete',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(default_storage.exists(file_name))
+
+    def test_delete_uploaded_document_keeps_file_when_copy_still_uses_it(self):
+        user = User.objects.create_user(username='owner', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        item = DocumentItem.objects.create(
+            owner=user,
+            name='wspoldzielony.pdf',
+            kind=DocumentItem.Kind.FILE,
+            file=SimpleUploadedFile('wspoldzielony.pdf', b'abc', content_type='application/pdf'),
+        )
+        copy = DocumentItem.objects.create(
+            owner=user,
+            name='kopia.pdf',
+            kind=DocumentItem.Kind.FILE,
+            file=item.file,
+        )
+        file_name = item.file.name
+
+        item.delete()
+
+        self.assertTrue(default_storage.exists(file_name))
+        copy.delete()
+        self.assertFalse(default_storage.exists(file_name))
 
     def test_rename_inside_folder_returns_to_same_folder(self):
         user = User.objects.create_user(username='owner', password='pass')

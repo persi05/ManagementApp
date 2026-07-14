@@ -2,6 +2,7 @@ from io import BytesIO
 import posixpath
 import zipfile
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Case, Count, IntegerField, Q, Value, When
@@ -179,6 +180,17 @@ def documents_redirect(parent=None, selected=None, manage=None, archived=False):
     return redirect(f'{reverse("documents")}{suffix}')
 
 
+def add_form_errors_to_messages(request, form, fallback):
+    errors = []
+    for field_errors in form.errors.values():
+        errors.extend(field_errors)
+    errors.extend(form.non_field_errors())
+    if not errors:
+        errors = [fallback]
+    for error in errors:
+        messages.error(request, error)
+
+
 @login_required
 def documents(request):
     parent = parent_from_request(request)
@@ -186,6 +198,7 @@ def documents(request):
     selected_id = request.GET.get('selected')
     manage_id = request.GET.get('manage')
     show_archived = request.GET.get('archived') == '1'
+    upload_form = UploadDocumentForm(user=request.user)
     if show_archived:
         parent = None
 
@@ -214,9 +227,9 @@ def documents(request):
                 messages.success(request, 'Dokument został utworzony.')
                 return documents_redirect(parent=parent, selected=item)
         elif form_name == 'upload':
-            form = UploadDocumentForm(request.POST, request.FILES)
-            if form.is_valid():
-                item = form.save(commit=False)
+            upload_form = UploadDocumentForm(request.POST, request.FILES, user=request.user)
+            if upload_form.is_valid():
+                item = upload_form.save(commit=False)
                 item.kind = classify_upload(item.file)
                 item.parent = parent
                 item.owner = request.user
@@ -225,6 +238,8 @@ def documents(request):
                 item.save()
                 messages.success(request, 'Plik został przesłany.')
                 return documents_redirect(parent=parent, selected=item)
+            add_form_errors_to_messages(request, upload_form, 'Nie dodano pliku.')
+            upload_form = UploadDocumentForm(user=request.user)
         elif form_name == 'rename':
             item = visible_document(request.user, request.POST.get('item'))
             if not item.can_edit(request.user):
@@ -374,7 +389,9 @@ def documents(request):
         'selected_preview_text': file_preview_text(selected),
         'folder_form': FolderForm(),
         'document_form': TextDocumentForm(),
-        'upload_form': UploadDocumentForm(),
+        'upload_form': upload_form,
+        'max_upload_size_bytes': settings.DOCUMENTS_MAX_UPLOAD_SIZE_BYTES,
+        'allowed_upload_extensions': sorted(settings.DOCUMENTS_ALLOWED_UPLOAD_EXTENSIONS),
         'rename_form': RenameDocumentForm(instance=panel_item) if panel_item else RenameDocumentForm(),
         'access_form': DocumentAccessForm(),
         'accesses': panel_item.accesses.select_related('user') if panel_item else [],
