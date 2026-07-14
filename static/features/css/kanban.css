@@ -344,6 +344,14 @@
   background: #f0ebff;
 }
 
+.tag-row span.label-more-chip {
+  flex: 0 0 auto;
+  background: var(--accentSoft);
+  border-color: #b9ded6;
+  color: var(--accent);
+  font-weight: 850;
+}
+
 .tag-row em {
   display: inline-block;
   margin-left: 4px;

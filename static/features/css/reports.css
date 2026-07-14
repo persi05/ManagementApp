@@ -1,9 +1,22 @@
 .filter-bar {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.filter-row {
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-bottom: 14px;
   flex-wrap: wrap;
+}
+
+.filter-date-row {
+  align-items: stretch;
+}
+
+.filter-select-row select {
+  min-width: 190px;
 }
 
 .report-filter-panel {
@@ -220,12 +233,16 @@
 }
 
 @media (max-width: 620px) {
+  .filter-row,
   .client-report-summary,
   .client-report-card {
     flex-direction: column;
     align-items: flex-start;
   }
 
+  .filter-row input,
+  .filter-row select,
+  .filter-row button,
   .client-report-summary div,
   .client-report-card strong {
     width: 100%;

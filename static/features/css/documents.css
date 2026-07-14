@@ -266,29 +266,65 @@
 
 .document-card-body {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 11px;
-  padding: 12px 34px 12px 12px;
+  justify-items: center;
+  padding: 14px 34px 14px 12px;
   min-width: 0;
 }
 
-.document-card-body strong,
-.document-card-body small {
+.document-card-main {
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  gap: 8px;
+  min-width: 0;
+  text-align: center;
+}
+
+.document-card-main > div {
+  width: 100%;
+  min-width: 0;
+}
+
+.document-card-main strong,
+.document-card-main small {
   display: block;
 }
 
-.document-card-body strong {
+.document-card-main strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.document-card-body small {
+.document-card-main small {
   color: var(--muted);
   margin-top: 3px;
 }
 
-.document-card-body em {
+.document-card-body .document-search-path {
+  display: inline-flex;
+  justify-content: center;
+  max-width: min(100%, 260px);
+  margin: 8px auto 0;
+  border-radius: 999px;
+  background: #eef5ff;
+  color: #1d5fd1;
+  font-size: 11px;
+  font-weight: 820;
+  padding: 4px 8px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-card-body .document-search-path:hover {
+  background: #dfeeff;
+  color: #174aa4;
+  text-decoration: underline;
+}
+
+.document-card-main em {
   grid-column: 1 / -1;
   color: var(--warn);
   font-style: normal;

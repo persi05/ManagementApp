@@ -13,16 +13,17 @@
       <p>Dostępne pola zależą od uprawnień. Notatka zmiany zapisze się w historii zadania.</p>
     </div>
   </div>
-  {% if project_label_rates %}
-    <datalist id="project-label-suggestions">
-      {% for rate in project_label_rates %}
-        <option value="{{ rate.label }}">{% if can_view_rates %}{{ rate.label }} - {{ rate.hourly_rate|floatformat:2 }} {{ rate.currency }}/h{% else %}{{ rate.label }}{% endif %}</option>
-      {% endfor %}
-    </datalist>
-  {% endif %}
-  <form method="post" class="grid-form">
+  <form method="post" class="grid-form task-edit-form">
     {% csrf_token %}
-    {{ form.as_p }}
+    {{ form.non_field_errors }}
+    {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+    {% if form.title %}<p>{{ form.title.label_tag }}{{ form.title }}{{ form.title.errors }}</p>{% endif %}
+    {% if form.due_date %}<p>{{ form.due_date.label_tag }}{{ form.due_date }}{{ form.due_date.errors }}</p>{% endif %}
+    {% if form.priority %}<p>{{ form.priority.label_tag }}{{ form.priority }}{{ form.priority.errors }}</p>{% endif %}
+    {% if form.labels %}<div class="task-label-field">{{ form.labels.errors }}{{ form.labels }}</div>{% endif %}
+    {% if form.description %}<p>{{ form.description.label_tag }}{{ form.description }}{{ form.description.errors }}</p>{% endif %}
+    {% if form.assignee %}<p>{{ form.assignee.label_tag }}{{ form.assignee }}{{ form.assignee.errors }}</p>{% endif %}
+    {% if form.change_note %}<p>{{ form.change_note.label_tag }}{{ form.change_note }}{{ form.change_note.errors }}</p>{% endif %}
     <button class="primary-btn">Zapisz zmiany</button>
   </form>
 </section>

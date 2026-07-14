@@ -1004,6 +1004,7 @@ class KanbanRenderingTests(TestCase):
         })
 
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], reverse('edit_task', args=[task.id]))
         task.refresh_from_db()
         self.assertEqual(task.title, 'Updated title')
         self.assertTrue(TaskEditNote.objects.filter(task=task, user=client, content='Korekta opisu').exists())
@@ -1721,6 +1722,26 @@ class KanbanRenderingTests(TestCase):
         self.assertContains(response, '150,00 PLN/h')
         self.assertContains(response, '450,00 PLN')
 
+    def test_client_projects_show_project_and_label_rates(self):
+        client = User.objects.create_user(username='client', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Client project', client=client, client_hourly_rate=Decimal('150.00'), client_rate_currency='PLN')
+        ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
+        ProjectLabelRate.objects.create(project=project, label='backend', hourly_rate=Decimal('220.00'), currency='PLN')
+
+        self.client.force_login(client)
+        list_response = self.client.get(reverse('projects'))
+        detail_response = self.client.get(reverse('project_detail', args=[project.id]))
+
+        self.assertContains(list_response, 'Stawka podstawowa')
+        self.assertContains(list_response, '150,00 PLN/h')
+        self.assertContains(detail_response, 'Stawki projektu')
+        self.assertContains(detail_response, 'Stawka podstawowa')
+        self.assertContains(detail_response, 'backend')
+        self.assertContains(detail_response, '220,00 PLN/h')
+        self.assertNotContains(detail_response, 'frontend')
+
     def test_management_can_add_and_update_project_label_rate(self):
         manager = User.objects.create_user(username='manager', password='pass')
         manager.profile.role = UserProfile.Role.MANAGEMENT
@@ -1770,11 +1791,51 @@ class KanbanRenderingTests(TestCase):
         response = self.client.get(reverse('kanban_project', args=[project.id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'project-label-suggestions')
-        self.assertContains(response, 'backend - 220,00 PLN/h')
+        self.assertContains(response, 'data-label-transfer')
+        self.assertContains(response, 'data-label-value="backend"')
         self.assertContains(response, 'backend')
         self.assertContains(response, '220,00 PLN/h')
         self.assertNotContains(response, 'Stawka: 220,00 PLN/h')
+
+    def test_management_can_save_multiple_task_labels(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        column = BoardColumn.objects.create(project=project, name='Start', position=0)
+        ProjectLabelRate.objects.create(project=project, label='backend', hourly_rate=Decimal('220.00'))
+        task = Task.objects.create(project=project, column=column, title='Task')
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('edit_task', args=[task.id]), {
+            'title': 'Task',
+            'description': '',
+            'due_date': '',
+            'priority': 'medium',
+            'labels': 'backend, frontend, qa',
+            'change_note': '',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        task.refresh_from_db()
+        self.assertEqual(task.labels, 'backend, frontend, qa')
+
+    def test_kanban_card_shows_hidden_label_count(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        column = BoardColumn.objects.create(project=project, name='Start', position=0)
+        Task.objects.create(project=project, column=column, title='Task', labels='backend, frontend, qa, design, test')
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('kanban_project', args=[project.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'backend')
+        self.assertContains(response, 'frontend')
+        self.assertContains(response, 'label-more-chip')
+        self.assertContains(response, '+3')
 
     def test_kanban_hides_task_rates_from_employee(self):
         employee = User.objects.create_user(username='employee', password='pass')

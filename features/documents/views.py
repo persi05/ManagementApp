@@ -191,6 +191,19 @@ def add_form_errors_to_messages(request, form, fallback):
         messages.error(request, error)
 
 
+def document_folder_path(item):
+    path = []
+    cursor = item.parent
+    while cursor:
+        path.append(cursor)
+        cursor = cursor.parent
+    path.reverse()
+    return {
+        'label': ' / '.join(folder.name for folder in path) if path else 'Dokumenty i pliki',
+        'folder': path[-1] if path else None,
+    }
+
+
 @login_required
 def documents(request):
     parent = parent_from_request(request)
@@ -327,7 +340,6 @@ def documents(request):
                 item.save(update_fields=['is_pinned', 'updated_at'])
                 return documents_redirect(
                     parent=None if item.is_archived else item.parent,
-                    selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
                     archived=item.is_archived,
                 )
             if action == 'copy':
@@ -358,6 +370,12 @@ def documents(request):
         ),
     )
     current_items = current_items.order_by('-is_pinned', 'kind_rank', 'name')
+    if query:
+        current_items = list(current_items)
+        for item in current_items:
+            search_folder_path = document_folder_path(item)
+            item.search_folder_path = search_folder_path['label']
+            item.search_folder = search_folder_path['folder']
 
     selected = None
     if selected_id:

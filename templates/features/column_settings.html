@@ -10,7 +10,7 @@
   <div class="panel-head">
     <div>
       <h2>Ustawienia kolumny</h2>
-      <p>Zmien nazwe i prawa dla rol w tej zakladce.</p>
+      <p>Zmień nazwę i prawa dla ról w tej zakładce.</p>
     </div>
   </div>
   <form method="post" class="grid-form">
@@ -23,16 +23,16 @@
   <div class="panel-head">
     <div>
       <h2>Usuwanie</h2>
-      <p>Kolumne mozna usunac tylko wtedy, gdy jest pusta i projekt ma jeszcze inna kolumne.</p>
+      <p>Kolumnę można usunąć tylko wtedy, gdy jest pusta i projekt ma jeszcze inną kolumnę.</p>
     </div>
   </div>
   {% if can_delete_column %}
     <form method="post" action="{% url 'delete_column' column.id %}">
       {% csrf_token %}
-      <button class="danger-btn">Usun kolumne</button>
+      <button class="danger-btn">Usuń kolumnę</button>
     </form>
   {% else %}
-    <p class="empty">Tej kolumny nie mozna teraz usunac.</p>
+    <p class="empty">Tej kolumny nie można teraz usunąć.</p>
   {% endif %}
 </section>
 {% endblock %}

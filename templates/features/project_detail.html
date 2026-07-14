@@ -8,7 +8,7 @@
 {% endblock %}
 {% block content %}
 {% if can_manage %}
-<section class="content-split">
+<section class="content-split project-settings-split">
   <form method="post" class="form-card compact">
     {% csrf_token %}
     <input type="hidden" name="form" value="project_settings">
@@ -70,7 +70,40 @@
 </section>
 {% endif %}
 
-<section class="workspace-grid">
+{% if can_view_client_rates and not can_manage %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Stawki projektu</h2>
+      <p>Stawka podstawowa obowiązuje, gdy zadanie nie ma labela z osobną stawką.</p>
+    </div>
+  </div>
+  <div class="label-rate-list">
+    <article class="label-rate-item">
+      <div class="label-rate-display">
+        <div>
+          <strong>Stawka podstawowa</strong>
+          <small>Domyślna stawka projektu</small>
+        </div>
+        <span>{% if project.client_hourly_rate %}{{ project.client_hourly_rate|floatformat:2 }} {{ project.client_rate_currency }}/h{% else %}-{% endif %}</span>
+      </div>
+    </article>
+    {% for rate in label_rates %}
+      <article class="label-rate-item">
+        <div class="label-rate-display">
+          <div>
+            <strong>{{ rate.label }}</strong>
+            <small>Stawka dla labela zadania</small>
+          </div>
+          <span>{{ rate.hourly_rate|floatformat:2 }} {{ rate.currency }}/h</span>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="content-split project-settings-split project-assignments-split">
   <div class="panel">
     <div class="panel-head"><div><h2>Przypisane osoby</h2><p>Klienci i pracownicy przypisani do projektu.</p></div></div>
     <div class="table-wrap">
