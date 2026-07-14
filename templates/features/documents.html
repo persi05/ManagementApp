@@ -163,11 +163,11 @@
       {% if selected %}
         <div class="preview-frame">
           {% if selected.kind == 'image' and selected.file %}
-          <img src="{{ selected.file.url }}" alt="{{ selected.name }}">
+          <img src="{% url 'document_file' selected.id %}" alt="{{ selected.name }}">
           {% elif selected.kind == 'document' %}
           <pre>{{ selected.content|default:"Brak treści dokumentu." }}</pre>
           {% elif selected_is_pdf %}
-          <iframe src="{{ selected.file.url }}" title="Podgląd PDF"></iframe>
+          <iframe src="{% url 'document_file' selected.id %}" title="Podgląd PDF"></iframe>
           {% elif selected_preview_text %}
           <pre>{{ selected_preview_text }}</pre>
           {% elif selected.file %}

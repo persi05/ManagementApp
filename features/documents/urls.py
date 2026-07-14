@@ -5,5 +5,6 @@ from . import views
 urlpatterns = [
     path('documents/', views.documents, name='documents'),
     path('documents/<int:item_id>/download/', views.download_document, name='download_document'),
+    path('documents/<int:item_id>/file/', views.document_file, name='document_file'),
     path('documents/<int:item_id>/open/', views.open_document, name='open_document'),
 ]

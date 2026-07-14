@@ -1,4 +1,5 @@
 from io import BytesIO
+import mimetypes
 import posixpath
 import zipfile
 
@@ -6,7 +7,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Case, Count, IntegerField, Q, Value, When
-from django.http import FileResponse, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
+from django.http import FileResponse, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import get_valid_filename
@@ -434,10 +435,25 @@ def download_document(request, item_id):
 
 
 @login_required
+def document_file(request, item_id):
+    item = visible_document(request.user, item_id)
+    if not item.file:
+        return redirect(f"{reverse('documents')}?selected={item.id}")
+
+    content_type, _ = mimetypes.guess_type(item.file.name)
+    return FileResponse(
+        item.file.open('rb'),
+        as_attachment=False,
+        filename=item.name or item.file.name,
+        content_type=content_type or 'application/octet-stream',
+    )
+
+
+@login_required
 def open_document(request, item_id):
     item = visible_document(request.user, item_id)
     if item.kind == DocumentItem.Kind.FOLDER:
         return redirect(f"{reverse('documents')}?folder={item.id}")
     if item.file:
-        return HttpResponseRedirect(item.file.url)
+        return redirect('document_file', item_id=item.id)
     return redirect(f"{reverse('documents')}?selected={item.id}")
