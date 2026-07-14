@@ -141,12 +141,6 @@
                   <strong>{{ attachment.name }}</strong>
                   <small>Podgląd · {{ attachment.document.size_label }}</small>
                 </a>
-              {% elif attachment.file %}
-                <a href="{{ attachment.file.url }}">
-                  <span>PLIK</span>
-                  <strong>{{ attachment.name }}</strong>
-                  <small>Załącznik</small>
-                </a>
               {% elif attachment.url %}
                 <a href="{{ attachment.url }}">
                   <span>LINK</span>
