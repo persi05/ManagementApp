@@ -274,4 +274,74 @@
     syncHidden();
     form?.addEventListener('submit', syncHidden, { capture: true });
   });
+
+  document.querySelectorAll('[data-assignee-picker]').forEach((root) => {
+    const select = root.previousElementSibling?.matches?.('[data-assignee-source]')
+      ? root.previousElementSibling
+      : root.parentElement?.querySelector('[data-assignee-source]');
+    const picker = root.querySelector('[data-assignee-picker-select]');
+    const addButton = root.querySelector('[data-assignee-add]');
+    const selectedBox = root.querySelector('[data-assignee-selected]');
+
+    function ensureEmptyState() {
+      const hasItems = Boolean(selectedBox.querySelector('[data-assignee-item]'));
+      let empty = selectedBox.querySelector('[data-assignee-empty]');
+      if (hasItems && empty) {
+        empty.remove();
+      }
+      if (!hasItems && !empty) {
+        empty = document.createElement('p');
+        empty.className = 'assignee-picker-empty';
+        empty.dataset.assigneeEmpty = '';
+        empty.textContent = 'Brak przypisanych osób.';
+        selectedBox.appendChild(empty);
+      }
+    }
+
+    function syncSelect() {
+      if (!select) return;
+      const selectedValues = new Set(Array.from(selectedBox.querySelectorAll('[data-assignee-item]')).map((item) => item.dataset.assigneeValue));
+      Array.from(select.options).forEach((option) => {
+        option.selected = selectedValues.has(option.value);
+      });
+    }
+
+    function addAssignee(value, label) {
+      if (!value || selectedBox.querySelector(`[data-assignee-value="${CSS.escape(value)}"]`)) return;
+      const item = document.createElement('span');
+      item.className = 'assignee-picker-item';
+      item.dataset.assigneeItem = '';
+      item.dataset.assigneeValue = value;
+      item.innerHTML = `<span></span><button type="button" class="ghost-btn tiny-btn" data-assignee-remove aria-label="Usuń osobę">-</button>`;
+      item.querySelector('span').textContent = label;
+      selectedBox.appendChild(item);
+      if (picker) picker.value = '';
+      ensureEmptyState();
+      syncSelect();
+    }
+
+    addButton?.addEventListener('click', () => {
+      const option = picker?.selectedOptions?.[0];
+      addAssignee(option?.value || '', option?.textContent?.trim() || '');
+    });
+
+    picker?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        addButton?.click();
+      }
+    });
+
+    selectedBox.addEventListener('click', (event) => {
+      const removeButton = event.target.closest('[data-assignee-remove]');
+      if (!removeButton) return;
+      removeButton.closest('[data-assignee-item]')?.remove();
+      ensureEmptyState();
+      syncSelect();
+    });
+
+    ensureEmptyState();
+    syncSelect();
+    root.closest('form')?.addEventListener('submit', syncSelect, { capture: true });
+  });
 })();

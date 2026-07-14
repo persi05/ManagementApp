@@ -12,7 +12,7 @@
       <select name="project"><option value="">Bez projektu</option>{% for project in projects %}<option value="{{ project.id }}">{{ project.name }}</option>{% endfor %}</select>
       <button class="primary-btn">Start</button>
     {% else %}
-      <button class="danger-btn">Zakoncz i zapisz</button>
+      <button class="danger-btn">Zakończ i zapisz</button>
     {% endif %}
   </form>
   {% if active_session and active_session.state == 'running' %}
@@ -23,7 +23,7 @@
   {% elif active_session and active_session.state == 'paused' %}
     <form method="post" action="{% url 'resume_timer' %}" class="inline-form">
       {% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}">
-      <button class="primary-btn">Wznow</button>
+      <button class="primary-btn">Wznów</button>
     </form>
   {% endif %}
 </article>

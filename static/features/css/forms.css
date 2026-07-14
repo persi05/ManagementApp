@@ -341,6 +341,79 @@ textarea {
   font-weight: 850;
 }
 
+.assignee-picker {
+  display: grid;
+  gap: 8px;
+  width: min(100%, 520px);
+}
+
+.assignee-picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+  align-items: center;
+}
+
+.assignee-picker-row select {
+  width: 100%;
+}
+
+.assignee-picker-add {
+  min-height: 38px;
+  width: 42px;
+  padding: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.assignee-picker > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.assignee-picker-list {
+  min-height: 48px;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  background: var(--surface2);
+  padding: 8px;
+  display: flex;
+  align-content: flex-start;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.assignee-picker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  min-height: 34px;
+  padding: 4px 4px 4px 10px;
+  font-weight: 700;
+}
+
+.assignee-picker-item button {
+  width: 28px;
+  min-height: 26px;
+  padding: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.assignee-picker-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .task-modal-form > .primary-btn {
   grid-column: 2 / -1;
   width: 100%;

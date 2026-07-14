@@ -121,6 +121,7 @@ class Task(models.Model):
     title = models.CharField(max_length=180)
     description = models.TextField(blank=True)
     assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
+    assignees = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='assigned_tasks')
     due_date = models.DateField(null=True, blank=True)
     priority = models.CharField(max_length=12, choices=Priority.choices, default=Priority.MEDIUM)
     labels = models.CharField(max_length=180, blank=True)
@@ -147,6 +148,13 @@ class Task(models.Model):
     @property
     def labels_list(self):
         return [label.strip() for label in self.labels.split(',') if label.strip()]
+
+    @property
+    def assignees_list(self):
+        assigned = list(self.assignees.all())
+        if assigned:
+            return assigned
+        return [self.assignee] if self.assignee_id else []
 
 
 class TaskEditNote(models.Model):

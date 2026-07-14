@@ -38,8 +38,20 @@ POLISH_MONTHS = {
 
 @login_required
 def calendar_view(request):
+    view_mode = selected_view_mode(request)
     month_date = selected_month(request)
-    start_date, end_date = month_range(month_date)
+    week_start = selected_week_start(request)
+    if view_mode == 'week':
+        start_date, end_date = week_range(week_start)
+        month_date = start_date.replace(day=1)
+        period_label = f'{start_date:%Y-%m-%d} - {(end_date - timedelta(days=1)):%Y-%m-%d}'
+        previous_period_url = f'?view=week&week={(start_date - timedelta(days=7)).isoformat()}'
+        next_period_url = f'?view=week&week={(start_date + timedelta(days=7)).isoformat()}'
+    else:
+        start_date, end_date = month_range(month_date)
+        period_label = f'{POLISH_MONTHS[month_date.month]} {month_date.year}'
+        previous_period_url = f'?month={add_months(month_date, -1):%Y-%m}'
+        next_period_url = f'?month={add_months(month_date, 1):%Y-%m}'
     leave_start_date, leave_end_date, leave_end_exclusive = selected_leave_range(request, start_date, end_date)
     leave_summary = leave_days_summary(request.user, leave_start_date, leave_end_exclusive)
 
@@ -59,7 +71,7 @@ def calendar_view(request):
                 actor=request.user,
             )
             messages.success(request, 'Wniosek o wolne został wysłany.')
-            return redirect(f'{request.path}?month={month_date:%Y-%m}')
+            return redirect(request.get_full_path())
     else:
         form = LeaveRequestForm()
 
@@ -69,6 +81,13 @@ def calendar_view(request):
         'month_label': f'{POLISH_MONTHS[month_date.month]} {month_date.year}',
         'previous_month': add_months(month_date, -1).strftime('%Y-%m'),
         'next_month': add_months(month_date, 1).strftime('%Y-%m'),
+        'view_mode': view_mode,
+        'week': week_start.isoformat(),
+        'period_label': period_label,
+        'previous_period_url': previous_period_url,
+        'next_period_url': next_period_url,
+        'month_view_url': f'?month={month_date:%Y-%m}',
+        'week_view_url': f'?view=week&week={week_start.isoformat()}',
         'weekdays': ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'],
         'today': timezone.localdate(),
         'weeks': build_calendar_days(request.user, month_date, start_date, end_date),
@@ -134,10 +153,30 @@ def selected_month(request):
     return today.replace(day=1)
 
 
+def selected_view_mode(request):
+    return 'week' if request.GET.get('view') == 'week' else 'month'
+
+
+def selected_week_start(request):
+    raw_week = request.GET.get('week')
+    if raw_week:
+        try:
+            selected_day = date.fromisoformat(raw_week)
+        except ValueError:
+            selected_day = timezone.localdate()
+    else:
+        selected_day = timezone.localdate()
+    return selected_day - timedelta(days=selected_day.weekday())
+
+
 def month_range(month_date):
     start_date = month_date.replace(day=1)
     end_date = add_months(start_date, 1)
     return start_date, end_date
+
+
+def week_range(week_start):
+    return week_start, week_start + timedelta(days=7)
 
 
 def selected_leave_range(request, default_start, default_end):
@@ -175,14 +214,19 @@ def build_calendar_days(user, month_date, start_date, end_date):
     leave_by_day = leave_by_day_for_user(user, start_date, end_date)
     month_calendar = calendar.Calendar(firstweekday=0)
     weeks = []
+    if (end_date - start_date).days == 7:
+        calendar_weeks = [[start_date + timedelta(days=offset) for offset in range(7)]]
+    else:
+        calendar_weeks = month_calendar.monthdatescalendar(month_date.year, month_date.month)
 
-    for week in month_calendar.monthdatescalendar(month_date.year, month_date.month):
+    for week in calendar_weeks:
         week_days = []
         for day in week:
             day_tasks = tasks_by_day.get(day, [])
             day_leaves = leave_by_day.get(day, [])
             day_people = people_by_day.get(day, [])
             hours = time_by_day.get(day, Decimal('0'))
+            notes = calendar_day_notes(day_leaves, day_people, day_tasks)
             week_days.append({
                 'date': day,
                 'in_month': day.month == month_date.month,
@@ -195,10 +239,40 @@ def build_calendar_days(user, month_date, start_date, end_date):
                 'has_tasks': bool(day_tasks),
                 'has_leave': bool(day_leaves),
                 'has_approved_leave': any(leave.status == LeaveRequest.Status.APPROVED and leave.user_id == user.id for leave in day_leaves),
+                'notes': notes,
+                'preview_notes': notes[:2],
+                'hidden_notes_count': max(len(notes) - 2, 0),
             })
         weeks.append(week_days)
 
     return weeks
+
+
+def calendar_day_notes(leaves, people, tasks):
+    notes = []
+    for leave in leaves:
+        notes.append({
+            'type': 'leave',
+            'status': leave.status,
+            'is_past': leave.is_past,
+            'title': f'Urlop {leave.get_status_display().lower()}',
+            'body': leave.user.get_full_name() or leave.user.username,
+        })
+    for row in people:
+        user = row['user']
+        notes.append({
+            'type': 'work',
+            'title': f"{row['hours']:.2f}h",
+            'body': user.get_full_name() or user.username,
+        })
+    for task in tasks:
+        notes.append({
+            'type': 'task',
+            'title': task.project.name,
+            'body': task.title,
+            'url': reverse('kanban_project', args=[task.project_id]),
+        })
+    return notes
 
 
 def time_summary_by_day(user, start_date, end_date):
@@ -222,7 +296,7 @@ def time_summary_by_day(user, start_date, end_date):
 
 
 def tasks_due_by_day(user, start_date, end_date):
-    tasks = visible_tasks(user).filter(due_date__gte=start_date, due_date__lt=end_date).select_related('project', 'assignee', 'column')
+    tasks = visible_tasks(user).filter(due_date__gte=start_date, due_date__lt=end_date).select_related('project', 'assignee', 'column').prefetch_related('assignees')
     tasks_by_day = defaultdict(list)
     for task in tasks:
         tasks_by_day[task.due_date].append(task)
@@ -251,7 +325,7 @@ def leave_request_base_queryset(start_date, end_date):
 def leave_request_calendar_queryset(user, start_date, end_date):
     qs = leave_request_base_queryset(start_date, end_date)
     if is_management(user):
-        return qs
+        return qs.exclude(status=LeaveRequest.Status.REJECTED)
     return qs.filter(user=user).exclude(
         status=LeaveRequest.Status.REJECTED,
         read_at__isnull=False,

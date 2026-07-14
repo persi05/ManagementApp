@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth.models import User
 from django.utils.html import conditional_escape, format_html, format_html_join
 from django.utils.safestring import mark_safe
 
@@ -71,6 +72,48 @@ class LabelTransferWidget(forms.Widget):
         )
 
 
+class AssigneeTransferWidget(forms.SelectMultiple):
+    def render(self, name, value, attrs=None, renderer=None):
+        selected_values = {str(getattr(item, 'pk', item)) for item in (value or [])}
+        attrs = attrs or {}
+        attrs['data-assignee-source'] = ''
+        attrs['style'] = 'display:none'
+        choices = list(self.choices)
+        picker_options = ['<option value="">Wybierz osobę</option>']
+        selected_items = []
+        for option_value, option_label in choices:
+            option_value = str(option_value)
+            option_label = str(option_label)
+            picker_options.append(format_html('<option value="{}">{}</option>', option_value, option_label))
+            if option_value in selected_values:
+                selected_items.append((option_value, option_label))
+        self.choices = choices
+        select = super().render(name, value, attrs, renderer)
+        return format_html(
+            '{}'
+            '<div class="assignee-picker" data-assignee-picker>'
+            '<div class="assignee-picker-row">'
+            '<select data-assignee-picker-select>{}</select>'
+            '<button type="button" class="ghost-btn tiny-btn assignee-picker-add" data-assignee-add aria-label="Dodaj osobę">+</button>'
+            '</div>'
+            '<span>Przypisane osoby:</span>'
+            '<div class="assignee-picker-list" data-assignee-selected>{}</div>'
+            '</div>',
+            mark_safe(select),
+            mark_safe(''.join(str(option) for option in picker_options)),
+            self.render_items(selected_items),
+        )
+
+    def render_items(self, users):
+        if not users:
+            return mark_safe('<p class="assignee-picker-empty" data-assignee-empty>Brak przypisanych osób.</p>')
+        return format_html_join(
+            '',
+            '<span class="assignee-picker-item" data-assignee-item data-assignee-value="{}"><span>{}</span><button type="button" class="ghost-btn tiny-btn" data-assignee-remove aria-label="Usuń osobę">-</button></span>',
+            ((value, label) for value, label in users),
+        )
+
+
 def setup_label_widget(form, project):
     rates = list(ProjectLabelRate.objects.filter(project=project).order_by('label'))
     form.fields['labels'].widget = LabelTransferWidget([rate.label for rate in rates])
@@ -78,10 +121,34 @@ def setup_label_widget(form, project):
     return rates
 
 
+def normalize_assignee_data(args):
+    if not args:
+        return args
+    data = args[0]
+    if not hasattr(data, 'copy') or 'assignees' in data or 'assignee' not in data:
+        return args
+    mutable_data = data.copy()
+    assignee = data.get('assignee')
+    if assignee:
+        mutable_data.setlist('assignees', [assignee])
+    return (mutable_data, *args[1:])
+
+
+def assignable_users_queryset(project):
+    return project.members.filter(is_active=True).exclude(profile__role=UserProfile.Role.CLIENT).order_by('first_name', 'last_name', 'username')
+
+
+def setup_assignee_picker(field, project):
+    field.queryset = assignable_users_queryset(project)
+    widget = AssigneeTransferWidget()
+    widget.choices = field.choices
+    field.widget = widget
+
+
 class TaskForm(forms.ModelForm):
     class Meta:
         model = Task
-        fields = ('project', 'column', 'title', 'description', 'assignee', 'due_date', 'priority', 'labels')
+        fields = ('project', 'column', 'title', 'description', 'assignees', 'due_date', 'priority', 'labels')
         widgets = {
             'due_date': forms.DateInput(attrs={'type': 'date'}),
             'description': forms.Textarea(attrs={'rows': 4}),
@@ -91,13 +158,14 @@ class TaskForm(forms.ModelForm):
             'column': 'Kolumna',
             'title': 'Tytuł',
             'description': 'Opis',
-            'assignee': 'Przypisany',
+            'assignees': 'Przypisani',
             'due_date': 'Termin',
             'priority': 'Priorytet',
             'labels': 'Etykiety',
         }
 
     def __init__(self, *args, user=None, project=None, projects_queryset=None, fixed_project=False, **kwargs):
+        args = normalize_assignee_data(args)
         self.user = user
         self.project = project
         self.fixed_project = fixed_project
@@ -118,7 +186,7 @@ class TaskForm(forms.ModelForm):
             self.fields['column'].initial = column_qs.order_by('position', 'id').first()
 
         if user is not None and not is_management(user):
-            self.fields.pop('assignee', None)
+            self.fields.pop('assignees', None)
             self.fields.pop('labels', None)
 
         if user is not None and user_role(user) == UserProfile.Role.CLIENT:
@@ -133,9 +201,10 @@ class TaskForm(forms.ModelForm):
         if 'labels' in self.fields:
             field_order.append('labels')
         field_order.append('description')
-        if 'assignee' in self.fields:
-            field_order.append('assignee')
+        if 'assignees' in self.fields:
+            field_order.append('assignees')
         self.order_fields(field_order)
+        self._setup_assignee_field()
 
     def _setup_label_suggestions(self):
         if 'labels' not in self.fields or self.project is None:
@@ -144,6 +213,21 @@ class TaskForm(forms.ModelForm):
 
     def clean_labels(self):
         return format_labels(parse_labels(self.cleaned_data.get('labels')))
+
+    def _setup_assignee_field(self):
+        if 'assignees' not in self.fields or self.project is None:
+            return
+        setup_assignee_picker(self.fields['assignees'], self.project)
+
+    def save(self, commit=True):
+        selected_assignees = list(self.cleaned_data.get('assignees') or [])
+        task = super().save(commit=False)
+        task.assignee = selected_assignees[0] if selected_assignees else None
+        if commit:
+            task.save()
+            self.save_m2m()
+            task.assignees.set(selected_assignees)
+        return task
 
 
 class BoardColumnForm(forms.ModelForm):
@@ -228,7 +312,7 @@ class TaskEditForm(forms.ModelForm):
 
     class Meta:
         model = Task
-        fields = ('title', 'description', 'due_date', 'priority', 'assignee', 'labels')
+        fields = ('title', 'description', 'due_date', 'priority', 'assignees', 'labels')
         widgets = {
             'due_date': forms.DateInput(attrs={'type': 'date'}),
             'description': forms.Textarea(attrs={'rows': 4}),
@@ -236,19 +320,20 @@ class TaskEditForm(forms.ModelForm):
         labels = {
             'title': 'Tytuł',
             'description': 'Opis',
-            'assignee': 'Przypisany',
+            'assignees': 'Przypisani',
             'due_date': 'Termin',
             'priority': 'Priorytet',
             'labels': 'Etykiety',
         }
 
     def __init__(self, *args, user=None, project=None, **kwargs):
+        args = normalize_assignee_data(args)
         self.user = user
         self.project = project
         super().__init__(*args, **kwargs)
 
         if user is not None and not is_management(user):
-            self.fields.pop('assignee', None)
+            self.fields.pop('assignees', None)
         if user is not None and self.instance.pk and not can_edit_task_labels(user, self.instance):
             self.fields.pop('labels', None)
         if user is not None and self.instance.pk and not can_edit_task_fields(user, self.instance):
@@ -261,10 +346,11 @@ class TaskEditForm(forms.ModelForm):
         if 'labels' in self.fields:
             field_order.append('labels')
         field_order.append('description')
-        if 'assignee' in self.fields:
-            field_order.append('assignee')
+        if 'assignees' in self.fields:
+            field_order.append('assignees')
         field_order.append('change_note')
         self.order_fields(field_order)
+        self._setup_assignee_field()
 
     def _setup_label_suggestions(self):
         if 'labels' not in self.fields:
@@ -276,3 +362,21 @@ class TaskEditForm(forms.ModelForm):
 
     def clean_labels(self):
         return format_labels(parse_labels(self.cleaned_data.get('labels')))
+
+    def _setup_assignee_field(self):
+        if 'assignees' not in self.fields:
+            return
+        project = self.project or getattr(self.instance, 'project', None)
+        if project is None:
+            return
+        setup_assignee_picker(self.fields['assignees'], project)
+
+    def save(self, commit=True):
+        selected_assignees = list(self.cleaned_data.get('assignees') or [])
+        task = super().save(commit=False)
+        task.assignee = selected_assignees[0] if selected_assignees else None
+        if commit:
+            task.save()
+            self.save_m2m()
+            task.assignees.set(selected_assignees)
+        return task

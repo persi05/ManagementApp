@@ -1,6 +1,5 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db.models import Max, Sum
 from django.http import HttpResponseForbidden, JsonResponse
@@ -23,6 +22,7 @@ from features.tasks.services import (
     can_move_to_column,
     default_permissions_for_position,
     notify_project_clients,
+    notify_task_assignees,
     notify_user,
     normalize_column_positions,
     task_effective_client_rate,
@@ -97,11 +97,6 @@ def kanban(request, project_id=None):
                 fixed_project=project_id is not None,
             )
             column_form = BoardColumnForm()
-            if 'assignee' in form.fields:
-                form.fields['assignee'].queryset = User.objects.filter(
-                    projectassignment__project_id=selected_project.id,
-                    profile__role=UserProfile.Role.EMPLOYEE,
-                ).distinct()
             if form.is_valid():
                 task = form.save(commit=False)
                 task.project = selected_project
@@ -114,8 +109,9 @@ def kanban(request, project_id=None):
                 else:
                     task.created_by = request.user
                     task.save()
-                    notify_user(
-                        task.assignee,
+                    form.save_m2m()
+                    notify_task_assignees(
+                        task,
                         'Nowe zadanie',
                         f'Przypisano Ci zadanie: {task.title}',
                         kind='task',
@@ -144,14 +140,10 @@ def kanban(request, project_id=None):
             fixed_project=project_id is not None,
         )
         column_form = BoardColumnForm()
-        if 'assignee' in form.fields:
-            form.fields['assignee'].queryset = User.objects.filter(
-                projectassignment__project=project,
-                profile__role=UserProfile.Role.EMPLOYEE,
-            ).distinct()
 
     columns = project.columns.prefetch_related(
         'tasks__assignee',
+        'tasks__assignees',
         'tasks__worklogs',
         'tasks__checklist',
         'tasks__edit_notes__user',
@@ -194,8 +186,8 @@ def move_task(request, task_id):
     task.column = column
     task.save(update_fields=['column', 'updated_at'])
     if previous_column_id != column.id and column.notify_assignee_on_move_to:
-        notify_user(
-            task.assignee,
+        notify_task_assignees(
+            task,
             'Zmieniono status zadania',
             f'{task.title} jest teraz w kolumnie {column.name}.',
             kind='task',
@@ -268,8 +260,8 @@ def add_task_note(request, task_id):
     note = (request.POST.get('content') or '').strip()
     if note:
         TaskEditNote.objects.create(task=task, user=request.user, content=note)
-        notify_user(
-            task.assignee,
+        notify_task_assignees(
+            task,
             'Nowa notatka do zadania',
             f'Dodano notatke do zadania: {task.title}',
             kind='task_note',
@@ -349,24 +341,31 @@ def edit_task(request, task_id):
         return HttpResponseForbidden('Brak uprawnień do edycji zadania.')
 
     if request.method == 'POST':
-        previous_assignee_id = task.assignee_id
+        previous_assignee_ids = set(task.assignees.values_list('id', flat=True))
+        if not previous_assignee_ids and task.assignee_id:
+            previous_assignee_ids.add(task.assignee_id)
         form = TaskEditForm(request.POST, instance=task, user=request.user, project=task.project)
         if form.is_valid():
             updated_task = form.save()
-            if updated_task.assignee_id and updated_task.assignee_id != previous_assignee_id:
-                notify_user(
-                    updated_task.assignee,
+            current_assignee_ids = set(updated_task.assignees.values_list('id', flat=True))
+            if not current_assignee_ids and updated_task.assignee_id:
+                current_assignee_ids.add(updated_task.assignee_id)
+            new_assignee_ids = current_assignee_ids - previous_assignee_ids
+            if new_assignee_ids:
+                notify_task_assignees(
+                    updated_task,
                     'Nowe przypisanie',
                     f'Przypisano Ci zadanie: {updated_task.title}',
                     kind='task',
                     url=reverse('edit_task', args=[updated_task.id]),
                     actor=request.user,
+                    exclude_ids=current_assignee_ids - new_assignee_ids,
                 )
             note = form.cleaned_data.get('change_note', '').strip()
             if note:
                 TaskEditNote.objects.create(task=updated_task, user=request.user, content=note)
-                notify_user(
-                    updated_task.assignee,
+                notify_task_assignees(
+                    updated_task,
                     'Nowa notatka do zadania',
                     f'Dodano notatke do zadania: {updated_task.title}',
                     kind='task_note',

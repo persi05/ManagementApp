@@ -107,7 +107,26 @@ def can_edit_task_fields(user, task):
 def can_edit_task_labels(user, task):
     if is_management(user):
         return True
-    return user.is_authenticated and task.assignee_id == user.id
+    return user.is_authenticated and (task.assignee_id == user.id or task.assignees.filter(id=user.id).exists())
+
+
+def task_assignees(task):
+    assigned = list(task.assignees.all())
+    if assigned:
+        return assigned
+    return [task.assignee] if task.assignee_id else []
+
+
+def notify_task_assignees(task, title, content, kind='task', url='', actor=None, exclude_ids=None):
+    exclude_ids = set(exclude_ids or [])
+    notifications = []
+    for user in task_assignees(task):
+        if user.id in exclude_ids:
+            continue
+        notification = notify_user(user, title, content, kind=kind, url=url, actor=actor)
+        if notification:
+            notifications.append(notification)
+    return notifications
 
 
 def notify_user(user, title, content, kind='system', url='', actor=None):
@@ -195,7 +214,7 @@ def create_daily_reminders(user):
         return
 
     tomorrow = today + timedelta(days=1)
-    tasks = Task.objects.filter(assignee=user, due_date=tomorrow).select_related('project')[:20]
+    tasks = Task.objects.filter(Q(assignee=user) | Q(assignees=user), due_date=tomorrow).select_related('project').distinct()[:20]
     for task in tasks:
         notify_user_once_today(
             user,
