@@ -1,9 +1,10 @@
-<article class="panel timer-panel" data-timer-root data-status-url="{% url 'timer_status' %}" data-active-seconds="{{ active_session_seconds|default:0 }}" data-started-at="{% if active_session %}{{ active_session.started_at|date:'c' }}{% endif %}" data-paused-at="{% if active_session.paused_at %}{{ active_session.paused_at|date:'c' }}{% endif %}" data-inactive-seconds="{% if active_session %}{{ active_session.total_inactive_seconds }}{% else %}0{% endif %}" data-state="{% if active_session %}{{ active_session.state }}{% else %}stopped{% endif %}">
+<article class="panel timer-panel" data-timer-root data-status-url="{% url 'timer_status' %}" data-start-url="{% url 'start_timer' %}" data-pause-url="{% url 'pause_timer' %}" data-resume-url="{% url 'resume_timer' %}" data-stop-url="{% url 'stop_timer' %}" data-active-seconds="{{ active_session_seconds|default:0 }}" data-started-at="{% if active_session %}{{ active_session.started_at|date:'c' }}{% endif %}" data-paused-at="{% if active_session.paused_at %}{{ active_session.paused_at|date:'c' }}{% endif %}" data-inactive-seconds="{% if active_session %}{{ active_session.total_inactive_seconds }}{% else %}0{% endif %}" data-state="{% if active_session %}{{ active_session.state }}{% else %}stopped{% endif %}">
   <div class="panel-head">
     <div><h2>Licznik pracy</h2><p>Start, pauza i zapis sesji do historii czasu.</p></div>
     <span class="status-pill {% if active_session %}ok{% endif %}">{% if active_session %}{{ active_session.get_state_display }}{% else %}Nieaktywny{% endif %}</span>
   </div>
   <div class="timer-readout" data-timer-readout>{{ active_session_display|default:"00:00:00" }}</div>
+  <div data-timer-controls>
   <form method="post" action="{% if active_session %}{% url 'stop_timer' %}{% else %}{% url 'start_timer' %}{% endif %}" class="inline-form">
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ request.path }}">
@@ -26,4 +27,5 @@
       <button class="primary-btn">Wznów</button>
     </form>
   {% endif %}
+  </div>
 </article>
