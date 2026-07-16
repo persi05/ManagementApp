@@ -66,18 +66,46 @@ def column_allows(role, column, action):
     return bool(getattr(column, field_name, False))
 
 
+def can_view_column(user, project, column):
+    if not user.is_authenticated or project.id != column.project_id:
+        return False
+    if is_management(user):
+        return True
+    return column_allows(project_role_for(user, project), column, 'view_column')
+
+
+def visible_columns(user, project):
+    columns = project.columns.all()
+    if is_management(user):
+        return columns
+
+    role = project_role_for(user, project)
+    field_name = column_permission_field(role, 'view_column')
+    if field_name is None:
+        return columns.none()
+    return columns.filter(**{field_name: True})
+
+
+def can_create_task_in_column(user, project, column):
+    if not user.is_authenticated or project.id != column.project_id:
+        return False
+    if is_management(user):
+        return True
+    return can_view_column(user, project, column) and column_allows(project_role_for(user, project), column, 'create_tasks')
+
+
 def can_move_to_column(user, project, column):
     if not user.is_authenticated or project.id != column.project_id:
         return False
     if is_management(user):
         return True
-    return column_allows(project_role_for(user, project), column, 'move_to')
+    return can_view_column(user, project, column) and column_allows(project_role_for(user, project), column, 'move_to')
 
 
 def can_move_task_to_column(user, task, column):
     if not user.is_authenticated or task.project_id != column.project_id:
         return False
-    return can_move_to_column(user, task.project, column)
+    return can_edit_task(user, task) and can_move_to_column(user, task.project, column)
 
 
 def can_edit_task(user, task):
@@ -85,8 +113,7 @@ def can_edit_task(user, task):
         return False
     if is_management(user):
         return True
-
-    return column_allows(project_role_for(user, task.project), task.column, 'edit_tasks')
+    return can_view_column(user, task.project, task.column) and column_allows(project_role_for(user, task.project), task.column, 'edit_tasks')
 
 
 def can_delete_task(user, task):
@@ -94,20 +121,18 @@ def can_delete_task(user, task):
         return False
     if is_management(user):
         return True
-    if task.created_by_id != user.id:
-        return False
     role = project_role_for(user, task.project)
-    return column_allows(role, task.column, 'delete_tasks')
+    return can_view_column(user, task.project, task.column) and column_allows(role, task.column, 'delete_tasks')
 
 
 def can_edit_task_fields(user, task):
-    return user.is_authenticated and (is_management(user) or task.created_by_id == user.id)
+    return can_edit_task(user, task)
 
 
 def can_edit_task_labels(user, task):
     if is_management(user):
         return True
-    return user.is_authenticated and (task.assignee_id == user.id or task.assignees.filter(id=user.id).exists())
+    return user.is_authenticated and project_role_for(user, task.project) == ProjectAssignment.ProjectRole.LEAD
 
 
 def task_assignees(task):

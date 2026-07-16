@@ -19,7 +19,7 @@
     <div class="panel-head">
       <div>
         <h2>Wpisy{% if selected_project %}: {{ selected_project.name }}{% endif %}</h2>
-        <p>Ten czas jest raportowany przy zadaniach i nie wchodzi do wynagrodzenia pracownika.</p>
+        {% if role == 'management' %}<p>Ten czas jest raportowany przy zadaniach i nie wchodzi do wynagrodzenia pracownika.</p>{% endif %}
       </div>
       <p class="panel-summary"><strong>Suma godzin:</strong> {{ total_hours|floatformat:2 }}h</p>
     </div>

@@ -181,9 +181,75 @@
   padding-bottom: 13px;
 }
 
-.client-worklog-table td:last-child {
+.client-worklog-table td:nth-last-child(2) {
   font-weight: 800;
   color: var(--accent);
+}
+
+.report-settings {
+  margin-bottom: 16px;
+}
+
+.report-comment-button {
+  white-space: nowrap;
+}
+
+.report-comment-source {
+  display: none;
+}
+
+.report-comment-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.report-comment-modal.is-hidden {
+  display: none;
+}
+
+.report-comment-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, .42);
+}
+
+.report-comment-card {
+  position: relative;
+  z-index: 1;
+  width: min(520px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+.report-comment-card h2 {
+  margin: 0 34px 12px 0;
+  font-size: 18px;
+}
+
+.report-comment-card p {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.report-comment-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
 }
 
 .bar-row {

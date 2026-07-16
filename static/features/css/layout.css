@@ -229,6 +229,28 @@
   align-items: start;
 }
 
+.projects-page {
+  display: grid;
+  gap: 16px;
+}
+
+.projects-list-panel {
+  width: 100%;
+}
+
+.projects-create-form {
+  width: min(100%, 520px);
+  justify-self: end;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+}
+
 .stack {
   display: grid;
   gap: 16px;

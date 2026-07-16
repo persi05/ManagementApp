@@ -11,12 +11,18 @@ from features.projects.models import Project
 
 class BoardColumn(models.Model):
     PERMISSION_FIELDS = (
+        'client_can_view_column',
+        'client_can_create_tasks',
         'client_can_move_to',
         'client_can_edit_tasks',
         'client_can_delete_tasks',
+        'employee_can_view_column',
+        'employee_can_create_tasks',
         'employee_can_move_to',
         'employee_can_edit_tasks',
         'employee_can_delete_tasks',
+        'lead_can_view_column',
+        'lead_can_create_tasks',
         'lead_can_move_to',
         'lead_can_edit_tasks',
         'lead_can_delete_tasks',
@@ -32,12 +38,18 @@ class BoardColumn(models.Model):
     name = models.CharField(max_length=80)
     position = models.PositiveIntegerField(default=0)
     is_done_column = models.BooleanField(default=False)
+    client_can_view_column = models.BooleanField(default=True)
+    client_can_create_tasks = models.BooleanField(default=False)
     client_can_move_to = models.BooleanField(default=False)
     client_can_edit_tasks = models.BooleanField(default=False)
     client_can_delete_tasks = models.BooleanField(default=False)
+    employee_can_view_column = models.BooleanField(default=True)
+    employee_can_create_tasks = models.BooleanField(default=False)
     employee_can_move_to = models.BooleanField(default=False)
     employee_can_edit_tasks = models.BooleanField(default=False)
     employee_can_delete_tasks = models.BooleanField(default=False)
+    lead_can_view_column = models.BooleanField(default=True)
+    lead_can_create_tasks = models.BooleanField(default=False)
     lead_can_move_to = models.BooleanField(default=False)
     lead_can_edit_tasks = models.BooleanField(default=False)
     lead_can_delete_tasks = models.BooleanField(default=False)
@@ -48,39 +60,17 @@ class BoardColumn(models.Model):
 
     class Meta:
         ordering = ['position', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['project'],
+                condition=models.Q(is_done_column=True),
+                name='unique_done_column_per_project',
+            ),
+        ]
 
     @staticmethod
     def default_permissions_for_position(position):
-        defaults = {field_name: False for field_name in BoardColumn.PERMISSION_FIELDS}
-        if position == 0:
-            defaults.update({
-                'client_can_edit_tasks': True,
-                'client_can_delete_tasks': True,
-                'employee_can_move_to': True,
-                'employee_can_edit_tasks': True,
-                'employee_can_delete_tasks': True,
-                'lead_can_move_to': True,
-                'lead_can_edit_tasks': True,
-                'lead_can_delete_tasks': True,
-            })
-        elif position == 1:
-            defaults.update({
-                'employee_can_move_to': True,
-                'employee_can_edit_tasks': True,
-                'lead_can_move_to': True,
-                'lead_can_edit_tasks': True,
-            })
-        elif position == 2:
-            defaults.update({
-                'employee_can_move_to': True,
-                'lead_can_move_to': True,
-                'lead_can_edit_tasks': True,
-            })
-        else:
-            defaults.update({
-                'lead_can_move_to': True,
-            })
-        return defaults
+        return {field_name: True for field_name in BoardColumn.PERMISSION_FIELDS}
 
     @staticmethod
     def default_notifications_for_position(position):
@@ -92,7 +82,11 @@ class BoardColumn(models.Model):
         }
 
     def save(self, *args, **kwargs):
-        if self._state.adding and not any(getattr(self, field_name) for field_name in self.PERMISSION_FIELDS):
+        action_permission_fields = [
+            field_name for field_name in self.PERMISSION_FIELDS
+            if not field_name.endswith('_can_view_column')
+        ]
+        if self._state.adding and not any(getattr(self, field_name) for field_name in action_permission_fields):
             for field_name, value in self.default_permissions_for_position(self.position).items():
                 setattr(self, field_name, value)
         client_notification_fields = (
@@ -111,6 +105,14 @@ class BoardColumn(models.Model):
 
 
 class Task(models.Model):
+    class CardColor(models.TextChoices):
+        DEFAULT = 'default', 'Domyslny'
+        GREEN = 'green', 'Zielony'
+        BLUE = 'blue', 'Niebieski'
+        YELLOW = 'yellow', 'Zolty'
+        RED = 'red', 'Czerwony'
+        VIOLET = 'violet', 'Fioletowy'
+
     class Priority(models.TextChoices):
         LOW = 'low', 'Niski'
         MEDIUM = 'medium', 'Średni'
@@ -125,13 +127,15 @@ class Task(models.Model):
     due_date = models.DateField(null=True, blank=True)
     priority = models.CharField(max_length=12, choices=Priority.choices, default=Priority.MEDIUM)
     labels = models.CharField(max_length=180, blank=True)
+    is_starred = models.BooleanField(default=False)
+    card_color = models.CharField(max_length=12, choices=CardColor.choices, default=CardColor.DEFAULT)
     position = models.PositiveIntegerField(default=0)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_tasks')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['column__position', 'position', '-created_at']
+        ordering = ['column__position', '-is_starred', 'position', '-created_at']
         indexes = [models.Index(fields=['project', 'column']), models.Index(fields=['assignee'])]
 
     def __str__(self):

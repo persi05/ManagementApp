@@ -1,9 +1,10 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from features.accounts.models import UserProfile, is_management, user_role
+from features.accounts.models import UserProfile, ensure_profile, is_management, user_role
 from features.accounts.permissions import management_required
 from features.projects.forms import ProjectAssignmentForm, ProjectForm, ProjectLabelRateForm
 from features.projects.models import ProjectAssignment, ProjectLabelRate
@@ -31,12 +32,26 @@ def projects(request):
             return redirect('projects')
     else:
         form = ProjectForm()
+    page_obj = Paginator(visible_projects(request.user).order_by('name', 'id'), 50).get_page(request.GET.get('page'))
     return render(request, 'features/projects.html', {
-        'projects': visible_projects(request.user),
+        'projects': page_obj.object_list,
+        'page_obj': page_obj,
         'form': form,
         'can_manage': is_management(request.user),
         'can_view_client_rates': can_view_client_rates,
+        'default_tasks_project_id': request.user.profile.default_tasks_project_id,
     })
+
+
+@login_required
+@require_POST
+def set_default_tasks_project(request, project_id):
+    project = get_object_or_404(visible_projects(request.user), pk=project_id)
+    profile = ensure_profile(request.user)
+    profile.default_tasks_project = project
+    profile.save(update_fields=['default_tasks_project'])
+    messages.success(request, f'Projekt {project.name} będzie otwierany domyślnie w zadaniach.')
+    return redirect('projects')
 
 
 @login_required

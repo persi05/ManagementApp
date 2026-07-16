@@ -10,9 +10,6 @@
   {% for item in projects %}<a class="{% if item.id == project.id %}active{% endif %}" href="{% url 'kanban_project' item.id %}">{{ item.name }}</a>{% endfor %}
 </div>
 {% if can_manage_board %}
-  <div class="kanban-toolbar">
-    <button type="button" class="primary-btn add-column-toggle" aria-expanded="false" aria-controls="add-column-panel">+</button>
-  </div>
   <div class="kanban-modal is-hidden" id="add-column-panel" role="dialog" aria-modal="true" aria-labelledby="add-column-title">
     <div class="kanban-modal-backdrop" data-close-add-column></div>
     <section class="kanban-modal-card">
@@ -33,18 +30,34 @@
       <header>
         <div class="column-title-wrap">
           <span class="column-title">{{ column.name }}</span>
-          <small class="column-count">{{ column.tasks.all|length }}</small>
         </div>
         <div class="column-actions">
-          <button type="button" class="column-add-task add-task-toggle" data-task-column="{{ column.id }}" aria-expanded="false" aria-controls="new-task-panel" aria-label="Dodaj zadanie do kolumny {{ column.name }}">+</button>
-          {% if can_manage_board %}
+          <small class="column-count" aria-label="Liczba zadan">{{ column.tasks.all|length }}</small>
+          {% if column.can_create_tasks %}
+            <button type="button" class="column-add-task add-task-toggle" data-task-column="{{ column.id }}" data-task-project="{{ column.project_id }}" aria-expanded="false" aria-controls="new-task-panel" aria-label="Dodaj zadanie do kolumny {{ column.name }}">+</button>
+          {% endif %}
+          {% if can_manage_column_settings %}
             <a class="column-edit-settings" href="{% url 'update_column' column.id %}" data-open-modal="edit-column-{{ column.id }}" aria-label="Edytuj kolumnę {{ column.name }}">⚙</a>
           {% endif %}
         </div>
       </header>
       <div class="kanban-dropzone">
         {% for task in column.tasks.all %}
-          <article class="kanban-card priority-card-{{ task.priority }}" draggable="{% if can_move_tasks %}true{% else %}false{% endif %}" data-task="{{ task.id }}" data-move-url="{% url 'move_task' task.id %}" data-open-modal="task-preview-{{ task.id }}" tabindex="0" role="button" aria-label="Otwórz podgląd zadania {{ task.title }}">
+          <article class="kanban-card card-color-{{ task.card_color }} priority-card-{{ task.priority }}{% if task.is_starred %} is-starred{% endif %}" draggable="{% if task.can_move %}true{% else %}false{% endif %}" data-task="{{ task.id }}" data-move-url="{% url 'move_task' task.id %}" data-card-settings-url="{% url 'update_task_card' task.id %}" data-open-modal="task-preview-{{ task.id }}" tabindex="0" role="button" aria-label="Otwórz podgląd zadania {{ task.title }}">
+            {% if task.can_edit %}
+              <div class="card-quick-actions">
+                <button type="button" class="card-star-toggle{% if task.is_starred %} active{% endif %}" data-toggle-star aria-pressed="{% if task.is_starred %}true{% else %}false{% endif %}" aria-label="{% if task.is_starred %}Usuń wyróżnienie{% else %}Wyróżnij zadanie{% endif %}">&#9733;</button>
+                <button type="button" class="card-color-toggle" data-toggle-colors aria-expanded="false" aria-label="Zmień kolor karty"><span></span></button>
+                <div class="card-color-menu is-hidden" data-color-menu>
+                  <button type="button" class="card-color-swatch card-color-swatch-default" data-card-color="default" aria-label="Kolor domyślny"></button>
+                  <button type="button" class="card-color-swatch card-color-swatch-green" data-card-color="green" aria-label="Kolor zielony"></button>
+                  <button type="button" class="card-color-swatch card-color-swatch-blue" data-card-color="blue" aria-label="Kolor niebieski"></button>
+                  <button type="button" class="card-color-swatch card-color-swatch-yellow" data-card-color="yellow" aria-label="Kolor żółty"></button>
+                  <button type="button" class="card-color-swatch card-color-swatch-red" data-card-color="red" aria-label="Kolor czerwony"></button>
+                  <button type="button" class="card-color-swatch card-color-swatch-violet" data-card-color="violet" aria-label="Kolor fioletowy"></button>
+                </div>
+              </div>
+            {% endif %}
             {% if task.label_badges %}
               <div class="tag-row card-labels-top">
                 {% for label in task.visible_label_badges %}
@@ -72,8 +85,16 @@
         {% empty %}
         {% endfor %}
       </div>
+      {% if column.can_create_tasks %}
+        <button type="button" class="column-add-card add-task-toggle" data-task-column="{{ column.id }}" data-task-project="{{ column.project_id }}" aria-expanded="false" aria-controls="new-task-panel"><span>+</span> Dodaj kartę</button>
+      {% endif %}
     </div>
   {% endfor %}
+  {% if can_manage_board %}
+    <div class="kanban-add-list-column">
+      <button type="button" class="kanban-add-list add-column-toggle" aria-expanded="false" aria-controls="add-column-panel"><span>+</span> Dodaj kolejną kolumnę</button>
+    </div>
+  {% endif %}
 </section>
 {% for column in columns %}
   {% for task in column.tasks.all %}
@@ -211,7 +232,7 @@
     </div>
   {% endfor %}
 {% endfor %}
-{% if can_manage_board %}
+{% if can_manage_column_settings %}
   {% for column in columns %}
     <div class="kanban-modal is-hidden" id="edit-column-{{ column.id }}" role="dialog" aria-modal="true" aria-labelledby="edit-column-title-{{ column.id }}">
       <div class="kanban-modal-backdrop" data-close-modal></div>
@@ -236,26 +257,45 @@
             </label>
             <small>Zadania z tej kolumny będą liczone w pasku postępu klienta jako zakończone.</small>
           </div>
-          <div class="column-permissions-grid">
-            <div class="column-permissions-head">Rola</div>
-            <div class="column-permissions-head">Przenoszenie</div>
-            <div class="column-permissions-head">Edycja</div>
-            <div class="column-permissions-head">Usuwanie</div>
-
-            <div class="column-role-label">Klient</div>
-            <label><input type="checkbox" name="client_can_move_to" {% if column.client_can_move_to %}checked{% endif %}> <span>Może</span></label>
-            <label><input type="checkbox" name="client_can_edit_tasks" {% if column.client_can_edit_tasks %}checked{% endif %}> <span>Może</span></label>
-            <label><input type="checkbox" name="client_can_delete_tasks" {% if column.client_can_delete_tasks %}checked{% endif %}> <span>Może</span></label>
-
-            <div class="column-role-label">Pracownik</div>
-            <label><input type="checkbox" name="employee_can_move_to" {% if column.employee_can_move_to %}checked{% endif %}> <span>Może</span></label>
-            <label><input type="checkbox" name="employee_can_edit_tasks" {% if column.employee_can_edit_tasks %}checked{% endif %}> <span>Może</span></label>
-            <label><input type="checkbox" name="employee_can_delete_tasks" {% if column.employee_can_delete_tasks %}checked{% endif %}> <span>Może</span></label>
-
-            <div class="column-role-label">Lead</div>
-            <label><input type="checkbox" name="lead_can_move_to" {% if column.lead_can_move_to %}checked{% endif %}> <span>Może</span></label>
-            <label><input type="checkbox" name="lead_can_edit_tasks" {% if column.lead_can_edit_tasks %}checked{% endif %}> <span>Może</span></label>
-            <label><input type="checkbox" name="lead_can_delete_tasks" {% if column.lead_can_delete_tasks %}checked{% endif %}> <span>Może</span></label>
+          <div class="column-permissions-wrap">
+            <table class="column-permissions-table">
+              <thead>
+                <tr>
+                  <th>Rola</th>
+                  <th>Widoczność</th>
+                  <th>Tworzenie</th>
+                  <th>Przenoszenie</th>
+                  <th>Edycja</th>
+                  <th>Usuwanie</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th>Klient</th>
+                  <td><label><input type="checkbox" name="client_can_view_column" {% if column.client_can_view_column %}checked{% endif %}> <span>Może</span></label></td>
+                  <td><label><input type="checkbox" name="client_can_create_tasks" {% if column.client_can_create_tasks %}checked{% endif %}> <span>Może</span></label></td>
+                  <td><label><input type="checkbox" name="client_can_move_to" {% if column.client_can_move_to %}checked{% endif %}> <span>Może</span></label></td>
+                  <td><label><input type="checkbox" name="client_can_edit_tasks" {% if column.client_can_edit_tasks %}checked{% endif %}> <span>Może</span></label></td>
+                  <td><label><input type="checkbox" name="client_can_delete_tasks" {% if column.client_can_delete_tasks %}checked{% endif %}> <span>Może</span></label></td>
+                </tr>
+                <tr>
+                  <th>Pracownik</th>
+                  <td><label><input type="checkbox" name="employee_can_view_column" {% if column.employee_can_view_column %}checked{% endif %}> <span>Może</span></label></td>
+                  <td><label><input type="checkbox" name="employee_can_create_tasks" {% if column.employee_can_create_tasks %}checked{% endif %}> <span>Może</span></label></td>
+                  <td><label><input type="checkbox" name="employee_can_move_to" {% if column.employee_can_move_to %}checked{% endif %}> <span>Może</span></label></td>
+                  <td><label><input type="checkbox" name="employee_can_edit_tasks" {% if column.employee_can_edit_tasks %}checked{% endif %}> <span>Może</span></label></td>
+                  <td><label><input type="checkbox" name="employee_can_delete_tasks" {% if column.employee_can_delete_tasks %}checked{% endif %}> <span>Może</span></label></td>
+                </tr>
+                <tr>
+                  <th>Lead</th>
+                  <td><label><input type="checkbox" name="lead_can_view_column" {% if column.lead_can_view_column %}checked{% endif %}> <span>Może</span></label></td>
+                  <td><label><input type="checkbox" name="lead_can_create_tasks" {% if column.lead_can_create_tasks %}checked{% endif %}> <span>Może</span></label></td>
+                  <td><label><input type="checkbox" name="lead_can_move_to" {% if column.lead_can_move_to %}checked{% endif %}> <span>Może</span></label></td>
+                  <td><label><input type="checkbox" name="lead_can_edit_tasks" {% if column.lead_can_edit_tasks %}checked{% endif %}> <span>Może</span></label></td>
+                  <td><label><input type="checkbox" name="lead_can_delete_tasks" {% if column.lead_can_delete_tasks %}checked{% endif %}> <span>Może</span></label></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
           <div class="column-notifications">
             <h3>Powiadomienia</h3>

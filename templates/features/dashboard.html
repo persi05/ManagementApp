@@ -59,9 +59,9 @@
         </div>
         <a href="{% url 'kanban' %}">Wszystkie →</a>
       </div>
-      <div class="widget-list">
+      <div class="widget-list" data-collapsible-list>
         {% for task in today_tasks %}
-          <a class="widget-row" href="{% url 'kanban_project' task.project_id %}">
+          <a class="widget-row{% if forloop.counter > 3 %} dashboard-extra-item{% endif %}" href="{% url 'kanban_project' task.project_id %}">
             <span class="priority {{ task.priority }}"></span>
             <strong>{{ task.title }}</strong>
             <em>{{ task.get_priority_display }}</em>
@@ -69,6 +69,7 @@
         {% empty %}
           <p class="empty compact">Brak zadań na dziś.</p>
         {% endfor %}
+        {% if today_tasks_extra_count %}<button class="dashboard-more-btn" type="button" data-list-expand data-more-count="{{ today_tasks_extra_count }}">+ {{ today_tasks_extra_count }} więcej</button>{% endif %}
       </div>
     </article>
 
@@ -80,9 +81,9 @@
           <p>{{ upcoming_deadlines|length }} terminów</p>
         </div>
       </div>
-      <div class="widget-list">
+      <div class="widget-list" data-collapsible-list>
         {% for task in upcoming_deadlines %}
-          <a class="widget-row" href="{% url 'kanban_project' task.project_id %}">
+          <a class="widget-row{% if forloop.counter > 3 %} dashboard-extra-item{% endif %}" href="{% url 'kanban_project' task.project_id %}">
             <span class="deadline-dot {{ task.priority }}"></span>
             <strong>{{ task.title }}</strong>
             <em>{% if task.due_date == today %}dziś{% else %}{{ task.due_date|date:"d.m" }}{% endif %}</em>
@@ -90,6 +91,7 @@
         {% empty %}
           <p class="empty compact">Brak nadchodzących terminów.</p>
         {% endfor %}
+        {% if upcoming_deadlines_extra_count %}<button class="dashboard-more-btn" type="button" data-list-expand data-more-count="{{ upcoming_deadlines_extra_count }}">+ {{ upcoming_deadlines_extra_count }} więcej</button>{% endif %}
       </div>
     </article>
 
@@ -134,9 +136,9 @@
         </div>
         <a href="{% url 'projects' %}">Wszystkie →</a>
       </div>
-      <div class="project-mini-list">
-        {% for row in project_rows|slice:":3" %}
-          <a href="{% url 'kanban_project' row.project.id %}">
+      <div class="project-mini-list" data-collapsible-list>
+        {% for row in project_rows %}
+          <a class="{% if forloop.counter > 3 %}dashboard-extra-item{% endif %}" href="{% url 'kanban_project' row.project.id %}">
             <span>{{ row.project.name }}</span>
             <div><i style="width: {{ row.progress }}%"></i></div>
             <em>{{ row.progress }}%</em>
@@ -144,6 +146,7 @@
         {% empty %}
           <p class="empty compact">Brak projektów.</p>
         {% endfor %}
+        {% if project_rows_extra_count %}<button class="dashboard-more-btn" type="button" data-list-expand data-more-count="{{ project_rows_extra_count }}">+ {{ project_rows_extra_count }} więcej</button>{% endif %}
       </div>
     </article>
 
@@ -156,9 +159,9 @@
         </div>
         <a href="{% url 'documents' %}">Pliki →</a>
       </div>
-      <div class="widget-list">
-        {% for document in recent_documents|slice:":3" %}
-          <a class="widget-row" href="{% url 'documents' %}?selected={{ document.id }}">
+      <div class="widget-list" data-collapsible-list>
+        {% for document in recent_documents %}
+          <a class="widget-row{% if forloop.counter > 3 %} dashboard-extra-item{% endif %}" href="{% url 'documents' %}?selected={{ document.id }}">
             <span class="file-badge">{{ document.extension|slice:":3" }}</span>
             <strong>{{ document.name }}</strong>
             <em>{{ document.modified_label }}</em>
@@ -166,6 +169,7 @@
         {% empty %}
           <p class="empty compact">Brak dokumentów.</p>
         {% endfor %}
+        {% if recent_documents_extra_count %}<button class="dashboard-more-btn" type="button" data-list-expand data-more-count="{{ recent_documents_extra_count }}">+ {{ recent_documents_extra_count }} więcej</button>{% endif %}
       </div>
     </article>
 
@@ -178,12 +182,13 @@
         </div>
         <a href="{% url 'notifications' %}">Zobacz →</a>
       </div>
-      <div class="notification-mini-list">
-        {% for notification in notifications|slice:":3" %}
-          <a href="{{ notification.url|default:'#' }}">{{ notification.content }}</a>
+      <div class="notification-mini-list" data-collapsible-list>
+        {% for notification in notifications %}
+          <a class="{% if forloop.counter > 3 %}dashboard-extra-item{% endif %}" href="{{ notification.url|default:'#' }}">{{ notification.content }}</a>
         {% empty %}
           <p class="empty compact">Brak nowych powiadomień.</p>
         {% endfor %}
+        {% if notifications_extra_count %}<button class="dashboard-more-btn" type="button" data-list-expand data-more-count="{{ notifications_extra_count }}">+ {{ notifications_extra_count }} więcej</button>{% endif %}
       </div>
     </article>
   </section>
@@ -271,9 +276,9 @@
       <a class="ghost-btn small-btn" href="{% url 'reports' %}?project={{ client_selected_project_row.project.id }}">Raport projektu</a>
     </div>
 
-    <div class="task-list">
+    <div class="task-list" data-collapsible-list>
       {% for task in client_project_tasks %}
-        <a href="{% url 'kanban_project' task.project_id %}" class="task-row">
+        <a href="{% url 'kanban_project' task.project_id %}" class="task-row{% if forloop.counter > 3 %} dashboard-extra-item{% endif %}">
           <span class="priority {{ task.priority }}"></span>
           <div><strong>{{ task.title }}</strong><small>{{ task.project.name }} / {{ task.column.name }}</small></div>
           <em>{{ task.client_hours|floatformat:2 }}h</em>
@@ -281,6 +286,7 @@
       {% empty %}
         <p class="empty">Brak zadań w tym projekcie.</p>
       {% endfor %}
+      {% if client_project_tasks_extra_count %}<button class="dashboard-more-btn" type="button" data-list-expand data-more-count="{{ client_project_tasks_extra_count }}">+ {{ client_project_tasks_extra_count }} więcej</button>{% endif %}
     </div>
   {% endif %}
 </section>
@@ -413,9 +419,9 @@
 
   <article class="panel dashboard-section" data-dashboard-widget="recent-tasks">
     <div class="panel-head"><div><h2>Ostatnie zadania</h2><p>Twoje zadania i zadania z dostępnych projektów.</p></div></div>
-    <div class="task-list">
+    <div class="task-list" data-collapsible-list>
       {% for task in tasks %}
-        <a href="{% url 'kanban_project' task.project_id %}" class="task-row">
+        <a href="{% url 'kanban_project' task.project_id %}" class="task-row{% if forloop.counter > 3 %} dashboard-extra-item{% endif %}">
           <span class="priority {{ task.priority }}"></span>
           <div><strong>{{ task.title }}</strong><small>{{ task.project.name }} / {{ task.column.name }}</small></div>
           <em>{{ task.total_hours|floatformat:2 }}h</em>
@@ -423,6 +429,7 @@
       {% empty %}
         <p class="empty">Brak zadań do pokazania.</p>
       {% endfor %}
+      {% if tasks_extra_count %}<button class="dashboard-more-btn" type="button" data-list-expand data-more-count="{{ tasks_extra_count }}">+ {{ tasks_extra_count }} więcej</button>{% endif %}
     </div>
   </article>
 </section>
@@ -430,14 +437,15 @@
 
 <section class="panel dashboard-section" data-dashboard-widget="project-list">
   <div class="panel-head"><div><h2>Projekty</h2><p>Zakres widoczny zgodnie z rolą.</p></div><a class="ghost-btn" href="{% url 'projects' %}">Zobacz wszystkie</a></div>
-  <div class="project-strip">
+  <div class="project-strip" data-collapsible-list>
     {% for project in projects %}
-      <a class="project-tile" href="{% url 'kanban_project' project.id %}">
+      <a class="project-tile{% if forloop.counter > 3 %} dashboard-extra-item{% endif %}" href="{% url 'kanban_project' project.id %}">
         <strong>{{ project.name }}</strong>
         <span>{{ project.get_status_display }}</span>
         <small>{{ project.visible_hours|floatformat:2 }}h widoczne dla klienta</small>
       </a>
     {% empty %}<p class="empty">Nie masz jeszcze przypisanych projektów.</p>{% endfor %}
+    {% if projects_extra_count %}<button class="dashboard-more-btn" type="button" data-list-expand data-more-count="{{ projects_extra_count }}">+ {{ projects_extra_count }} więcej</button>{% endif %}
   </div>
 </section>
 {% endif %}
@@ -491,6 +499,14 @@
       state = defaults;
       localStorage.removeItem(storageKey);
       applyState(state);
+    });
+
+    root.querySelectorAll('[data-list-expand]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const list = button.closest('[data-collapsible-list]');
+        const expanded = list?.classList.toggle('is-expanded');
+        button.textContent = expanded ? 'Zwiń' : `+ ${button.dataset.moreCount} więcej`;
+      });
     });
   })();
 </script>

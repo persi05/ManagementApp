@@ -29,10 +29,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .kanban-board {
-    grid-template-columns: repeat(2, minmax(260px, 1fr));
-  }
-
   .month-board {
     grid-template-columns: repeat(7, 150px);
     overflow-x: auto;
@@ -115,10 +111,6 @@
   .nav {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .column-permissions-grid {
-    grid-template-columns: 1fr;
   }
 
   .column-danger-zone {

@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 
 from features.accounts.models import UserProfile
 
-from .models import DocumentAccess, DocumentItem
+from .models import DocumentAccess, DocumentItem, DocumentVisibilityBlock
 
 
 def format_file_size(size):
@@ -76,11 +76,30 @@ class UploadDocumentForm(forms.ModelForm):
         return cleaned
 
 
+class DocumentVisibilityBlockForm(forms.ModelForm):
+    class Meta:
+        model = DocumentVisibilityBlock
+        fields = ('user',)
+        labels = {'user': 'Niewidoczne dla'}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['user'].queryset = User.objects.filter(is_active=True).order_by('username')
+
+
 class RenameDocumentForm(forms.ModelForm):
     class Meta:
         model = DocumentItem
         fields = ('name',)
         labels = {'name': 'Nowa nazwa'}
+
+
+class EditTextDocumentForm(forms.ModelForm):
+    class Meta:
+        model = DocumentItem
+        fields = ('name', 'content')
+        labels = {'name': 'Nazwa dokumentu', 'content': 'Treść'}
+        widgets = {'content': forms.Textarea(attrs={'rows': 7})}
 
 
 class DocumentAccessForm(forms.ModelForm):
