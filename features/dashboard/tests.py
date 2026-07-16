@@ -47,6 +47,15 @@ class RoutingTests(TestCase):
         self.assertEqual(reverse('time_entries'), '/app/time-entries/')
         self.assertEqual(reverse('calendar'), '/app/calendar/')
 
+    def test_dashboard_aliases_redirect_to_current_dashboard(self):
+        app_response = self.client.get('/app/')
+        legacy_response = self.client.get('/dashboard/')
+
+        self.assertEqual(app_response.status_code, 302)
+        self.assertEqual(app_response['Location'], reverse('dashboard'))
+        self.assertEqual(legacy_response.status_code, 302)
+        self.assertEqual(legacy_response['Location'], reverse('dashboard'))
+
     def test_root_renders_landing_page(self):
         response = self.client.get(reverse('landing'))
 
