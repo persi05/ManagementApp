@@ -6,7 +6,7 @@ import zipfile
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Q, Value, When
 from django.http import FileResponse, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -16,7 +16,7 @@ from django.views.decorators.http import require_POST
 from features.accounts.models import is_management
 
 from .forms import DocumentAccessForm, DocumentVisibilityBlockForm, EditTextDocumentForm, FolderForm, RenameDocumentForm, TextDocumentForm, UploadDocumentForm
-from .models import DocumentAccess, DocumentItem, DocumentVisibilityBlock
+from .models import DocumentAccess, DocumentItem, DocumentPin, DocumentVisibilityBlock
 
 
 TEXT_PREVIEW_EXTENSIONS = {
@@ -373,7 +373,7 @@ def documents(request):
             action = request.POST.get('action')
             if action == 'copy':
                 return HttpResponseForbidden('Kopiowanie dokumentów jest wyłączone.')
-            if action in {'archive', 'unarchive', 'delete', 'pin'} and not item.can_manage(request.user):
+            if action in {'archive', 'unarchive', 'delete'} and not item.can_manage(request.user):
                 return HttpResponseForbidden('Brak uprawnień do tej akcji.')
             if action == 'archive':
                 previous_parent = item.parent
@@ -393,8 +393,9 @@ def documents(request):
                 messages.success(request, 'Element został usunięty.')
                 return documents_redirect(parent=None if was_archived else previous_parent, archived=was_archived)
             if action == 'pin':
-                item.is_pinned = not item.is_pinned
-                item.save(update_fields=['is_pinned', 'updated_at'])
+                pin, created = DocumentPin.objects.get_or_create(item=item, user=request.user)
+                if not created:
+                    pin.delete()
                 return documents_redirect(
                     parent=None if item.is_archived else item.parent,
                     archived=item.is_archived,
@@ -418,6 +419,7 @@ def documents(request):
         current_items = items.filter(parent=parent)
     current_items = current_items.select_related('owner', 'parent').annotate(
         children_count=Count('children'),
+        is_pinned_by_user=Exists(DocumentPin.objects.filter(item_id=OuterRef('pk'), user=request.user)),
         kind_rank=Case(
             When(kind=DocumentItem.Kind.FOLDER, then=Value(0)),
             When(kind=DocumentItem.Kind.DOCUMENT, then=Value(1)),
@@ -426,7 +428,7 @@ def documents(request):
             output_field=IntegerField(),
         ),
     )
-    current_items = current_items.order_by('-is_pinned', 'kind_rank', 'name')
+    current_items = current_items.order_by('-is_pinned_by_user', 'kind_rank', 'name')
     if query:
         current_items = list(current_items)
         for item in current_items:

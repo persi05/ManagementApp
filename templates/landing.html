@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dcode Management</title>
-  <link rel="stylesheet" href="{% static 'features/app.css' %}?v=20260714-landing">
+  <link rel="stylesheet" href="{% static 'features/app.css' %}?v=20260716-landing-documents-label">
 </head>
 <body class="landing-body">
   <main class="landing-page">
@@ -26,28 +26,59 @@
 
     <section class="landing-hero">
       <div class="landing-copy">
-        <p class="eyebrow">Panel dla projektów, zadań i dokumentów</p>
+        <p class="landing-tag">Projekty · zadania · czas · raporty</p>
         <h1>Dcode Management</h1>
-        <p>
-          Jedno miejsce do obsługi klientów, projektów, zadań, czasu pracy,
-          dokumentów i raportów.
-        </p>
+        <p>Porządek w pracy zespołu. Pełny obraz projektu dla managementu, pracownika i klienta.</p>
         <div class="landing-actions">
           {% if user.is_authenticated %}
             <a class="primary-btn" href="{% url 'dashboard' %}">Otwórz panel</a>
             <a class="ghost-btn" href="{% url 'documents' %}">Dokumenty</a>
           {% else %}
             <a class="primary-btn" href="{% url 'accounts:login' %}">Zaloguj się</a>
-            <a class="ghost-btn" href="{% url 'accounts:register' %}">Utwórz konto</a>
+            <a class="ghost-btn landing-register-btn" href="{% url 'accounts:register' %}">Zarejestruj</a>
           {% endif %}
         </div>
       </div>
 
-      <div class="landing-panel" aria-label="Skróty systemu">
-        <div><span>01</span><strong>Projekty</strong><small>Statusy, klienci i stawki</small></div>
-        <div><span>02</span><strong>Zadania</strong><small>Tablice, etykiety i terminy</small></div>
-        <div><span>03</span><strong>Dokumenty</strong><small>Pliki, foldery i dostęp</small></div>
-        <div><span>04</span><strong>Raporty</strong><small>Czas pracy i rozliczenia</small></div>
+      <div class="landing-board-scene" aria-hidden="true">
+        <div class="landing-board-top"><span>Projekt mobilny</span><i></i><i></i><i></i></div>
+        <div class="landing-board-columns">
+          <div class="landing-board-column">
+            <strong>Do zrobienia <em>3</em></strong>
+            <span><i class="urgent"></i>Panel klienta<small>Termin 18.07</small></span>
+            <span><i></i>Widok dokumentów<small>Design</small></span>
+            <span><i></i>Eksport raportu<small>Backend</small></span>
+          </div>
+          <div class="landing-board-column active">
+            <strong>W toku <em>2</em></strong>
+            <span><i class="progress"></i>Tablica projektu<small>Pracuje: Anna</small></span>
+            <span><i></i>Ewidencja czasu<small>Pracuje: Michał</small></span>
+          </div>
+          <div class="landing-board-column done">
+            <strong>Zakończone <em>4</em></strong>
+            <span><i></i>Uprawnienia ról<small>Gotowe</small></span>
+            <span><i></i>Powiadomienia<small>Gotowe</small></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-stats" aria-label="Zakres systemu">
+      <div><strong>3</strong><span>role w jednym obiegu</span></div>
+      <div><strong>1</strong><span>spójna tablica projektu</span></div>
+      <div><strong>100%</strong><span>kontroli nad dostępem</span></div>
+      <div><strong>24/7</strong><span>dostęp do aktualnego statusu</span></div>
+    </section>
+
+    <section class="landing-routes">
+      <div class="landing-routes-head">
+        <p class="landing-tag">Jeden system</p>
+        <h2>Każdy widzi dokładnie to, czego potrzebuje.</h2>
+      </div>
+      <div class="landing-route-grid">
+        <article><span>01</span><h3>Management</h3><p>Projekty, zespół, stawki i raporty w jednym widoku.</p></article>
+        <article><span>02</span><h3>Pracownik</h3><p>Zadania, terminy, czas pracy i własne rozliczenie.</p></article>
+        <article><span>03</span><h3>Klient</h3><p>Postęp, zakończone prace, dokumenty i przejrzysty raport.</p></article>
       </div>
     </section>
   </main>

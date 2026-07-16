@@ -190,6 +190,10 @@
   margin-bottom: 16px;
 }
 
+[data-report-section][hidden] {
+  display: none !important;
+}
+
 .report-comment-button {
   white-space: nowrap;
 }

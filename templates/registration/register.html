@@ -6,7 +6,6 @@
 <section class="auth-panel">
   <form method="post" class="form-card">
     {% csrf_token %}
-    <p class="empty">Po rejestracji konto ma rolę Klient. Management może później zmienić rolę w panelu użytkowników.</p>
     {{ form.as_p }}
     <button class="primary-btn full">Zarejestruj</button>
     <a class="text-link" href="{% url 'accounts:login' %}">Mam już konto</a>

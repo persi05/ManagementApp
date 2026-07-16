@@ -468,9 +468,10 @@ def delete_task(request, task_id):
 
 @login_required
 def worklogs(request):
-    forbidden = worker_required(request.user)
-    if forbidden:
-        return forbidden
+    if request.method == 'POST':
+        forbidden = worker_required(request.user)
+        if forbidden:
+            return forbidden
 
     projects_qs = visible_projects(request.user)
     selected_project_id = optional_pk(request.POST.get('project') or request.GET.get('project'))
@@ -509,6 +510,7 @@ def worklogs(request):
     worklog_items = list(qs[:100])
     for item in worklog_items:
         item.can_edit = item.can_be_edited_by(request.user)
+        item.can_toggle_visibility = is_management(request.user) or item.user_id == request.user.id
     return render(request, 'features/worklogs.html', {
         'worklogs': worklog_items,
         'form': form,
@@ -553,10 +555,10 @@ def edit_worklog(request, worklog_id):
 def toggle_worklog_visibility(request, worklog_id):
     qs = TaskWorklog.objects.all() if is_management(request.user) else TaskWorklog.objects.filter(user=request.user)
     worklog = get_object_or_404(qs, pk=worklog_id)
-    if not worklog.can_be_edited_by(request.user):
-        return HttpResponseForbidden('Nie można już edytować tego czasu zadania.')
     worklog.visible_to_client = not worklog.visible_to_client
     worklog.save(update_fields=['visible_to_client'])
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'visible_to_client': worklog.visible_to_client})
     return redirect('worklogs')
 
 

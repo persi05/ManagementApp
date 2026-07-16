@@ -112,12 +112,12 @@
             <a class="document-search-path" href="{% url 'documents' %}{% if item.search_folder %}?folder={{ item.search_folder.id }}{% endif %}">Lokalizacja: {{ item.search_folder_path }}</a>
           {% endif %}
           </div>
-          <form method="post" class="document-pin {% if item.is_pinned %}active{% endif %}">
+          <form method="post" class="document-pin {% if item.is_pinned_by_user %}active{% endif %}">
             {% csrf_token %}
             <input type="hidden" name="form" value="action">
             <input type="hidden" name="item" value="{{ item.id }}">
             <input type="hidden" name="action" value="pin">
-            <button type="submit" aria-label="{% if item.is_pinned %}Odepnij{% else %}Przypnij{% endif %}">
+            <button type="submit" aria-label="{% if item.is_pinned_by_user %}Odepnij{% else %}Przypnij{% endif %}">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9Z"/></svg>
             </button>
           </form>
