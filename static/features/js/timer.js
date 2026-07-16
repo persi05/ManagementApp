@@ -3,9 +3,15 @@
   if (!timerRoot) return;
 
   const readout = timerRoot.querySelector('[data-timer-readout]');
-  const inactiveFields = document.querySelectorAll('[data-inactive-field]');
+  const controls = timerRoot.querySelector('[data-timer-controls]');
+  const initialProjectSelect = controls?.querySelector('select[name="project"]');
+  const projectOptionsHtml = initialProjectSelect ? initialProjectSelect.innerHTML : '<option value="">Bez projektu</option>';
+  let inactiveFields = document.querySelectorAll('[data-inactive-field]');
   const statusPill = timerRoot.querySelector('.status-pill');
   const statusUrl = timerRoot.dataset.statusUrl;
+  const csrfToken = timerRoot.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
+  const nextPath = timerRoot.querySelector('input[name="next"]')?.value || window.location.pathname;
+  const scrollStorageKey = `timer-scroll:${window.location.pathname}`;
 
   const state = {
     timerState: timerRoot.dataset.state || 'stopped',
@@ -17,6 +23,19 @@
   let lastActivity = Date.now();
   let warned = false;
   let modalShown = false;
+
+  const rememberScroll = () => {
+    sessionStorage.setItem(scrollStorageKey, String(window.scrollY));
+  };
+
+  const restoreScroll = () => {
+    const stored = sessionStorage.getItem(scrollStorageKey);
+    if (stored === null) return;
+    sessionStorage.removeItem(scrollStorageKey);
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: Number(stored) || 0, left: 0, behavior: 'auto' });
+    });
+  };
 
   const format = (seconds) => {
     const value = Math.max(0, Math.floor(seconds));
@@ -45,7 +64,54 @@
     field.value = newInactiveSeconds;
   });
 
+  const hiddenFields = (includeInactive = false) => `
+    <input type="hidden" name="csrfmiddlewaretoken" value="${csrfToken}">
+    <input type="hidden" name="next" value="${nextPath}">
+    ${includeInactive ? '<input type="hidden" name="inactive_seconds" data-inactive-field value="0">' : ''}
+  `;
+
+  const renderControls = () => {
+    if (!controls) return;
+
+    if (state.timerState === 'stopped') {
+      controls.innerHTML = `
+        <form method="post" action="${timerRoot.dataset.startUrl}" class="inline-form">
+          ${hiddenFields(true)}
+          <select name="project">${projectOptionsHtml}</select>
+          <button class="primary-btn">Start</button>
+        </form>
+      `;
+    } else {
+      const resumeOrPause = state.timerState === 'paused'
+        ? `
+          <form method="post" action="${timerRoot.dataset.resumeUrl}" class="inline-form">
+            ${hiddenFields(false)}
+            <button class="primary-btn">Wzn&oacute;w</button>
+          </form>
+        `
+        : `
+          <form method="post" action="${timerRoot.dataset.pauseUrl}" class="inline-form">
+            ${hiddenFields(true)}
+            <button class="ghost-btn">Pauza</button>
+          </form>
+        `;
+
+      controls.innerHTML = `
+        <form method="post" action="${timerRoot.dataset.stopUrl}" class="inline-form">
+          ${hiddenFields(true)}
+          <button class="danger-btn">Zako&nacute;cz i zapisz</button>
+        </form>
+        ${resumeOrPause}
+      `;
+    }
+
+    inactiveFields = document.querySelectorAll('[data-inactive-field]');
+    setInactive();
+    bindTimerForms();
+  };
+
   const applyStatus = (payload) => {
+    const previousTimerState = state.timerState;
     const nextTimerState = payload.state || 'stopped';
     const serverActiveSeconds = Number(payload.active_seconds || 0);
     const localActiveSeconds = activeSecondsNow();
@@ -67,8 +133,50 @@
       statusPill.textContent = payload.state_label || 'Nieaktywny';
       statusPill.classList.toggle('ok', Boolean(payload.active));
     }
+    if (previousTimerState !== state.timerState) {
+      renderControls();
+    }
     render();
   };
+
+  const submitTimerForm = async (form) => {
+    setInactive();
+    rememberScroll();
+    const submitButtons = form.querySelectorAll('button');
+    submitButtons.forEach((button) => {
+      button.disabled = true;
+    });
+
+    try {
+      const response = await fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+      });
+      if (!response.ok) {
+        form.submit();
+        return;
+      }
+      newInactiveSeconds = 0;
+      applyStatus(await response.json());
+      setInactive();
+    } catch (error) {
+      form.submit();
+    }
+  };
+
+  function bindTimerForms() {
+    if (!controls) return;
+    controls.querySelectorAll('form').forEach((form) => {
+      if (form.dataset.ajaxBound) return;
+      form.dataset.ajaxBound = 'true';
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitTimerForm(form);
+      });
+    });
+  }
 
   const pollStatus = async () => {
     if (!statusUrl) return;
@@ -117,6 +225,8 @@
 
   render();
   setInactive();
+  bindTimerForms();
+  restoreScroll();
   pollStatus();
 
   setInterval(() => {

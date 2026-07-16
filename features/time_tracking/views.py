@@ -62,6 +62,17 @@ def timer_payload(user):
     }
 
 
+def wants_json(request):
+    return request.headers.get('x-requested-with') == 'XMLHttpRequest'
+
+
+def timer_action_response(request, message, level='success'):
+    if wants_json(request):
+        return JsonResponse(timer_payload(request.user))
+    getattr(messages, level)(request, message)
+    return redirect(request.POST.get('next') or reverse('dashboard'))
+
+
 @login_required
 def time_entries(request):
     forbidden = worker_required(request.user)
@@ -141,8 +152,7 @@ def start_timer(request):
     project = visible_projects(request.user).filter(pk=project_id).first() if project_id else None
     task = visible_tasks(request.user).filter(pk=task_id).first() if task_id else None
     WorkSession.objects.create(user=request.user, project=project, task=task)
-    messages.success(request, 'Licznik został uruchomiony.')
-    return redirect(request.POST.get('next') or reverse('dashboard'))
+    return timer_action_response(request, 'Licznik został uruchomiony.')
 
 
 @login_required
@@ -165,8 +175,7 @@ def pause_timer(request):
     session.paused_at = timezone.now()
     session.set_inactive_seconds(session.total_inactive_seconds + posted_inactive_seconds(request))
     session.save(update_fields=['state', 'paused_at', 'inactive_minutes', 'inactive_seconds'])
-    messages.info(request, 'Licznik został zatrzymany na pauzie.')
-    return redirect(request.POST.get('next') or reverse('dashboard'))
+    return timer_action_response(request, 'Licznik został zatrzymany na pauzie.', 'info')
 
 
 @login_required
@@ -181,8 +190,7 @@ def resume_timer(request):
     session.state = WorkSession.State.RUNNING
     session.paused_at = None
     session.save(update_fields=['inactive_minutes', 'inactive_seconds', 'state', 'paused_at'])
-    messages.success(request, 'Licznik został wznowiony.')
-    return redirect(request.POST.get('next') or reverse('dashboard'))
+    return timer_action_response(request, 'Licznik został wznowiony.')
 
 
 @login_required
@@ -212,5 +220,4 @@ def stop_timer(request):
             inactive_seconds=session.inactive_seconds,
             comment='Utworzone z licznika czasu.',
         )
-    messages.success(request, 'Sesja pracy została zakończona i zapisana.')
-    return redirect(request.POST.get('next') or reverse('dashboard'))
+    return timer_action_response(request, 'Sesja pracy została zakończona i zapisana.')
