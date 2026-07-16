@@ -129,6 +129,24 @@ class RegistrationTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    def test_registration_hides_rules_until_validation_fails(self):
+        response = self.client.get(reverse('accounts:register'))
+
+        self.assertNotContains(response, 'Po rejestracji konto ma rolę Klient')
+        self.assertNotContains(response, '150 lub mniej znaków')
+        self.assertNotContains(response, 'Wprowadź to samo hasło ponownie')
+
+        invalid_response = self.client.post(reverse('accounts:register'), {
+            'username': 'newclient',
+            'email': 'client@example.com',
+            'first_name': 'Jan',
+            'last_name': 'Klient',
+            'password1': '123',
+            'password2': '123',
+        })
+
+        self.assertContains(invalid_response, 'co najmniej 8 znaków')
+
 class AdminAccessTests(TestCase):
     def test_admin_is_forbidden_for_non_superuser(self):
         user = User.objects.create_user(username='employee', password='pass', is_staff=True)
@@ -385,7 +403,7 @@ class TimeAccountingTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
 
-    def test_friday_work_time_can_be_edited_until_monday_end(self):
+    def test_employee_work_time_can_be_edited_until_end_of_first_next_month_day(self):
         user = User.objects.create_user(username='employee', password='pass')
         user.profile.role = UserProfile.Role.EMPLOYEE
         user.profile.save()
@@ -402,11 +420,11 @@ class TimeAccountingTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         entry = TimeEntry.objects.get(user=user)
-        self.assertEqual(timezone.localtime(entry.editable_until).date(), date(2026, 7, 6))
+        self.assertEqual(timezone.localtime(entry.editable_until).date(), date(2026, 8, 1))
 
-        with patch('features.time_tracking.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 7, 6, 22, 0))):
+        with patch('features.time_tracking.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 8, 1, 22, 0))):
             self.assertTrue(entry.can_be_edited_by(user))
-        with patch('features.time_tracking.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 7, 7, 0, 1))):
+        with patch('features.time_tracking.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 8, 2, 0, 1))):
             self.assertFalse(entry.can_be_edited_by(user))
 
     def test_management_can_edit_work_time_only_until_month_end(self):
@@ -456,7 +474,7 @@ class TimeAccountingTests(TestCase):
 
         self.assertEqual(payroll, Decimal('61.00'))
 
-    def test_employee_can_edit_task_worklog_only_same_day(self):
+    def test_employee_can_edit_task_worklog_until_end_of_first_next_month_day(self):
         user = User.objects.create_user(username='employee', password='pass')
         user.profile.role = UserProfile.Role.EMPLOYEE
         user.profile.save()
@@ -465,9 +483,9 @@ class TimeAccountingTests(TestCase):
         task = Task.objects.create(project=project, column=column, title='Task')
         worklog = TaskWorklog.objects.create(task=task, user=user, date=date(2026, 7, 6), hours=Decimal('1.20'))
 
-        with patch('features.tasks.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 7, 6, 23, 0))):
+        with patch('features.tasks.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 8, 1, 23, 0))):
             self.assertTrue(worklog.can_be_edited_by(user))
-        with patch('features.tasks.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 7, 7, 0, 1))):
+        with patch('features.tasks.models.timezone.now', return_value=timezone.make_aware(datetime(2026, 8, 2, 0, 1))):
             self.assertFalse(worklog.can_be_edited_by(user))
 
     def test_time_entries_show_total_hours_for_selected_month(self):
@@ -493,6 +511,61 @@ class TimeAccountingTests(TestCase):
 
         self.assertContains(response, 'Suma godzin')
         self.assertContains(response, '3,50h')
+
+    def test_time_entry_defaults_to_current_time_and_eight_hours_later(self):
+        user = User.objects.create_user(username='employee-default-time', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        self.client.force_login(user)
+
+        response = self.client.get(reverse('time_entries'))
+        initial = response.context['form'].initial
+
+        self.assertEqual(initial['end'] - initial['start'], timedelta(hours=8))
+
+    def test_worklog_visibility_uses_switch_without_separate_toggle_button(self):
+        user = User.objects.create_user(username='employee-switch', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        project = Project.objects.create(name='Switch project')
+        ProjectAssignment.objects.create(project=project, user=user)
+        column = BoardColumn.objects.create(project=project, name='Do zrobienia')
+        task = Task.objects.create(project=project, column=column, title='Switch task')
+        TaskWorklog.objects.create(task=task, user=user, date=timezone.localdate(), hours=Decimal('1.00'), visible_to_client=True)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse('worklogs'), {'project': project.id})
+
+        self.assertContains(response, 'visibility-switch')
+        self.assertContains(response, 'Widzi')
+        self.assertNotContains(response, '>Przelacz<')
+
+        toggle_response = self.client.post(
+            reverse('toggle_worklog_visibility', args=[TaskWorklog.objects.get(user=user).id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(toggle_response.status_code, 200)
+        self.assertFalse(toggle_response.json()['visible_to_client'])
+
+    def test_client_does_not_see_worklog_visibility_status(self):
+        client = User.objects.create_user(username='worklog-client', password='pass')
+        employee = User.objects.create_user(username='worklog-owner', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Client worklog project', client=client)
+        ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
+        column = BoardColumn.objects.create(project=project, name='Zakończone', is_done_column=True)
+        task = Task.objects.create(project=project, column=column, title='Client task')
+        TaskWorklog.objects.create(task=task, user=employee, date=timezone.localdate(), hours=Decimal('1.00'), visible_to_client=True)
+        self.client.force_login(client)
+
+        response = self.client.get(reverse('worklogs'), {'project': project.id})
+
+        self.assertNotContains(response, 'visibility-switch')
+        self.assertNotContains(response, 'Nie widzi')
+        self.assertNotContains(response, '>Widzi<')
 
     def test_worklogs_filter_entries_and_task_choices_by_project(self):
         user = User.objects.create_user(username='employee', password='pass')

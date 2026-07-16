@@ -1,5 +1,5 @@
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -120,7 +120,8 @@ def time_entries(request):
             messages.success(request, 'Wpis czasu został zapisany.')
             return redirect('time_entries')
     else:
-        form = TimeEntryForm(initial={'start': timezone.localtime().replace(second=0, microsecond=0)})
+        default_start = timezone.localtime().replace(second=0, microsecond=0)
+        form = TimeEntryForm(initial={'start': default_start, 'end': default_start + timedelta(hours=8)})
 
     qs = TimeEntry.objects.select_related('project', 'task', 'user').filter(user=request.user, start__gte=start_dt, start__lt=end_dt)
     entries = list(qs)

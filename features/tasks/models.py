@@ -201,7 +201,11 @@ class TaskWorklog(models.Model):
 
     @staticmethod
     def employee_edit_deadline(worklog_date):
-        return timezone.make_aware(datetime.combine(worklog_date, time.max))
+        if worklog_date.month == 12:
+            first_next_month = worklog_date.replace(year=worklog_date.year + 1, month=1, day=1)
+        else:
+            first_next_month = worklog_date.replace(month=worklog_date.month + 1, day=1)
+        return timezone.make_aware(datetime.combine(first_next_month, time.max))
 
     @staticmethod
     def management_edit_deadline(worklog_date):

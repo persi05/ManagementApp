@@ -17,8 +17,12 @@ def local_day_end(value):
 
 def employee_time_entry_edit_deadline(start):
     local_start = timezone.localtime(start)
-    days = 3 if local_start.weekday() == 4 else 1
-    return local_day_end(local_start.date() + timedelta(days=days))
+    local_date = local_start.date()
+    if local_date.month == 12:
+        first_next_month = local_date.replace(year=local_date.year + 1, month=1, day=1)
+    else:
+        first_next_month = local_date.replace(month=local_date.month + 1, day=1)
+    return local_day_end(first_next_month)
 
 
 def month_edit_deadline(value):
@@ -76,7 +80,7 @@ class TimeEntry(models.Model):
         now = timezone.now()
         if is_management(user):
             return now <= month_edit_deadline(self.start)
-        return self.user_id == user.id and now <= self.editable_until
+        return self.user_id == user.id and now <= employee_time_entry_edit_deadline(self.start)
 
 
 class WorkSession(models.Model):

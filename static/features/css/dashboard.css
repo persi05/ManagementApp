@@ -24,7 +24,7 @@
   display: grid;
   grid-template-columns: 2fr 1fr 1fr;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
   grid-auto-flow: dense;
 }
 
@@ -694,15 +694,14 @@
 .project-actions {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
 .time-history-tools {
-  display: grid;
-  justify-items: end;
-  gap: 8px;
-  margin-left: auto;
+  display: contents;
 }
 
 .time-history-tools .panel-summary {
@@ -710,6 +709,15 @@
   gap: 16px;
   margin: 0;
   white-space: nowrap;
+  grid-column: 2;
+  justify-self: center;
+}
+
+.time-history-panel .panel-head {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
+  align-items: center;
+  gap: 18px;
 }
 
 .time-month-filter {
@@ -720,21 +728,29 @@
   justify-content: flex-end;
   padding: 0;
   margin-bottom: 0;
+  grid-column: 3;
+  justify-self: end;
 }
 
 .time-month-filter input {
   width: 170px;
 }
 
-@media (max-width: 760px) {
-  .time-history-tools {
-    width: 100%;
-    justify-items: stretch;
+@media (max-width: 900px) {
+  .time-history-panel .panel-head {
+    grid-template-columns: 1fr;
   }
 
   .time-history-tools .panel-summary {
+    grid-column: 1;
+    justify-self: start;
     flex-wrap: wrap;
     white-space: normal;
+  }
+
+  .time-month-filter {
+    grid-column: 1;
+    justify-self: start;
   }
 }
 

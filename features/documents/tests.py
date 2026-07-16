@@ -11,7 +11,7 @@ from django.urls import reverse
 
 from features.accounts.models import UserProfile
 
-from .models import DocumentAccess, DocumentItem, DocumentVisibilityBlock
+from .models import DocumentAccess, DocumentItem, DocumentPin, DocumentVisibilityBlock
 
 
 class DocumentTests(TestCase):
@@ -591,6 +591,25 @@ class DocumentTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], f'{reverse("documents")}?folder={folder.id}')
+
+    def test_client_can_pin_visible_document_without_affecting_other_users(self):
+        owner = User.objects.create_user(username='pin-owner', password='pass')
+        client = User.objects.create_user(username='pin-client', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        document = DocumentItem.objects.create(owner=owner, name='Shared file', kind=DocumentItem.Kind.DOCUMENT)
+        DocumentAccess.objects.create(item=document, user=client)
+        self.client.force_login(client)
+
+        response = self.client.post(reverse('documents'), {
+            'form': 'action',
+            'item': document.id,
+            'action': 'pin',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(DocumentPin.objects.filter(item=document, user=client).exists())
+        self.assertFalse(DocumentPin.objects.filter(item=document, user=owner).exists())
 
     def test_folder_can_open_management_panel_without_preview(self):
         user = User.objects.create_user(username='owner', password='pass')

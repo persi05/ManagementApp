@@ -12,6 +12,11 @@ class RegisterForm(UserCreationForm):
         model = User
         fields = ('username', 'email', 'first_name', 'last_name', 'password1', 'password2')
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.help_text = ''
+
 
 class AccountForm(forms.ModelForm):
     class Meta:

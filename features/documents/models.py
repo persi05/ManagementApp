@@ -166,3 +166,17 @@ class DocumentVisibilityBlock(models.Model):
 
     def __str__(self):
         return f'{self.item} hidden from {self.user.get_username()}'
+
+
+class DocumentPin(models.Model):
+    item = models.ForeignKey(DocumentItem, on_delete=models.CASCADE, related_name='user_pins')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='document_pins')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=('item', 'user'), name='unique_document_pin_per_user'),
+        ]
+
+    def __str__(self):
+        return f'{self.user.get_username()} pinned {self.item}'
