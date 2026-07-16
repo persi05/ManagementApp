@@ -3,6 +3,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 
 from features.accounts.models import UserProfile
+from features.projects.selectors import visible_projects
 
 from .models import DocumentAccess, DocumentItem, DocumentVisibilityBlock
 
@@ -33,29 +34,41 @@ def validate_user_file_limit(user):
         raise forms.ValidationError(f'Osiagnieto limit {settings.DOCUMENTS_MAX_FILES_PER_USER} plikow dla tego uzytkownika.')
 
 
-class FolderForm(forms.ModelForm):
-    class Meta:
-        model = DocumentItem
-        fields = ('name',)
-        labels = {'name': 'Nazwa folderu'}
+class DocumentProjectFieldMixin:
+    def __init__(self, *args, user=None, parent=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        project_field = self.fields['project']
+        project_field.queryset = visible_projects(user).order_by('name') if user else project_field.queryset.none()
+        project_field.required = False
+        project_field.empty_label = 'Prywatne'
+        project_field.help_text = 'Po przypisaniu wszyscy członkowie projektu zobaczą ten element.'
+        if not self.is_bound and not self.instance.pk and parent and parent.project_id:
+            self.initial['project'] = parent.project_id
 
 
-class TextDocumentForm(forms.ModelForm):
+class FolderForm(DocumentProjectFieldMixin, forms.ModelForm):
     class Meta:
         model = DocumentItem
-        fields = ('name', 'content')
-        labels = {'name': 'Nazwa dokumentu', 'content': 'Treść'}
+        fields = ('name', 'project')
+        labels = {'name': 'Nazwa folderu', 'project': 'Projekt'}
+
+
+class TextDocumentForm(DocumentProjectFieldMixin, forms.ModelForm):
+    class Meta:
+        model = DocumentItem
+        fields = ('name', 'content', 'project')
+        labels = {'name': 'Nazwa dokumentu', 'content': 'Treść', 'project': 'Projekt'}
         widgets = {'content': forms.Textarea(attrs={'rows': 5})}
 
 
-class UploadDocumentForm(forms.ModelForm):
+class UploadDocumentForm(DocumentProjectFieldMixin, forms.ModelForm):
     class Meta:
         model = DocumentItem
-        fields = ('name', 'file')
-        labels = {'name': 'Nazwa', 'file': 'Plik lub zdjęcie'}
+        fields = ('name', 'file', 'project')
+        labels = {'name': 'Nazwa', 'file': 'Plik lub zdjęcie', 'project': 'Projekt'}
 
-    def __init__(self, *args, user=None, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, user=None, parent=None, **kwargs):
+        super().__init__(*args, user=user, parent=parent, **kwargs)
         self.user = user
         self.fields['name'].required = False
 
@@ -100,6 +113,13 @@ class EditTextDocumentForm(forms.ModelForm):
         fields = ('name', 'content')
         labels = {'name': 'Nazwa dokumentu', 'content': 'Treść'}
         widgets = {'content': forms.Textarea(attrs={'rows': 7})}
+
+
+class DocumentProjectForm(DocumentProjectFieldMixin, forms.ModelForm):
+    class Meta:
+        model = DocumentItem
+        fields = ('project',)
+        labels = {'project': 'Projekt'}
 
 
 class DocumentAccessForm(forms.ModelForm):

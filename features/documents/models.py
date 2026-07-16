@@ -21,6 +21,13 @@ class DocumentItem(models.Model):
     file = models.FileField(upload_to='documents/%Y/%m/', blank=True)
     content = models.TextField(blank=True)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='document_items')
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='document_items',
+    )
     is_pinned = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -47,16 +54,23 @@ class DocumentItem(models.Model):
         role = user_role(user)
         return qs.filter(
             Q(owner=user)
+            | Q(project__members=user)
+            | Q(project__client=user)
             | Q(accesses__user=user)
             | Q(accesses__role=role)
             | Q(parent__accesses__user=user)
             | Q(parent__accesses__role=role)
             | Q(parent__owner=user)
+            | Q(parent__project__members=user)
+            | Q(parent__project__client=user)
             | Q(task_attachments__task__project__members=user)
             | Q(task_attachments__task__project__client=user)
             | Q(task_attachments__task__assignee=user)
             | Q(task_attachments__task__assignees=user)
         ).distinct()
+
+    def can_assign_project(self, user):
+        return is_management(user) or self.owner_id == user.id
 
     @property
     def is_file_like(self):

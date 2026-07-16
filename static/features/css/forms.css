@@ -71,9 +71,23 @@ textarea {
   width: 100%;
 }
 
+.task-modal-label-field {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.task-modal-label-field .label-transfer {
+  justify-self: start;
+  margin-left: 0;
+}
+
 .task-modal-form .label-transfer {
-  grid-template-columns: minmax(170px, 1fr) 84px minmax(170px, 1fr) minmax(160px, .85fr);
-  align-items: end;
+  grid-template-columns: minmax(220px, 1fr) 126px minmax(220px, 1fr) minmax(220px, .8fr);
+  align-items: start;
+  gap: 14px;
+  max-width: 100%;
 }
 
 .task-modal-form p:has(.label-transfer),
@@ -113,10 +127,7 @@ textarea {
 
 .task-modal-form p:has([data-task-field="labels"]) {
   max-width: 100%;
-}
-
-.task-modal-form .label-transfer-new {
-  grid-column: 4;
+  justify-self: start;
 }
 
 .task-modal-form p:has([data-task-field="assignees"]) {
@@ -124,18 +135,30 @@ textarea {
 }
 
 .task-modal-form .label-transfer-new {
-  grid-column: 1;
-  grid-template-columns: 1fr;
+  grid-column: 4;
+  grid-row: 1;
   align-items: start;
+  max-width: none;
+}
+
+.task-modal-form .label-transfer-panel > span {
+  min-height: 18px;
+}
+
+.task-modal-form .label-transfer-controls {
+  padding-top: 24px;
+}
+
+.task-modal-form .label-transfer-panel {
+  gap: 4px;
+}
+
+.task-modal-form .label-transfer-new-row {
+  grid-template-columns: 1fr;
 }
 
 .task-modal-form .label-transfer-new > span {
   grid-column: 1 / -1;
-}
-
-.task-modal-form .label-transfer-new button {
-  width: 100%;
-  min-width: 0;
 }
 
 .form-card label,
@@ -315,7 +338,7 @@ textarea {
   font-size: 12px;
   font-weight: 800;
   line-height: 1.25;
-  min-height: 30px;
+  min-height: 20px;
 }
 
 .label-transfer-box {
@@ -372,7 +395,7 @@ textarea {
 }
 
 .label-transfer-controls .tiny-btn {
-  width: 112px;
+  width: 100%;
   min-height: 38px;
   justify-content: center;
   white-space: nowrap;
@@ -396,6 +419,13 @@ textarea {
   z-index: 0;
 }
 
+.label-transfer-new-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  align-items: end;
+}
+
 .label-transfer-new > span {
   color: var(--muted);
   font-size: 12px;
@@ -415,6 +445,7 @@ textarea {
 .label-transfer-new button {
   min-height: 34px;
   font-weight: 850;
+  white-space: nowrap;
 }
 
 .assignee-picker {
@@ -586,12 +617,14 @@ textarea {
 
 @media (max-width: 900px) {
   .task-modal-form .label-transfer {
-    grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) 116px minmax(0, 1fr);
+    max-width: 100%;
   }
 
   .task-modal-form .label-transfer-new {
     grid-column: 1 / -1;
-    grid-template-columns: minmax(0, 1fr) 132px;
+    grid-row: 2;
+    max-width: 470px;
   }
 }
 
@@ -643,7 +676,17 @@ textarea {
     padding-top: 0;
   }
 
+  .task-modal-form .label-transfer-controls {
+    padding-top: 0;
+  }
+
   .task-modal-form .label-transfer-new {
+    grid-column: 1;
+    grid-row: auto;
+    max-width: none;
+  }
+
+  .label-transfer-new-row {
     grid-template-columns: 1fr;
   }
 

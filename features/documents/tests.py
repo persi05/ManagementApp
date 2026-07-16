@@ -10,6 +10,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from features.accounts.models import UserProfile
+from features.projects.models import Project, ProjectAssignment
 
 from .models import DocumentAccess, DocumentItem, DocumentPin, DocumentVisibilityBlock
 
@@ -52,6 +53,46 @@ class DocumentTests(TestCase):
         document = DocumentItem.objects.get(name='Opis API')
         self.assertEqual(document.parent, folder)
         self.assertEqual(document.owner, user)
+
+    def test_creator_can_assign_new_folder_document_file_and_image_to_project(self):
+        user = User.objects.create_user(username='project-creator', password='pass')
+        project = Project.objects.create(name='Projekt materiałów')
+        ProjectAssignment.objects.create(project=project, user=user)
+        self.client.force_login(user)
+
+        self.client.post(reverse('documents'), {
+            'form': 'folder',
+            'name': 'Folder projektu',
+            'project': project.id,
+        })
+        self.client.post(reverse('documents'), {
+            'form': 'document',
+            'name': 'Opis projektu',
+            'content': 'Treść',
+            'project': project.id,
+        })
+        self.client.post(reverse('documents'), {
+            'form': 'upload',
+            'name': 'Plik projektu',
+            'project': project.id,
+            'file': SimpleUploadedFile('projekt.txt', b'tresc', content_type='text/plain'),
+        })
+        self.client.post(reverse('documents'), {
+            'form': 'upload',
+            'name': 'Zdjęcie projektu',
+            'project': project.id,
+            'file': SimpleUploadedFile('projekt.png', b'png', content_type='image/png'),
+        })
+
+        items = DocumentItem.objects.filter(owner=user).order_by('name')
+        self.assertEqual(items.count(), 4)
+        self.assertFalse(items.exclude(project=project).exists())
+        self.assertEqual(set(items.values_list('kind', flat=True)), {
+            DocumentItem.Kind.FOLDER,
+            DocumentItem.Kind.DOCUMENT,
+            DocumentItem.Kind.FILE,
+            DocumentItem.Kind.IMAGE,
+        })
 
     def test_role_access_makes_document_visible(self):
         owner = User.objects.create_user(username='owner', password='pass')
@@ -176,6 +217,96 @@ class DocumentTests(TestCase):
         self.assertContains(response, 'Brief')
         self.assertFalse(document.can_edit(employee))
         self.assertFalse(document.can_manage(employee))
+
+    def test_project_client_and_members_can_see_assigned_document(self):
+        owner = User.objects.create_user(username='document-owner', password='pass')
+        client = User.objects.create_user(username='project-client', password='pass')
+        employee = User.objects.create_user(username='project-employee', password='pass')
+        outsider = User.objects.create_user(username='project-outsider', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Wspólny projekt', client=client)
+        ProjectAssignment.objects.create(project=project, user=employee)
+        document = DocumentItem.objects.create(
+            owner=owner,
+            name='Dokument projektu',
+            kind=DocumentItem.Kind.DOCUMENT,
+            project=project,
+        )
+
+        self.assertTrue(DocumentItem.visible_to(client).filter(pk=document.pk).exists())
+        self.assertTrue(DocumentItem.visible_to(employee).filter(pk=document.pk).exists())
+        self.assertFalse(DocumentItem.visible_to(outsider).filter(pk=document.pk).exists())
+        self.assertFalse(document.can_edit(employee))
+        self.assertFalse(document.can_manage(employee))
+
+    def test_owner_can_assign_document_only_to_visible_project(self):
+        owner = User.objects.create_user(username='project-owner', password='pass')
+        shared_user = User.objects.create_user(username='shared-user', password='pass')
+        visible_project = Project.objects.create(name='Widoczny projekt')
+        hidden_project = Project.objects.create(name='Ukryty projekt')
+        ProjectAssignment.objects.create(project=visible_project, user=owner)
+        document = DocumentItem.objects.create(
+            owner=owner,
+            name='Do przypisania',
+            kind=DocumentItem.Kind.DOCUMENT,
+        )
+        DocumentAccess.objects.create(item=document, user=shared_user, can_edit=True, can_manage=True)
+
+        self.client.force_login(owner)
+        page = self.client.get(reverse('documents'), {'selected': document.id})
+        assign_response = self.client.post(reverse('documents'), {
+            'form': 'project',
+            'item': document.id,
+            'project': visible_project.id,
+        })
+        hidden_response = self.client.post(reverse('documents'), {
+            'form': 'project',
+            'item': document.id,
+            'project': hidden_project.id,
+        })
+
+        document.refresh_from_db()
+        self.assertContains(page, 'Projekt i widoczność')
+        self.assertContains(page, 'Widoczny projekt')
+        self.assertNotContains(page, 'Ukryty projekt')
+        self.assertEqual(assign_response.status_code, 302)
+        self.assertEqual(hidden_response.status_code, 302)
+        self.assertEqual(document.project, visible_project)
+
+        self.client.force_login(shared_user)
+        forbidden_response = self.client.post(reverse('documents'), {
+            'form': 'project',
+            'item': document.id,
+            'project': '',
+        })
+        self.assertEqual(forbidden_response.status_code, 403)
+
+    def test_assigning_folder_project_shares_unassigned_descendants(self):
+        owner = User.objects.create_user(username='folder-owner', password='pass')
+        employee = User.objects.create_user(username='folder-member', password='pass')
+        project = Project.objects.create(name='Projekt folderu')
+        ProjectAssignment.objects.create(project=project, user=owner)
+        ProjectAssignment.objects.create(project=project, user=employee)
+        folder = DocumentItem.objects.create(owner=owner, name='Folder projektu', kind=DocumentItem.Kind.FOLDER)
+        nested = DocumentItem.objects.create(owner=owner, name='Podfolder', kind=DocumentItem.Kind.FOLDER, parent=folder)
+        document = DocumentItem.objects.create(owner=owner, name='Plik w środku', kind=DocumentItem.Kind.DOCUMENT, parent=nested)
+
+        self.client.force_login(owner)
+        response = self.client.post(reverse('documents'), {
+            'form': 'project',
+            'item': folder.id,
+            'project': project.id,
+        })
+
+        folder.refresh_from_db()
+        nested.refresh_from_db()
+        document.refresh_from_db()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(folder.project, project)
+        self.assertEqual(nested.project, project)
+        self.assertEqual(document.project, project)
+        self.assertEqual(DocumentItem.visible_to(employee).filter(pk__in=[folder.id, nested.id, document.id]).count(), 3)
 
     def test_edit_access_allows_text_document_content_change(self):
         owner = User.objects.create_user(username='owner', password='pass')

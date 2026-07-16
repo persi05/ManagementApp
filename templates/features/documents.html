@@ -4,13 +4,26 @@
 {% block eyebrow %}{% if parent %}{{ parent.name }}{% else %}Biblioteka{% endif %}{% endblock %}
 {% block top_actions %}{% endblock %}
 {% block content %}
+<div class="documents-page">
+<section class="documents-hero">
+  <div class="documents-hero-copy">
+    <span class="documents-kicker">Twoja przestrzeń · {{ documents_role_label }}</span>
+    <h2>Wszystko, czego potrzebuje zespół.<br><em>W jednym miejscu.</em></h2>
+    <p>{% if documents_is_management %}Twórz strukturę, udostępniaj materiały rolom i kontroluj dostęp z jednego widoku.{% elif request.user.profile.role == 'client' %}Bezpieczny dostęp do materiałów udostępnionych przez zespół i plików Twoich projektów.{% else %}Dokumenty projektowe, pliki zadań i własne materiały — zawsze pod ręką.{% endif %}</p>
+  </div>
+  <div class="documents-hero-stats">
+    <div><strong>{{ document_stats.active }}</strong><span>aktywnych</span></div>
+    <div><strong>{{ document_stats.folders }}</strong><span>folderów</span></div>
+    <div><strong>{{ document_stats.pinned }}</strong><span>przypiętych</span></div>
+  </div>
+</section>
 <section class="documents-toolbar">
   <div class="documents-title-row">
     {% if parent and not show_archived %}
       <a class="documents-back" href="{% if parent.parent %}{% url 'documents' %}?folder={{ parent.parent.id }}{% else %}{% url 'documents' %}{% endif %}" aria-label="Wróć do poprzedniego folderu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a>
     {% endif %}
     <div>
-    <strong>Biblioteka plików</strong>
+    <strong>{% if parent %}{{ parent.name }}{% elif show_archived %}Archiwum{% else %}Biblioteka plików{% endif %}</strong>
     <small>
       <a href="{% url 'documents' %}">Dokumenty i pliki</a>
       {% if not show_archived %}
@@ -24,7 +37,7 @@
   <form class="documents-search" data-documents-search>
     {% if parent %}<input type="hidden" name="folder" value="{{ parent.id }}">{% endif %}
     {% if show_archived %}<input type="hidden" name="archived" value="1">{% endif %}
-    <input type="search" name="q" value="{{ query }}" placeholder="Szukaj folderów, dokumentów i zdjęć">
+    <input type="search" name="q" value="{{ query }}" placeholder="Szukaj w bibliotece…" aria-label="Szukaj w bibliotece">
     <button class="ghost-btn small-btn"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.5-4.5"/><circle cx="11" cy="11" r="7"/></svg> Szukaj</button>
   </form>
   <details class="documents-new-menu" id="new-document">
@@ -42,8 +55,8 @@
 </section>
 
 <nav class="documents-tabs">
-  <a class="{% if not show_archived %}active{% endif %}" href="{% url 'documents' %}{% if parent %}?folder={{ parent.id }}{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg> Aktywne</a>
-  <a class="{% if show_archived %}active{% endif %}" href="{% url 'documents' %}?archived=1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M6 7v12h12V7"/><path d="M9 11h6"/></svg> Archiwum</a>
+  <a class="{% if not show_archived %}active{% endif %}" href="{% url 'documents' %}{% if parent %}?folder={{ parent.id }}{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg> Aktywne <span>{{ document_stats.active }}</span></a>
+  <a class="{% if show_archived %}active{% endif %}" href="{% url 'documents' %}?archived=1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M6 7v12h12V7"/><path d="M9 11h6"/></svg> Archiwum <span>{{ document_stats.archived }}</span></a>
 </nav>
 
 <section class="documents-layout">
@@ -93,10 +106,12 @@
 
     <section class="documents-grid">
       {% for item in items %}
-        <article class="document-card {% if panel_item and panel_item.id == item.id %}active{% endif %}" data-document-name="{{ item.name|lower }}">
+        <article class="document-card kind-{{ item.kind }} {% if panel_item and panel_item.id == item.id %}active{% endif %}" data-document-name="{{ item.name|lower }}">
           <div class="document-card-body">
           <a class="document-card-main" href="{% if item.kind == 'folder' %}{% url 'documents' %}?folder={{ item.id }}{% else %}{% url 'documents' %}?{% if query %}q={{ query|urlencode }}&{% elif parent and not show_archived %}folder={{ parent.id }}&{% endif %}{% if show_archived %}archived=1&{% endif %}selected={{ item.id }}{% endif %}">
-            {% include "features/partials/document_icon.html" with icon_kind=item.kind %}
+            <span class="document-card-visual">
+              {% if item.kind == 'image' and item.file %}<img src="{% url 'document_file' item.id %}" alt="">{% else %}{% include "features/partials/document_icon.html" with icon_kind=item.kind %}{% endif %}
+            </span>
             <div>
               <strong>{{ item.name }}</strong>
               <small>
@@ -106,6 +121,8 @@
                   {{ item.extension }} / {{ item.size_label }} / {{ item.modified_label }}
                 {% endif %}
               </small>
+              <span class="document-type-chip">{{ item.get_kind_display }}</span>
+              {% if item.project %}<span class="document-project-chip">{{ item.project.name }}</span>{% endif %}
             </div>
           </a>
           {% if query %}
@@ -131,8 +148,8 @@
               {% if item.can_manage_current_user %}
                 <a href="{% url 'documents' %}?{% if parent and not show_archived %}folder={{ parent.id }}&{% endif %}{% if show_archived %}archived=1&{% endif %}{% if item.kind == 'folder' %}manage={{ item.id }}{% else %}selected={{ item.id }}{% endif %}#move"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M5 12h13"/><path d="m13 6 6 6-6 6"/></svg></span> Przenieś</a>
               {% endif %}
-              {% if item.kind == 'folder' %}
-                <a href="{% url 'documents' %}?{% if parent and not show_archived %}folder={{ parent.id }}&{% endif %}{% if show_archived %}archived=1&{% endif %}manage={{ item.id }}#access"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-8 0v2"/><circle cx="12" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg></span> Dostęp</a>
+              {% if item.kind == 'folder' and item.can_assign_project_current_user %}
+                <a href="{% url 'documents' %}?{% if parent and not show_archived %}folder={{ parent.id }}&{% endif %}{% if show_archived %}archived=1&{% endif %}manage={{ item.id }}#project"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-8 0v2"/><circle cx="12" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg></span> Projekt i dostęp</a>
               {% endif %}
               <a href="{% url 'download_document' item.id %}"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></span> Pobierz</a>
               {% if item.can_manage_current_user %}
@@ -147,7 +164,7 @@
           </details>
         </article>
       {% empty %}
-        <p class="empty">Brak dokumentów w tym miejscu.</p>
+        <div class="documents-empty-state"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5Z"/></svg></span><h3>{% if query %}Nic tu nie pasuje{% else %}To miejsce czeka na pierwsze pliki{% endif %}</h3><p>{% if query %}Spróbuj krótszej frazy albo wróć do całej biblioteki.{% else %}Utwórz folder, dokument lub prześlij gotowy materiał.{% endif %}</p></div>
       {% endfor %}
       <p class="empty documents-filter-empty" hidden>Brak dokumentow pasujacych do wyszukiwania.</p>
     </section>
@@ -183,6 +200,7 @@
       <dl class="preview-meta">
         <div><dt>Typ</dt><dd>{{ panel_item.get_kind_display }}</dd></div>
         <div><dt>Rozmiar</dt><dd>{{ panel_item.size_label }}</dd></div>
+        <div><dt>Projekt</dt><dd>{% if panel_item.project %}{{ panel_item.project.name }}{% else %}Prywatne{% endif %}</dd></div>
         <div><dt>Autor</dt><dd>{{ panel_item.owner.get_full_name|default:panel_item.owner.username }}</dd></div>
         <div><dt>Zmodyfikowano</dt><dd>{{ panel_item.updated_at|date:"Y-m-d H:i" }}</dd></div>
       </dl>
@@ -191,6 +209,19 @@
         <a class="ghost-btn" href="{% url 'download_document' selected.id %}"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg> Pobierz</a>
         <a class="primary-btn" href="{% url 'open_document' selected.id %}"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg> Otwórz</a>
       </div>
+      {% endif %}
+      {% if can_assign_project_selected %}
+        <section class="document-project-panel" id="project">
+          <h3>Projekt i widoczność</h3>
+          <p>Przypisz element do projektu, aby wszyscy członkowie projektu mogli go zobaczyć.</p>
+          <form method="post" class="documents-inline-form">
+            {% csrf_token %}
+            <input type="hidden" name="form" value="project">
+            <input type="hidden" name="item" value="{{ panel_item.id }}">
+            {{ project_form.as_p }}
+            <button class="ghost-btn small-btn">Zapisz projekt</button>
+          </form>
+        </section>
       {% endif %}
       {% if can_edit_selected %}
         <form method="post" class="documents-inline-form" id="rename">
@@ -272,6 +303,7 @@
     </div>
   {% endif %}
 </section>
+</div>
 <script>
   const searchForm = document.querySelector('[data-documents-search]');
   const searchInput = searchForm?.querySelector('input[name="q"]');

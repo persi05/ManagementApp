@@ -31,7 +31,7 @@ def month_bounds(request):
 
 
 def date_range_bounds(request):
-    start_date, default_end, start_dt, end_dt = month_bounds(request)
+    start_date, default_end, _start_dt, _end_dt = month_bounds(request)
     end_date = default_end - timedelta(days=1)
     raw_start = request.GET.get('date_from')
     raw_end = request.GET.get('date_to')
@@ -49,6 +49,11 @@ def date_range_bounds(request):
                 end_date = parsed_end
         except ValueError:
             pass
+
+    # A lone custom start date can fall after the default month end.  Returning
+    # an inverted range made every report look empty even though data existed.
+    if end_date < start_date:
+        end_date = start_date
 
     exclusive_end = end_date + timedelta(days=1)
     start_dt = timezone.make_aware(datetime.combine(start_date, time.min))
@@ -71,19 +76,23 @@ def payroll_amount(user, entries, start_date, end_date):
     return total.quantize(Decimal('0.01')) if total else Decimal('0.00')
 
 
-def employee_month_summaries(start_date, end_date, start_dt, end_dt):
-    employees = User.objects.filter(profile__role=UserProfile.Role.EMPLOYEE).select_related('profile').order_by('last_name', 'first_name', 'username')
+def employee_month_summaries(start_date, end_date, start_dt, end_dt, employees=None, entries=None):
+    if employees is None:
+        employees = User.objects.filter(profile__role=UserProfile.Role.EMPLOYEE)
+    employees = employees.select_related('profile').order_by('last_name', 'first_name', 'username')
+    if entries is None:
+        entries = TimeEntry.objects.filter(start__gte=start_dt, start__lt=end_dt)
     rows = []
     for employee in employees:
-        entries = list(TimeEntry.objects.filter(user=employee, start__gte=start_dt, start__lt=end_dt).select_related('project', 'task'))
-        minutes = sum(entry.duration_minutes for entry in entries)
-        payroll = payroll_amount(employee, entries, start_date, end_date)
+        employee_entries = list(entries.filter(user=employee).select_related('project', 'task'))
+        minutes = sum(entry.duration_minutes for entry in employee_entries)
+        payroll = payroll_amount(employee, employee_entries, start_date, end_date)
         rows.append({
             'user': employee,
             'hours': Decimal(minutes) / Decimal(60),
             'payroll': payroll,
             'bank_account': getattr(employee.profile, 'bank_account', ''),
             'current_rate': employee.hourly_rates.order_by('-valid_from').first(),
-            'entries_count': len(entries),
+            'entries_count': len(employee_entries),
         })
     return rows

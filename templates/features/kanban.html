@@ -6,7 +6,12 @@
 {% if not project %}
   <section class="panel"><p class="empty">Brak projektów dostępnych dla Twojej roli.</p></section>
 {% else %}
-<div class="tabs">
+<div class="kanban-page-new">
+<section class="kanban-hero-new">
+  <div><span class="kanban-kicker">Tablica · {{ role_label }}</span><h2>{{ project.name }}</h2><p>Przesuwaj zadania między etapami, pilnuj priorytetów i trzymaj kontekst pracy w jednym miejscu.</p></div>
+  <div class="kanban-hero-stats"><div><strong>{{ board_task_count }}</strong><span>zadań</span></div><div><strong>{{ columns|length }}</strong><span>etapów</span></div><div><strong>{{ board_done_count }}</strong><span>gotowych</span></div></div>
+</section>
+<div class="tabs kanban-project-tabs">
   {% for item in projects %}<a class="{% if item.id == project.id %}active{% endif %}" href="{% url 'kanban_project' item.id %}">{{ item.name }}</a>{% endfor %}
 </div>
 {% if can_manage_board %}
@@ -185,13 +190,13 @@
           </div>
           {% if task.can_edit %}
             <div class="task-attachment-forms">
-              <form method="post" action="{% url 'add_task_attachment' task.id %}" enctype="multipart/form-data">
+              <form method="post" action="{% url 'add_task_attachment' task.id %}" enctype="multipart/form-data" data-preserve-scroll>
                 {% csrf_token %}
                 <input type="text" name="name" placeholder="Nazwa załącznika">
                 <input type="file" name="file" required>
                 <button class="ghost-btn small-btn">Dodaj załącznik</button>
               </form>
-              <form method="post" action="{% url 'link_task_document' task.id %}">
+              <form method="post" action="{% url 'link_task_document' task.id %}" data-preserve-scroll>
                 {% csrf_token %}
                 <select name="document" required>
                   <option value="">Powiąż istniejący dokument</option>
@@ -221,7 +226,7 @@
             {% endfor %}
           </div>
           {% if task.can_edit %}
-            <form method="post" action="{% url 'add_task_note' task.id %}" class="task-note-form">
+            <form method="post" action="{% url 'add_task_note' task.id %}" class="task-note-form" data-preserve-scroll>
               {% csrf_token %}
               <textarea name="content" rows="3" placeholder="Dodaj notatkę..." required></textarea>
               <button class="primary-btn">Dodaj notatkę</button>
@@ -244,7 +249,7 @@
             <p>Ustaw nazwę, uprawnienia i powiadomienia dla tej kolumny.</p>
           </div>
         </div>
-        <form method="post" action="{% url 'update_column' column.id %}" class="column-settings-form">
+        <form method="post" action="{% url 'update_column' column.id %}" class="column-settings-form" data-preserve-scroll>
           {% csrf_token %}
           <p>
             <label for="column-name-{{ column.id }}">Nazwa kolumny</label>
@@ -309,7 +314,7 @@
           </div>
         </form>
         <div class="column-danger-zone">
-          <form method="post" action="{% url 'delete_column' column.id %}" class="delete-column-form {% if column.tasks.all %}is-hidden{% endif %}">
+          <form method="post" action="{% url 'delete_column' column.id %}" class="delete-column-form {% if column.tasks.all %}is-hidden{% endif %}" data-preserve-scroll>
             {% csrf_token %}
             <button class="ghost-btn tiny-btn" aria-label="Usuń kolumnę {{ column.name }}">Usuń kolumnę</button>
           </form>
@@ -324,8 +329,22 @@
   <section class="kanban-modal-card task-modal-card">
     <button type="button" class="ghost-btn tiny-btn kanban-modal-close" data-close-add-task aria-label="Zamknij">x</button>
     <div class="panel-head"><div><h2 id="new-task-title">Utwórz nowe zadanie</h2><p>Wypełnij szczegóły i dodaj kartę do tablicy.</p></div></div>
-    <form method="post" class="grid-form task-modal-form" data-task-form>{% csrf_token %}{{ form.as_p }}<button class="primary-btn">Dodaj zadanie</button></form>
+    <form method="post" class="grid-form task-modal-form" data-task-form>
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {% for hidden in form.hidden_fields %}{{ hidden }}{{ hidden.errors }}{% endfor %}
+      {% if form.project and not form.project.is_hidden %}<p>{{ form.project.label_tag }}{{ form.project }}{{ form.project.errors }}</p>{% endif %}
+      {% if form.title %}<p>{{ form.title.label_tag }}{{ form.title }}{{ form.title.errors }}</p>{% endif %}
+      {% if form.due_date %}<p>{{ form.due_date.label_tag }}{{ form.due_date }}{{ form.due_date.errors }}</p>{% endif %}
+      {% if form.priority %}<p>{{ form.priority.label_tag }}{{ form.priority }}{{ form.priority.errors }}</p>{% endif %}
+      {% if form.column and not form.column.is_hidden %}<p>{{ form.column.label_tag }}{{ form.column }}{{ form.column.errors }}</p>{% endif %}
+      {% if form.labels %}<div class="task-label-field task-modal-label-field">{{ form.labels.errors }}{{ form.labels }}</div>{% endif %}
+      {% if form.description %}<p>{{ form.description.label_tag }}{{ form.description }}{{ form.description.errors }}</p>{% endif %}
+      {% if form.assignees %}<div class="task-label-field">{{ form.assignees.errors }}{{ form.assignees }}</div>{% endif %}
+      <button class="primary-btn">Dodaj zadanie</button>
+    </form>
   </section>
+</div>
 </div>
 {% endif %}
 {% endblock %}

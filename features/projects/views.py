@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -14,7 +15,7 @@ from features.tasks.services import ensure_default_columns
 
 @login_required
 def projects(request):
-    can_view_client_rates = is_management(request.user) or user_role(request.user) == UserProfile.Role.CLIENT
+    can_view_client_rates = is_management(request.user)
     if request.method == 'POST':
         if not is_management(request.user):
             return management_required(request.user)
@@ -32,7 +33,14 @@ def projects(request):
             return redirect('projects')
     else:
         form = ProjectForm()
-    page_obj = Paginator(visible_projects(request.user).order_by('name', 'id'), 50).get_page(request.GET.get('page'))
+    projects_qs = visible_projects(request.user).order_by('name', 'id')
+    project_stats = {
+        'all': projects_qs.count(),
+        'active': projects_qs.filter(status='active').count(),
+        'paused': projects_qs.filter(status='paused').count(),
+        'done': projects_qs.filter(status='done').count(),
+    }
+    page_obj = Paginator(projects_qs, 50).get_page(request.GET.get('page'))
     return render(request, 'features/projects.html', {
         'projects': page_obj.object_list,
         'page_obj': page_obj,
@@ -40,6 +48,8 @@ def projects(request):
         'can_manage': is_management(request.user),
         'can_view_client_rates': can_view_client_rates,
         'default_tasks_project_id': request.user.profile.default_tasks_project_id,
+        'project_stats': project_stats,
+        'role': user_role(request.user),
     })
 
 
@@ -50,6 +60,8 @@ def set_default_tasks_project(request, project_id):
     profile = ensure_profile(request.user)
     profile.default_tasks_project = project
     profile.save(update_fields=['default_tasks_project'])
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'project_id': project.id})
     messages.success(request, f'Projekt {project.name} będzie otwierany domyślnie w zadaniach.')
     return redirect('projects')
 
@@ -57,7 +69,7 @@ def set_default_tasks_project(request, project_id):
 @login_required
 def project_detail(request, project_id):
     project = get_object_or_404(visible_projects(request.user), pk=project_id)
-    can_view_client_rates = is_management(request.user) or user_role(request.user) == UserProfile.Role.CLIENT
+    can_view_client_rates = is_management(request.user)
     assignment_form = ProjectAssignmentForm(project=project)
     project_form = ProjectForm(instance=project)
     label_rate_form = ProjectLabelRateForm(project=project)

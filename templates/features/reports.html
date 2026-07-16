@@ -1,268 +1,128 @@
 {% extends "base.html" %}
-{% block title %}{% if selected_project_obj %}Raport projektu{% else %}Raporty projektów{% endif %} - Dcode Management{% endblock %}
-{% block heading %}{% if selected_project_obj %}Raport projektu{% else %}Raporty projektów{% endif %}{% endblock %}
-{% block eyebrow %}{% if selected_project_obj %}{{ selected_project_obj.name }}{% else %}Zestawienie projektów{% endif %}{% endblock %}
+{% block title %}Raporty - Dcode Management{% endblock %}
+{% block heading %}{% if selected_project_obj %}Raport projektu{% else %}Raporty{% endif %}{% endblock %}
+{% block eyebrow %}{% if is_client_report %}Strefa klienta{% elif is_employee_report %}Moja praca{% else %}Centrum analityczne{% endif %}{% endblock %}
 {% block top_actions %}
-  <button class="ghost-btn" type="button" data-report-settings-toggle>Edytuj widok</button>
-  {% if not is_employee_report %}
-  <a class="ghost-btn" href="{% url 'export_csv' %}?date_from={{ date_from }}&date_to={{ date_to }}&visibility={{ report_visibility }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}">CSV</a>
-  <a class="primary-btn" href="{% url 'export_pdf' %}?date_from={{ date_from }}&date_to={{ date_to }}&visibility={{ report_visibility }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}" target="_blank">PDF / druk</a>
-  {% endif %}
+  <button class="ghost-btn" type="button" data-report-settings-toggle>Ustaw widok</button>
+  {% if can_manage %}<a class="ghost-btn" href="{% url 'export_pdf' %}?report=payroll&date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}" target="_blank">PDF wypłat</a>{% endif %}
+  <a class="ghost-btn" href="{% url 'export_csv' %}?date_from={{ date_from }}&date_to={{ date_to }}&visibility={{ report_visibility }}&work_scope={{ work_scope }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}">Eksport CSV</a>
+  <a class="primary-btn" href="{% url 'export_pdf' %}?date_from={{ date_from }}&date_to={{ date_to }}&visibility={{ report_visibility }}&work_scope={{ work_scope }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}" target="_blank">PDF / druk</a>
 {% endblock %}
 {% block content %}
-<section class="panel report-filter-panel {% if is_client_report %}client-filter-panel{% endif %}">
-  <div class="panel-head">
+<div class="reports-page">
+  <section class="report-hero report-hero-{% if is_client_report %}client{% elif is_employee_report %}employee{% else %}management{% endif %}">
     <div>
-      <h2>{% if is_employee_report %}Twój raport pracy{% elif report_visibility == 'management' %}Zakres raportu managementu{% elif selected_project_obj %}Zakres raportu projektu{% elif is_client_report %}Zakres raportu{% else %}Zakres raportu klienta{% endif %}</h2>
-      <p>{% if is_employee_report %}Wybierz okres i opcjonalnie projekt. Zobaczysz własny czas pracy oraz godziny zapisane przy zakończonych zadaniach.{% elif report_visibility == 'management' %}Raport pokazuje wpisy wyłącznie z zadań zakończonych. Dolna tabela zawiera również pozycje ukryte przed klientem.{% elif is_client_report %}Wybierz okres i projekt. Raport pokazuje udostępnione prace z zakończonych zadań.{% else %}Raport podlicza widoczne wpisy wyłącznie z zadań zakończonych.{% endif %}</p>
+      <span class="report-kicker">{% if selected_project_obj %}Podsumowanie projektu{% elif is_client_report %}Raport klienta{% elif is_employee_report %}Raport pracownika{% else %}Raport managementu{% endif %}</span>
+      <h2>{% if is_client_report %}Postęp prac w jednym, bezpiecznym widoku{% elif is_employee_report %}Twój raport pracy{% else %}Pełny obraz pracy i rozliczeń zespołu{% endif %}</h2>
+      <p>{% if is_client_report %}Podsumowanie prac, czasu realizacji i rozliczenia w wybranym okresie.{% elif is_employee_report %}Ewidencja czasu pochodzi z timera i wpisów ręcznych, a godziny zadań z worklogów projektowych.{% else %}Ewidencja czasu służy do rozliczeń pracowników, a worklogi pokazują wykorzystanie czasu w projektach.{% endif %}</p>
     </div>
-  </div>
-  <form class="filter-bar" data-report-filter-form>
-    <input type="hidden" name="visibility" value="{{ report_visibility }}">
-    <div class="filter-row filter-date-row">
-      <input type="date" name="date_from" value="{{ date_from }}">
-      <input type="date" name="date_to" value="{{ date_to }}">
-      <button class="ghost-btn">Filtruj daty</button>
-    </div>
-    <div class="filter-row filter-select-row">
+    <div class="report-period-badge"><small>Wybrany okres</small><strong>{{ period_label }}</strong></div>
+  </section>
+
+  <section class="panel report-filter-panel">
+    <div class="panel-head">
+      <div><h2>{% if can_manage and report_visibility == 'management' %}Zakres raportu managementu{% elif can_manage %}Zakres raportu klienta{% else %}Zakres danych{% endif %}</h2><p>Zmień okres i zawęź raport. Wszystkie podsumowania oraz eksporty użyją tych samych filtrów.</p></div>
       {% if can_manage %}
-        <select name="client" data-auto-submit-filter>
-          <option value="">Wszyscy klienci</option>
-          {% for client in clients %}
-            <option value="{{ client.id }}" {% if selected_client == client.id|stringformat:"s" %}selected{% endif %}>{% if client.get_full_name %}{{ client.get_full_name }}{% else %}{{ client.username }}{% endif %}</option>
-          {% endfor %}
-        </select>
+      <nav class="report-visibility-switch" aria-label="Zakres widoczności">
+        <a class="{% if report_visibility == 'client' %}active{% endif %}" href="{% url 'reports' %}?visibility=client&date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}">Dane klienta</a>
+        <a class="{% if report_visibility == 'management' %}active{% endif %}" href="{% url 'reports' %}?visibility=management&date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}">Dane wewnętrzne</a>
+      </nav>
       {% endif %}
-      <select name="project" data-auto-submit-filter>
-        <option value="">Wszystkie projekty</option>
-        {% for project in projects %}
-          <option value="{{ project.id }}" {% if selected_project == project.id|stringformat:"s" %}selected{% endif %}>{{ project.name }}</option>
-        {% endfor %}
-      </select>
+    </div>
+    <form class="report-filter-form" data-report-filter-form>
+      <input type="hidden" name="visibility" value="{{ report_visibility }}">
+      <input type="hidden" name="work_scope" value="{{ work_scope }}">
+      <label><span>Od</span><input type="date" name="date_from" value="{{ date_from }}"></label>
+      <label><span>Do</span><input type="date" name="date_to" value="{{ date_to }}"></label>
       {% if can_manage %}
-        <select name="employee" data-auto-submit-filter>
-          <option value="">Wszyscy pracownicy</option>
-          {% for employee in employees %}
-            <option value="{{ employee.id }}" {% if selected_employee == employee.id|stringformat:"s" %}selected{% endif %}>{% if employee.get_full_name %}{{ employee.get_full_name }}{% else %}{{ employee.username }}{% endif %}</option>
-          {% endfor %}
-        </select>
+      <label><span>Klient</span><select name="client" data-auto-submit-filter><option value="">Wszyscy klienci</option>{% for client in clients %}<option value="{{ client.id }}" {% if selected_client == client.id|stringformat:"s" %}selected{% endif %}>{{ client.get_full_name|default:client.username }}</option>{% endfor %}</select></label>
       {% endif %}
-    </div>
-  </form>
-</section>
-
-<section class="dashboard-settings report-settings" data-report-settings hidden>
-  <div><strong>Widoczne sekcje</strong><small>Ustawienie zapisuje się na tym urządzeniu.</small></div>
-  <label><input type="checkbox" data-report-section-toggle value="summary" checked> Podsumowanie</label>
-  {% if not is_employee_report %}<label><input type="checkbox" data-report-section-toggle value="projects" checked> Projekty</label>{% endif %}
-  <label><input type="checkbox" data-report-section-toggle value="entries" checked> Wpisy</label>
-  <button class="ghost-btn small-btn" type="button" data-report-settings-reset>Reset</button>
-</section>
-
-{% if can_manage %}
-<div class="report-visibility-switch">
-  <a class="{% if report_visibility == 'client' %}active{% endif %}" href="{% url 'reports' %}?visibility=client&date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}">
-    Widoczne dla klienta
-  </a>
-  <a class="{% if report_visibility == 'management' %}active{% endif %}" href="{% url 'reports' %}?visibility=management&date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}">
-    Widoczne dla managementu
-  </a>
-</div>
-{% endif %}
-
-{% if is_employee_report %}
-<section class="metrics-grid report-metrics" data-report-section="summary">
-  <article class="metric"><span>Okres</span><strong class="metric-small">{{ period_label }}</strong><small>wybrany zakres raportu</small></article>
-  <article class="metric"><span>Czas pracy</span><strong>{{ employee_work_hours|floatformat:2 }}h</strong><small>ewidencja czasu pracy</small></article>
-  <article class="metric"><span>Czas przy zadaniach</span><strong>{{ employee_task_hours|floatformat:2 }}h</strong><small>tylko zadania zakończone</small></article>
-  <article class="metric"><span>Wynagrodzenie</span><strong>{{ employee_payroll|floatformat:2 }} PLN</strong><small>według stawek historycznych</small></article>
-</section>
-{% elif is_client_report %}
-<section class="client-report-hero" data-report-section="summary">
-  <div>
-    <span>Raport klienta</span>
-    <strong>{{ period_label }}</strong>
-  </div>
-  <dl class="client-report-summary">
-    <div><dt>{% if selected_project_obj %}Projekt{% else %}Projekty{% endif %}</dt><dd>{% if selected_project_obj %}1{% else %}{{ by_project|length }}{% endif %}</dd></div>
-    <div><dt>Wpisy</dt><dd>{{ client_worklogs|length }}</dd></div>
-    <div><dt>Łącznie</dt><dd>{{ total_hours|floatformat:2 }}h</dd></div>
-    <div><dt>Kwota</dt><dd>{% if total_amount != None %}{{ total_amount|floatformat:2 }} {{ report_currency }}{% else %}-{% endif %}</dd></div>
-  </dl>
-</section>
-<section class="client-report-cards" data-report-section="projects">
-  {% for row in by_project %}
-    <article class="client-report-card">
-      <div>
-        <h3>{{ row.project.name }}</h3>
-        <small>{{ row.entries_count }} wpisów w zakresie</small>
-      </div>
-      <div class="client-report-card-values">
-        <strong>{{ row.hours|floatformat:2 }}h</strong>
-        <small>{% if row.amount != None %}{{ row.amount|floatformat:2 }} {{ row.currency }}{% else %}Brak stawki{% endif %}</small>
-      </div>
-    </article>
-  {% empty %}
-    <article class="client-report-card empty-card">
-      <h3>Brak danych w tym okresie</h3>
-      <small>Zmień zakres dat albo wybierz inny projekt.</small>
-    </article>
-  {% endfor %}
-</section>
-{% else %}
-<section class="metrics-grid report-metrics" data-report-section="summary">
-  <article class="metric"><span>{% if report_visibility == 'management' %}Zakres managementu{% else %}Zakres klienta{% endif %}</span><strong class="metric-small">{{ period_label }}</strong><small>tylko zadania zakończone</small></article>
-  <article class="metric"><span>{% if selected_project_obj %}Projekt{% else %}Projekty{% endif %}</span><strong class="{% if selected_project_obj %}metric-small{% endif %}">{% if selected_project_obj %}{{ selected_project_obj.name }}{% else %}{{ by_project|length }}{% endif %}</strong><small>{% if selected_project_obj %}wybrany projekt{% else %}z godzinami w zakresie{% endif %}</small></article>
-  <article class="metric"><span>{% if is_client_visibility_report %}Godziny widoczne dla klienta{% else %}Godziny łączne{% endif %}</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>z zakończonych zadań</small></article>
-  <article class="metric"><span>Godziny klienta</span><strong>{{ total_visible_hours|floatformat:2 }}h</strong><small>wpisy widoczne dla klienta</small></article>
-  <article class="metric"><span>{% if is_client_visibility_report %}Kwota klienta{% else %}Kwota wg stawek{% endif %}</span><strong>{% if total_amount != None %}{{ total_amount|floatformat:2 }} {{ report_currency }}{% else %}-{% endif %}</strong><small>według stawek projektu i etykiet</small></article>
-  <article class="metric"><span>Pracownicy</span><strong>{{ by_user|length }}</strong><small>z wpisami w zakresie</small></article>
-</section>
-{% endif %}
-
-{% if can_manage %}
-<section class="workspace-grid" data-report-section="projects">
-  <div class="panel">
-    <div class="panel-head"><div><h2>{% if selected_project_obj %}Podsumowanie projektu{% else %}Zestawienie projektów{% endif %}</h2><p>Podsumowanie obejmuje wyłącznie zadania znajdujące się w kolumnach oznaczonych jako zakończone.</p></div></div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Projekt</th>{% if not is_client_report %}<th>Klient</th>{% endif %}<th>Godziny łączne</th><th>Godziny klienta</th><th>Kwota klienta</th><th>Wpisy</th></tr></thead>
-        <tbody>
-          {% for row in by_project %}
-            <tr>
-              <td>{{ row.project.name }}</td>
-              {% if not is_client_report %}<td>{% if row.client %}{% if row.client.get_full_name %}{{ row.client.get_full_name }}{% else %}{{ row.client.username }}{% endif %}{% else %}-{% endif %}</td>{% endif %}
-              <td>{{ row.hours|floatformat:2 }}h</td>
-              <td>{{ row.visible_hours|floatformat:2 }}h</td>
-              <td>{% if row.amount != None %}{{ row.amount|floatformat:2 }} {{ row.currency }}{% else %}-{% endif %}</td>
-              <td>{{ row.entries_count }}</td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="6">Brak danych projektowych.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="panel {% if is_client_report %}client-report-team-panel{% endif %}">
-    <div class="panel-head"><div><h2>Podział pracowników</h2><p>Ile dany pracownik wpisał godzin w wybranym raporcie.</p></div></div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Pracownik</th><th>Godziny</th></tr></thead>
-        <tbody>
-          {% for row in by_user %}
-            <tr>
-              <td>{% if row.user.get_full_name %}{{ row.user.get_full_name }}{% else %}{{ row.user.username }}{% endif %}</td>
-              <td>{{ row.hours|floatformat:2 }}h</td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="2">Brak godzin pracowników.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</section>
-{% endif %}
-
-<section class="panel {% if is_client_report %}client-worklog-panel{% endif %}" data-report-section="entries">
-  <div class="panel-head"><div><h2>{% if is_employee_report %}Twoje wpisy zadań{% elif is_client_report %}Wykonane prace{% else %}Wpisy zadań{% endif %}</h2><p>{% if is_employee_report %}Godziny zapisane przez Ciebie przy zadaniach znajdujących się w kolumnie zakończone.{% elif is_client_report %}Lista udostępnionych wpisów bez danych pracowników.{% elif report_visibility == 'management' %}Ostatnie 100 wpisów widocznych dla managementu. Kwoty pokazujemy również dla wpisów ukrytych dla klienta.{% else %}Ostatnie 100 wpisów widocznych dla klienta.{% endif %}</p></div></div>
-  <div class="table-wrap">
-    <table class="{% if is_client_report %}client-worklog-table{% endif %}">
-      {% if is_employee_report %}
-        <thead><tr><th>Data</th><th>Projekt</th><th>Zadanie</th><th>Godziny</th><th>Komentarz</th></tr></thead>
-      {% else %}
-        <thead><tr><th>Data</th>{% if not is_client_report %}<th>Pracownik</th>{% endif %}<th>Projekt</th><th>Zadanie</th><th>Godziny</th><th>Stawka</th><th>Kwota</th><th>Komentarz</th>{% if not is_client_report %}<th>Klient</th>{% endif %}</tr></thead>
+      <label><span>Projekt</span><select name="project" data-auto-submit-filter><option value="">Wszystkie projekty</option>{% for project in projects %}<option value="{{ project.id }}" {% if selected_project == project.id|stringformat:"s" %}selected{% endif %}>{{ project.name }}</option>{% endfor %}</select></label>
+      {% if can_manage %}
+      <label><span>Pracownik</span><select name="employee" data-auto-submit-filter><option value="">Wszyscy pracownicy</option>{% for employee in employees %}<option value="{{ employee.id }}" {% if selected_employee == employee.id|stringformat:"s" %}selected{% endif %}>{{ employee.get_full_name|default:employee.username }}</option>{% endfor %}</select></label>
       {% endif %}
-      <tbody>
-        {% for worklog in client_worklogs %}
-          <tr>
-            <td>{{ worklog.date }}</td>
-            {% if not is_client_report and not is_employee_report %}<td>{% if worklog.user.get_full_name %}{{ worklog.user.get_full_name }}{% else %}{{ worklog.user.username }}{% endif %}</td>{% endif %}
-            <td>{{ worklog.task.project.name }}</td>
-            <td>{{ worklog.task.title }}</td>
-            <td>{{ worklog.hours|floatformat:2 }}</td>
-            {% if not is_employee_report %}
-              <td>{% if worklog.billing_rate != None %}{{ worklog.billing_rate|floatformat:2 }} {{ worklog.billing_currency }}/h{% if worklog.billing_label %}<br><small>{{ worklog.billing_label }}</small>{% endif %}{% else %}-{% endif %}</td>
-              <td>{% if worklog.billing_amount != None %}{{ worklog.billing_amount|floatformat:2 }} {{ worklog.billing_currency }}{% else %}-{% endif %}</td>
-            {% endif %}
-            <td>
-              {% if worklog.comment %}
-                <button type="button" class="ghost-btn small-btn report-comment-button" data-report-comment-target="report-comment-{{ worklog.id }}">Zobacz komentarz</button>
-                <div id="report-comment-{{ worklog.id }}" class="report-comment-source" hidden>{{ worklog.comment }}</div>
-              {% else %}
-                -
-              {% endif %}
-            </td>
-            {% if not is_client_report and not is_employee_report %}<td>{% if worklog.visible_to_client %}widzi{% else %}ukryte{% endif %}</td>{% endif %}
-          </tr>
-        {% empty %}
-          <tr><td colspan="{% if is_employee_report %}5{% elif is_client_report %}7{% else %}9{% endif %}">Brak wpisów.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
+      <button class="primary-btn report-filter-submit">Zastosuj</button>
+    </form>
+  </section>
 
-<div class="report-comment-modal is-hidden" data-report-comment-modal role="dialog" aria-modal="true" aria-labelledby="report-comment-title">
-  <div class="report-comment-backdrop" data-report-comment-close></div>
-  <section class="report-comment-card">
-    <button type="button" class="ghost-btn tiny-btn report-comment-close" data-report-comment-close aria-label="Zamknij">x</button>
-    <h2 id="report-comment-title">Komentarz</h2>
-    <p data-report-comment-content></p>
+  <section class="dashboard-settings report-settings" data-report-settings hidden>
+    <div><strong>Widoczne sekcje</strong><small>Ustawienie zapisuje się na tym urządzeniu.</small></div>
+    <label><input type="checkbox" data-report-section-toggle value="summary" checked> Podsumowanie</label>
+    {% if can_manage %}<label><input type="checkbox" data-report-section-toggle value="payroll" checked> Rozliczenia</label>{% endif %}
+    <label><input type="checkbox" data-report-section-toggle value="projects" checked> Projekty</label>
+    {% if not is_client_report %}<label><input type="checkbox" data-report-section-toggle value="time" checked> Ewidencja</label>{% endif %}
+    <label><input type="checkbox" data-report-section-toggle value="entries" checked> Worklogi</label>
+    <button class="ghost-btn small-btn" type="button" data-report-settings-reset>Reset</button>
+  </section>
+
+  <section class="report-metrics {% if is_client_report %}report-metrics-client{% endif %}" data-report-section="summary">
+    {% if is_employee_report %}
+      <article class="report-metric accent"><span>Czas pracy</span><strong>{{ employee_work_hours|floatformat:2 }}h</strong><small>timer i wpisy ręczne</small></article>
+      <article class="report-metric"><span>Czas przy zadaniach</span><strong>{{ employee_task_hours|floatformat:2 }}h</strong><small>worklogi projektowe</small></article>
+      <article class="report-metric"><span>Wynagrodzenie</span><strong>{{ employee_payroll|floatformat:2 }} PLN</strong><small>stawki historyczne</small></article>
+      <article class="report-metric"><span>Wpisy projektowe</span><strong>{{ worklog_count }}</strong><small>w wybranym zakresie</small></article>
+    {% elif is_client_report %}
+      <article class="report-metric accent"><span>Łączny czas</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>prace w wybranym okresie</small></article>
+      <article class="report-metric"><span>Projekty</span><strong>{{ by_project|length }}</strong><small>z aktywnością w okresie</small></article>
+      <article class="report-metric"><span>Wpisy prac</span><strong>{{ worklog_count }}</strong><small>szczegółowe pozycje</small></article>
+      <article class="report-metric"><span>Do zapłaty</span><strong class="metric-word">{% for total in billing_totals %}{{ total.amount|floatformat:2 }} {{ total.currency }}{% if not forloop.last %}<br>{% endif %}{% empty %}{% if has_completed_worklogs %}Do wyceny{% else %}0,00 PLN{% endif %}{% endfor %}</strong><small>suma za zakończone zadania</small></article>
+    {% else %}
+      <article class="report-metric accent"><span>Godziny w ewidencji</span><strong>{{ total_work_hours|floatformat:2 }}h</strong><small>podstawa rozliczeń</small></article>
+      <article class="report-metric"><span>{% if report_visibility == 'management' %}Godziny łączne{% else %}Godziny widoczne dla klienta{% endif %}</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>{% if report_visibility == 'client' %}wszystkie udostępnione prace{% else %}wszystkie worklogi{% endif %}</small></article>
+      <article class="report-metric"><span>Wynagrodzenia</span><strong>{{ total_payroll|floatformat:2 }} PLN</strong><small>według stawek historycznych</small></article>
+      <article class="report-metric"><span>Kwota wg stawek</span><strong class="metric-word">{% for total in billing_totals %}{{ total.amount|floatformat:2 }} {{ total.currency }}{% if not forloop.last %}<br>{% endif %}{% empty %}Brak pełnych stawek{% endfor %}</strong><small>stawki klientów i etykiet</small></article>
+    {% endif %}
+  </section>
+
+  {% if can_manage %}
+  <section class="panel report-section" data-report-section="payroll">
+    <div class="panel-head"><div><span class="section-kicker">Poufne</span><h2>Rozliczenia pracowników</h2><p>Kwoty są wyliczane z ewidencji czasu i stawki obowiązującej w dniu wpisu.</p></div><span class="report-count">{{ employee_summaries|length }} osób</span></div>
+    <div class="report-table-wrap"><table class="report-table"><thead><tr><th>Pracownik</th><th>Godziny</th><th>Wpisy</th><th>Aktualna stawka</th><th>Do wypłaty</th><th>Konto</th><th></th></tr></thead><tbody>
+      {% for row in employee_summaries %}<tr><td><strong>{{ row.user.get_full_name|default:row.user.username }}</strong></td><td>{{ row.hours|floatformat:2 }}h</td><td>{{ row.entries_count }}</td><td>{% if row.current_rate %}{{ row.current_rate.amount|floatformat:2 }} {{ row.current_rate.currency }}/h{% else %}<span class="report-muted">brak</span>{% endif %}</td><td><strong>{{ row.payroll|floatformat:2 }} PLN</strong></td><td class="account-number">{{ row.bank_account|default:"brak danych" }}</td><td><a class="ghost-btn small-btn" target="_blank" href="{% url 'export_pdf' %}?user={{ row.user.id }}&date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}">PDF</a></td></tr>{% empty %}<tr><td colspan="7"><div class="report-empty">Brak pracowników w tym zakresie.</div></td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+  {% endif %}
+
+  <section class="report-section" data-report-section="projects">
+    <div class="report-section-head"><div><span class="section-kicker">Projekty</span><h2>Gdzie trafił czas</h2><p>Opisują pracę przy zadaniach.</p></div><span class="report-count">{{ by_project|length }} projektów</span></div>
+    <div class="report-project-grid">
+      {% for row in by_project %}<article class="report-project-card"><div class="project-card-top"><span class="project-avatar">{{ row.project.name|slice:":1"|upper }}</span><div><h3>{{ row.project.name }}</h3><small>{% if can_manage %}{% if row.client %}{{ row.client.get_full_name|default:row.client.username }}{% else %}Bez klienta{% endif %} · {% endif %}{{ row.entries_count }} wpisów</small></div></div><div class="project-card-stats"><div><span>Godziny</span><strong>{{ row.hours|floatformat:2 }}h</strong></div>{% if can_manage %}<div><span>Godziny klienta</span><strong>{{ row.visible_hours|floatformat:2 }}h</strong>{% if report_visibility == 'management' %}<small>{{ row.hidden_hours|floatformat:2 }}h ukryte</small>{% endif %}</div><div><span>{% if report_visibility == 'client' %}Kwota klienta{% else %}Wartość{% endif %}</span><strong>{% if row.amount != None %}{{ row.amount|floatformat:2 }} {{ row.currency }}{% else %}—{% endif %}</strong></div>{% endif %}</div></article>
+      {% empty %}<div class="report-empty-card"><span>∅</span><h3>Brak danych w tym okresie</h3><p>Zmień zakres dat albo wybierz inny projekt.</p></div>{% endfor %}
+    </div>
+  </section>
+
+  {% if not is_client_report %}
+  <section class="panel report-section" data-report-section="time">
+    <div class="panel-head"><div><span class="section-kicker">Źródło rozliczeń</span><h2>{% if is_employee_report %}Twoja ewidencja czasu{% else %}Ewidencja czasu zespołu{% endif %}</h2><p>Wpisy z timera i czasu dodanego ręcznie. Pokazujemy maksymalnie 100 najnowszych pozycji.</p></div><span class="report-count">{{ employee_entries|length }} pozycji</span></div>
+    <div class="report-table-wrap"><table class="report-table"><thead><tr>{% if can_manage %}<th>Pracownik</th>{% endif %}<th>Data</th><th>Godziny</th><th>Projekt</th><th>Zadanie</th><th>Źródło</th><th>Komentarz</th></tr></thead><tbody>
+      {% for entry in employee_entries %}<tr>{% if can_manage %}<td><strong>{{ entry.user.get_full_name|default:entry.user.username }}</strong></td>{% endif %}<td>{{ entry.start|date:"d.m.Y" }}<small class="cell-subtitle">{{ entry.start|time:"H:i" }}–{{ entry.end|time:"H:i" }}</small></td><td><strong>{{ entry.hours|floatformat:2 }}h</strong></td><td>{{ entry.project.name|default:"—" }}</td><td>{{ entry.task.title|default:"—" }}</td><td><span class="source-badge">{{ entry.get_source_display }}</span></td><td>{{ entry.comment|default:"—" }}</td></tr>{% empty %}<tr><td colspan="7"><div class="report-empty">Brak wpisów ewidencji czasu.</div></td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+  {% endif %}
+
+  <section class="panel report-section" data-report-section="entries">
+    <div class="panel-head"><div><span class="section-kicker">Szczegóły projektu</span><h2>{% if is_client_report %}Wykonane prace{% elif is_employee_report %}Twoje worklogi{% else %}Worklogi zadań{% endif %}</h2><p>Pokazujemy maksymalnie 100 najnowszych pozycji. Podsumowania powyżej obejmują wybrany zakres.</p>{% if is_client_report %}<nav class="report-work-scope" aria-label="Zakres wykonanych prac"><a class="{% if work_scope == 'all' %}active{% endif %}" href="?date_from={{ date_from }}&date_to={{ date_to }}&work_scope=all{% if selected_project %}&project={{ selected_project }}{% endif %}">Wszystkie <span>{{ all_worklog_count }}</span></a><a class="{% if work_scope == 'completed' %}active{% endif %}" href="?date_from={{ date_from }}&date_to={{ date_to }}&work_scope=completed{% if selected_project %}&project={{ selected_project }}{% endif %}">Zakończone <span>{{ completed_worklog_count }}</span></a></nav>{% endif %}</div><span class="report-count">{{ worklog_count }} wpisów</span></div>
+    <div class="report-table-wrap"><table class="report-table"><thead><tr><th>Data</th>{% if can_manage %}<th>Pracownik</th>{% endif %}<th>Projekt / zadanie</th><th>Godziny</th>{% if show_billing %}{% if can_manage %}<th>Stawka</th>{% endif %}<th>Kwota</th>{% endif %}<th>Komentarz</th>{% if can_manage %}<th>Widoczność</th>{% endif %}</tr></thead><tbody>
+      {% for worklog in client_worklogs %}<tr><td>{{ worklog.date|date:"d.m.Y" }}</td>{% if can_manage %}<td><strong>{{ worklog.user.get_full_name|default:worklog.user.username }}</strong></td>{% endif %}<td><strong>{{ worklog.task.title }}</strong><small class="cell-subtitle">{{ worklog.task.project.name }}</small></td><td><strong>{{ worklog.hours|floatformat:2 }}h</strong></td>{% if show_billing %}{% if can_manage %}<td>{% if billing_completed_only and not worklog.billing_is_due %}—{% elif worklog.billing_rate != None %}{{ worklog.billing_rate|floatformat:2 }} {{ worklog.billing_currency }}/h{% if worklog.billing_label %}<small class="cell-subtitle">{{ worklog.billing_label }}</small>{% endif %}{% else %}—{% endif %}</td>{% endif %}<td>{% if billing_completed_only and not worklog.billing_is_due %}<span class="report-muted">W toku</span>{% elif worklog.billing_amount != None %}<strong>{{ worklog.billing_amount|floatformat:2 }} {{ worklog.billing_currency }}</strong><small class="cell-subtitle">{% if worklog.billing_label %}{{ worklog.billing_label }} · {% endif %}{{ worklog.billing_rate|floatformat:2 }} {{ worklog.billing_currency }}/h</small>{% else %}Do wyceny{% endif %}</td>{% endif %}<td>{% if worklog.comment %}<button type="button" class="ghost-btn small-btn report-comment-button" data-report-comment-target="report-comment-{{ worklog.id }}">Zobacz komentarz</button><div id="report-comment-{{ worklog.id }}" class="report-comment-source" hidden>{{ worklog.comment }}</div>{% else %}—{% endif %}</td>{% if can_manage %}<td><span class="visibility-badge {% if worklog.visible_to_client %}visible{% else %}hidden-entry{% endif %}">{% if worklog.visible_to_client %}Klient widzi{% else %}Wewnętrzne{% endif %}</span></td>{% endif %}</tr>{% empty %}<tr><td colspan="8"><div class="report-empty">Brak prac w wybranym zakresie.</div></td></tr>{% endfor %}
+    </tbody></table></div>
   </section>
 </div>
+
+<div class="report-comment-modal is-hidden" data-report-comment-modal role="dialog" aria-modal="true" aria-labelledby="report-comment-title"><div class="report-comment-backdrop" data-report-comment-close></div><section class="report-comment-card"><button type="button" class="ghost-btn tiny-btn report-comment-close" data-report-comment-close aria-label="Zamknij">×</button><span class="section-kicker">Worklog</span><h2 id="report-comment-title">Komentarz</h2><p data-report-comment-content></p></section></div>
 <script>
   const reportSettings = document.querySelector('[data-report-settings]');
   const reportSectionToggles = Array.from(document.querySelectorAll('[data-report-section-toggle]'));
   const reportSections = Array.from(document.querySelectorAll('[data-report-section]'));
   const reportStorageKey = 'report-sections:{{ request.user.id }}';
-  const applyReportSections = (state) => {
-    reportSections.forEach((section) => { section.hidden = state[section.dataset.reportSection] === false; });
-    reportSectionToggles.forEach((toggle) => { toggle.checked = state[toggle.value] !== false; });
-  };
-  let reportSectionState = {};
-  try { reportSectionState = JSON.parse(localStorage.getItem(reportStorageKey) || '{}'); } catch { reportSectionState = {}; }
-  applyReportSections(reportSectionState);
-  document.querySelector('[data-report-settings-toggle]')?.addEventListener('click', () => {
-    reportSettings.hidden = !reportSettings.hidden;
-  });
-  reportSectionToggles.forEach((toggle) => toggle.addEventListener('change', () => {
-    reportSectionState = { ...reportSectionState, [toggle.value]: toggle.checked };
-    localStorage.setItem(reportStorageKey, JSON.stringify(reportSectionState));
-    applyReportSections(reportSectionState);
-  }));
-  document.querySelector('[data-report-settings-reset]')?.addEventListener('click', () => {
-    reportSectionState = {};
-    localStorage.removeItem(reportStorageKey);
-    applyReportSections(reportSectionState);
-  });
-
-  document.querySelectorAll('[data-report-filter-form] [data-auto-submit-filter]').forEach((field) => {
-    field.addEventListener('change', () => {
-      field.form?.requestSubmit();
-    });
-  });
-  const reportCommentModal = document.querySelector('[data-report-comment-modal]');
-  const reportCommentContent = reportCommentModal?.querySelector('[data-report-comment-content]');
-  document.querySelectorAll('[data-report-comment-target]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const source = document.getElementById(button.dataset.reportCommentTarget);
-      if (!reportCommentModal || !reportCommentContent || !source) return;
-      reportCommentContent.textContent = source.textContent || '';
-      reportCommentModal.classList.remove('is-hidden');
-    });
-  });
-  document.querySelectorAll('[data-report-comment-close]').forEach((button) => {
-    button.addEventListener('click', () => {
-      reportCommentModal?.classList.add('is-hidden');
-    });
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      reportCommentModal?.classList.add('is-hidden');
-    }
-  });
+  const applyReportSections = (state) => { reportSections.forEach((section) => { section.hidden = state[section.dataset.reportSection] === false; }); reportSectionToggles.forEach((toggle) => { toggle.checked = state[toggle.value] !== false; }); };
+  let reportSectionState = {}; try { reportSectionState = JSON.parse(localStorage.getItem(reportStorageKey) || '{}'); } catch { reportSectionState = {}; } applyReportSections(reportSectionState);
+  document.querySelector('[data-report-settings-toggle]')?.addEventListener('click', () => { reportSettings.hidden = !reportSettings.hidden; });
+  reportSectionToggles.forEach((toggle) => toggle.addEventListener('change', () => { reportSectionState = { ...reportSectionState, [toggle.value]: toggle.checked }; localStorage.setItem(reportStorageKey, JSON.stringify(reportSectionState)); applyReportSections(reportSectionState); }));
+  document.querySelector('[data-report-settings-reset]')?.addEventListener('click', () => { reportSectionState = {}; localStorage.removeItem(reportStorageKey); applyReportSections(reportSectionState); });
+  document.querySelectorAll('[data-report-filter-form] [data-auto-submit-filter]').forEach((field) => { field.addEventListener('change', () => field.form?.requestSubmit()); });
+  const reportCommentModal = document.querySelector('[data-report-comment-modal]'); const reportCommentContent = reportCommentModal?.querySelector('[data-report-comment-content]');
+  document.querySelectorAll('[data-report-comment-target]').forEach((button) => button.addEventListener('click', () => { const source = document.getElementById(button.dataset.reportCommentTarget); if (!reportCommentModal || !reportCommentContent || !source) return; reportCommentContent.textContent = source.textContent || ''; reportCommentModal.classList.remove('is-hidden'); }));
+  document.querySelectorAll('[data-report-comment-close]').forEach((button) => button.addEventListener('click', () => reportCommentModal?.classList.add('is-hidden')));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') reportCommentModal?.classList.add('is-hidden'); });
 </script>
 {% endblock %}

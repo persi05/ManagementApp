@@ -106,6 +106,7 @@
   }
 
   document.querySelectorAll('form').forEach((form) => {
+    if (form.dataset.defaultProjectForm !== undefined || form.classList.contains('document-pin')) return;
     form.addEventListener('submit', () => {
       const submitter = form.querySelector('button[type="submit"], button:not([type]), input[type="submit"]');
       if (submitter) {
