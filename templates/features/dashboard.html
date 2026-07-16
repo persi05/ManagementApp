@@ -17,6 +17,7 @@
     <div>
       <span class="dashboard-kicker">Dcode Management</span>
       <h2>Dzień dobry{% if user.first_name %}, {{ user.first_name }}{% endif %}</h2>
+      <p>{% if role == 'management' %}Najważniejsze dane zespołu, projektów i pracy — w jednym spojrzeniu.{% elif role == 'client' %}Postęp Twoich projektów i ostatnia aktywność zespołu są zawsze pod ręką.{% else %}Zobacz priorytety na dziś i wróć dokładnie tam, gdzie skończyłeś.{% endif %}</p>
     </div>
     <div class="dashboard-hero-actions">
       <a class="ghost-btn" href="{{ request.path }}">Odśwież</a>
@@ -107,7 +108,7 @@
       <div class="widget-status">
         <span class="status-pill ok">{{ client_done_count }} / {{ client_task_count }} zadań</span>
         <strong>{% if client_task_count %}{% widthratio client_done_count client_task_count 100 %}{% else %}0{% endif %}%</strong>
-        <small>zakończone względem zadań widocznych dla klienta</small>
+        <small>zakończone względem wszystkich zadań</small>
       </div>
     </article>
     {% else %}
@@ -224,12 +225,12 @@
     <div>
       <span>Godziny</span>
       <strong>{{ task_hours|floatformat:2 }}h</strong>
-      <small>wpisy widoczne dla klienta w tym miesiącu</small>
+      <small>zakończone prace w tym miesiącu</small>
     </div>
   </div>
 </section>
 
-<section class="panel dashboard-section" data-dashboard-widget="client-project">
+<section class="panel dashboard-section" data-dashboard-widget="client-project" data-client-project-panel>
   <div class="panel-head">
     <div><h2>Podsumowanie projektu</h2><p>Przełącz projekt, żeby zobaczyć jego postęp, godziny i ostatnie zadania.</p></div>
     {% if client_selected_project_row %}
@@ -239,7 +240,7 @@
 
   <div class="client-project-tabs">
     {% for row in client_project_rows %}
-      <a class="{% if client_selected_project_row and row.project.id == client_selected_project_row.project.id %}active{% endif %}" href="{% url 'dashboard' %}?project={{ row.project.id }}">
+      <a class="{% if client_selected_project_row and row.project.id == client_selected_project_row.project.id %}active{% endif %}" href="{% url 'dashboard' %}?project={{ row.project.id }}" data-dashboard-project-link>
         <strong>{{ row.project.name }}</strong>
         <small>{{ row.done_count }}/{{ row.task_count }}</small>
       </a>
@@ -501,12 +502,13 @@
       applyState(state);
     });
 
-    root.querySelectorAll('[data-list-expand]').forEach((button) => {
-      button.addEventListener('click', () => {
-        const list = button.closest('[data-collapsible-list]');
-        const expanded = list?.classList.toggle('is-expanded');
-        button.textContent = expanded ? 'Zwiń' : `+ ${button.dataset.moreCount} więcej`;
-      });
+    root.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-list-expand]');
+      if (!button || !root.contains(button)) return;
+
+      const list = button.closest('[data-collapsible-list]');
+      const expanded = list?.classList.toggle('is-expanded');
+      button.textContent = expanded ? 'Zwiń' : `+ ${button.dataset.moreCount} więcej`;
     });
   })();
 </script>

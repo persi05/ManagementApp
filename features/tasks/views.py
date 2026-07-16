@@ -75,7 +75,7 @@ def kanban(request, project_id=None):
         project = projects_qs.filter(pk=preferred_project_id).first() if preferred_project_id else None
         project = project or projects_qs.first()
     role = user_role(request.user)
-    can_view_rates = is_management(request.user) or role == UserProfile.Role.CLIENT
+    can_view_rates = is_management(request.user)
     open_task_modal = False
     if not project:
         return render(request, 'features/kanban.html', {'project': None, 'projects': projects_qs, 'can_view_rates': can_view_rates})
@@ -201,6 +201,9 @@ def kanban(request, project_id=None):
         'can_manage_column_settings': is_management(request.user),
         'can_move_tasks': any(column.can_accept_tasks for column in columns),
         'is_client_view': role == UserProfile.Role.CLIENT,
+        'role_label': request.user.profile.get_role_display(),
+        'board_task_count': sum(len(column.tasks.all()) for column in columns),
+        'board_done_count': sum(len(column.tasks.all()) for column in columns if column.is_done_column),
         'available_documents': DocumentItem.visible_to(request.user).filter(is_archived=False).exclude(kind=DocumentItem.Kind.FOLDER).order_by('kind', 'name')[:120],
     })
 
@@ -360,6 +363,7 @@ def add_task_attachment(request, task_id):
             name=name or uploaded.name,
             kind=classify_task_upload(uploaded),
             file=uploaded,
+            project=task.project,
         )
         grant_task_document_access(document, task)
         Attachment.objects.create(task=task, name=document.name, document=document)
@@ -555,7 +559,11 @@ def edit_worklog(request, worklog_id):
 def toggle_worklog_visibility(request, worklog_id):
     qs = TaskWorklog.objects.all() if is_management(request.user) else TaskWorklog.objects.filter(user=request.user)
     worklog = get_object_or_404(qs, pk=worklog_id)
-    worklog.visible_to_client = not worklog.visible_to_client
+    requested_visibility = request.POST.get('visible_to_client')
+    if requested_visibility is None:
+        worklog.visible_to_client = not worklog.visible_to_client
+    else:
+        worklog.visible_to_client = requested_visibility in {'1', 'true', 'on', 'yes'}
     worklog.save(update_fields=['visible_to_client'])
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         return JsonResponse({'visible_to_client': worklog.visible_to_client})

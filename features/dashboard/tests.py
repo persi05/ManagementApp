@@ -539,13 +539,29 @@ class TimeAccountingTests(TestCase):
         self.assertContains(response, 'visibility-switch')
         self.assertContains(response, 'Widzi')
         self.assertNotContains(response, '>Przelacz<')
+        self.assertNotContains(response, 'onchange="this.form.submit()"')
 
         toggle_response = self.client.post(
             reverse('toggle_worklog_visibility', args=[TaskWorklog.objects.get(user=user).id]),
+            {'visible_to_client': '0'},
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(toggle_response.status_code, 200)
         self.assertFalse(toggle_response.json()['visible_to_client'])
+
+        repeated_response = self.client.post(
+            reverse('toggle_worklog_visibility', args=[TaskWorklog.objects.get(user=user).id]),
+            {'visible_to_client': '0'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertFalse(repeated_response.json()['visible_to_client'])
+
+        visible_response = self.client.post(
+            reverse('toggle_worklog_visibility', args=[TaskWorklog.objects.get(user=user).id]),
+            {'visible_to_client': '1'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertTrue(visible_response.json()['visible_to_client'])
 
     def test_client_does_not_see_worklog_visibility_status(self):
         client = User.objects.create_user(username='worklog-client', password='pass')
@@ -1534,6 +1550,15 @@ class KanbanRenderingTests(TestCase):
         ProjectAssignment.objects.create(project=preferred_project, user=employee)
 
         self.client.force_login(employee)
+        ajax_response = self.client.post(
+            reverse('set_default_tasks_project', args=[first_project.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(ajax_response.status_code, 200)
+        self.assertJSONEqual(ajax_response.content, {'ok': True, 'project_id': first_project.id})
+        employee.profile.refresh_from_db()
+        self.assertEqual(employee.profile.default_tasks_project, first_project)
+
         set_response = self.client.post(reverse('set_default_tasks_project', args=[preferred_project.id]))
         projects_page = self.client.get(reverse('projects'))
         board_response = self.client.get(reverse('kanban'))
@@ -1542,6 +1567,8 @@ class KanbanRenderingTests(TestCase):
         employee.profile.refresh_from_db()
         self.assertEqual(employee.profile.default_tasks_project, preferred_project)
         self.assertContains(projects_page, 'Domyślny')
+        self.assertContains(projects_page, 'features/js/workspace.js')
+        self.assertContains(projects_page, 'data-default-project-form', count=2)
         self.assertRedirects(board_response, reverse('kanban_project', args=[preferred_project.id]))
 
     def test_only_management_can_open_column_permission_settings(self):
@@ -1661,8 +1688,28 @@ class KanbanRenderingTests(TestCase):
         self.assertContains(response, 'Podsumowanie łączone')
         self.assertContains(response, 'Podsumowanie projektu')
         self.assertContains(response, f'?project={second_project.id}')
+        self.assertContains(response, 'data-client-project-panel')
+        self.assertContains(response, 'data-dashboard-project-link', count=2)
+        self.assertContains(response, 'features/js/workspace.js')
         self.assertContains(response, 'Second task')
         self.assertNotContains(response, 'First task</strong>')
+
+    def test_dashboard_expand_handler_supports_ajax_replaced_client_panel(self):
+        client = User.objects.create_user(username='client-expand', password='pass')
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        project = Project.objects.create(name='Expandable project', client=client)
+        column = BoardColumn.objects.create(project=project, name='Start', position=0)
+        for index in range(6):
+            Task.objects.create(project=project, column=column, title=f'Task {index}')
+
+        self.client.force_login(client)
+        response = self.client.get(reverse('dashboard'), {'project': project.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-list-expand')
+        self.assertContains(response, "root.addEventListener('click', (event) =>", html=False)
+        self.assertContains(response, "event.target.closest('[data-list-expand]')", html=False)
 
     def test_management_can_allow_employee_to_move_to_custom_column(self):
         manager = User.objects.create_user(username='manager', password='pass')
@@ -1917,6 +1964,28 @@ class KanbanRenderingTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Notification.objects.filter(user=user, is_read=False).exists())
 
+    @override_settings(NOTIFICATIONS_PER_PAGE=1)
+    def test_notifications_pagination_has_edge_page_numbers_and_arrows(self):
+        user = User.objects.create_user(username='notification-pages', password='pass')
+        for index in range(10):
+            Notification.objects.create(user=user, title=f'Notification {index}', content='Content')
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('notifications'), {'page': 5})
+        first_page_response = self.client.get(reverse('notifications'), {'page': 1})
+        last_page_response = self.client.get(reverse('notifications'), {'page': 10})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="?page=4" aria-label="Poprzednia strona"')
+        self.assertContains(response, 'href="?page=6" aria-label="Następna strona"')
+        self.assertContains(response, 'href="?page=1">1</a>')
+        self.assertContains(response, 'href="?page=10">10</a>')
+        self.assertContains(response, 'class="pagination-ellipsis"', count=2)
+        self.assertNotContains(response, '>Pierwsza<')
+        self.assertNotContains(response, '>Ostatnia<')
+        self.assertContains(first_page_response, '<span class="pagination-arrow disabled" aria-hidden="true">←</span>', html=True)
+        self.assertContains(last_page_response, '<span class="pagination-arrow disabled" aria-hidden="true">→</span>', html=True)
+
     def test_client_gets_notification_for_new_task_in_first_column(self):
         manager = User.objects.create_user(username='manager', password='pass')
         client = User.objects.create_user(username='client', password='pass')
@@ -2072,7 +2141,7 @@ class KanbanRenderingTests(TestCase):
         self.assertNotContains(response, 'employee')
         self.assertNotContains(response, '<td>widzi</td>')
 
-    def test_client_report_uses_first_matching_label_rate(self):
+    def test_client_report_uses_matching_label_rate(self):
         client = User.objects.create_user(username='client', password='pass')
         employee = User.objects.create_user(username='employee', password='pass')
         client.profile.role = UserProfile.Role.CLIENT
@@ -2115,7 +2184,7 @@ class KanbanRenderingTests(TestCase):
         self.assertContains(response, '150,00 PLN/h')
         self.assertContains(response, '450,00 PLN')
 
-    def test_client_projects_show_project_and_label_rates(self):
+    def test_client_projects_hide_project_and_label_rates(self):
         client = User.objects.create_user(username='client', password='pass')
         client.profile.role = UserProfile.Role.CLIENT
         client.profile.save()
@@ -2127,13 +2196,12 @@ class KanbanRenderingTests(TestCase):
         list_response = self.client.get(reverse('projects'))
         detail_response = self.client.get(reverse('project_detail', args=[project.id]))
 
-        self.assertContains(list_response, 'Stawka podstawowa')
-        self.assertContains(list_response, '150,00 PLN/h')
-        self.assertContains(detail_response, 'Stawki projektu')
-        self.assertContains(detail_response, 'Stawka podstawowa')
-        self.assertContains(detail_response, 'backend')
-        self.assertContains(detail_response, '220,00 PLN/h')
-        self.assertNotContains(detail_response, 'frontend')
+        self.assertNotContains(list_response, 'Stawka')
+        self.assertNotContains(list_response, '150,00 PLN/h')
+        self.assertNotContains(detail_response, 'Stawki projektu')
+        self.assertNotContains(detail_response, 'Stawka podstawowa')
+        self.assertNotContains(detail_response, 'backend')
+        self.assertNotContains(detail_response, '220,00 PLN/h')
 
     def test_management_can_add_and_update_project_label_rate(self):
         manager = User.objects.create_user(username='manager', password='pass')
@@ -2185,10 +2253,15 @@ class KanbanRenderingTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-label-transfer')
+        self.assertContains(response, 'label-transfer-new-row')
+        self.assertContains(response, 'Wybrane etykiety')
+        self.assertContains(response, 'Dostępne etykiety')
         self.assertContains(response, 'data-label-value="backend"')
         self.assertContains(response, 'backend')
         self.assertContains(response, '220,00 PLN/h')
         self.assertNotContains(response, 'Stawka: 220,00 PLN/h')
+        body = response.content.decode('utf-8')
+        self.assertLess(body.index('data-task-field="priority"'), body.index('data-label-transfer'))
 
     def test_management_can_save_multiple_task_labels(self):
         manager = User.objects.create_user(username='manager', password='pass')
@@ -2286,6 +2359,7 @@ class KanbanRenderingTests(TestCase):
         self.assertEqual(attachment.name, 'Spec')
         self.assertIsNotNone(attachment.document)
         self.assertEqual(attachment.document.name, 'Spec')
+        self.assertEqual(attachment.document.project, project)
         self.assertTrue(attachment.document.file.name.endswith('.txt'))
         self.assertTrue(DocumentItem.objects.filter(name='Spec', owner=employee).exists())
         self.assertIn(attachment.document, DocumentItem.visible_to(employee))

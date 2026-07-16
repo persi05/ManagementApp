@@ -7,6 +7,11 @@
   <a class="primary-btn" href="{% url 'kanban_project' project.id %}">Zadania</a>
 {% endblock %}
 {% block content %}
+<div class="project-detail-page">
+<section class="project-detail-hero">
+  <div><span class="projects-kicker">{{ project.get_status_display }}</span><h2>{{ project.name }}</h2><p>{% if project.description %}{{ project.description|truncatechars:180 }}{% else %}Centrum ustawień, zespołu i przepływu pracy dla tego projektu.{% endif %}</p></div>
+  <div class="project-detail-stats"><div><span>Klient</span><strong>{% if project.client %}{{ project.client.get_full_name|default:project.client.username }}{% else %}Nieprzypisany{% endif %}</strong></div><div><span>{% if can_manage %}Godziny klienta{% else %}Godziny{% endif %}</span><strong>{{ project.visible_hours|floatformat:2 }}h</strong></div><div><span>Zespół</span><strong>{{ assignments|length }} osób</strong></div></div>
+</section>
 {% if can_manage %}
 <section class="content-split project-settings-split">
   <form method="post" class="form-card compact">
@@ -55,7 +60,7 @@
                 </div>
                 <button class="ghost-btn small-btn">Zapisz zmiany</button>
               </form>
-              <form method="post" action="{% url 'remove_project_label_rate' rate.id %}">
+              <form method="post" action="{% url 'remove_project_label_rate' rate.id %}" data-preserve-scroll>
                 {% csrf_token %}
                 <button class="ghost-btn small-btn">Usuń</button>
               </form>
@@ -117,7 +122,7 @@
               <td>{{ assignment.get_project_role_display }}</td>
               <td>
                 {% if can_manage %}
-                  <form method="post" action="{% url 'remove_project_assignment' assignment.id %}">
+                  <form method="post" action="{% url 'remove_project_assignment' assignment.id %}" data-preserve-scroll>
                     {% csrf_token %}
                     <button class="ghost-btn small-btn">Usuń</button>
                   </form>
@@ -140,4 +145,5 @@
     </form>
   {% endif %}
 </section>
+</div>
 {% endblock %}

@@ -15,7 +15,7 @@ from django.views.decorators.http import require_POST
 
 from features.accounts.models import is_management
 
-from .forms import DocumentAccessForm, DocumentVisibilityBlockForm, EditTextDocumentForm, FolderForm, RenameDocumentForm, TextDocumentForm, UploadDocumentForm
+from .forms import DocumentAccessForm, DocumentProjectForm, DocumentVisibilityBlockForm, EditTextDocumentForm, FolderForm, RenameDocumentForm, TextDocumentForm, UploadDocumentForm
 from .models import DocumentAccess, DocumentItem, DocumentPin, DocumentVisibilityBlock
 
 
@@ -59,6 +59,25 @@ def is_descendant_folder(candidate, folder):
             return True
         cursor = cursor.parent
     return False
+
+
+def descendant_item_ids(folder):
+    descendant_ids = []
+    parent_ids = [folder.pk]
+    while parent_ids:
+        parent_ids = list(DocumentItem.objects.filter(parent_id__in=parent_ids).values_list('id', flat=True))
+        descendant_ids.extend(parent_ids)
+    return descendant_ids
+
+
+def sync_folder_project(folder, previous_project_id):
+    descendant_ids = descendant_item_ids(folder)
+    if not descendant_ids:
+        return
+    inherited_projects = Q(project__isnull=True)
+    if previous_project_id:
+        inherited_projects |= Q(project_id=previous_project_id)
+    DocumentItem.objects.filter(pk__in=descendant_ids).filter(inherited_projects).update(project_id=folder.project_id)
 
 
 def classify_upload(uploaded_file):
@@ -212,7 +231,7 @@ def documents(request):
     selected_id = request.GET.get('selected')
     manage_id = request.GET.get('manage')
     show_archived = request.GET.get('archived') == '1'
-    upload_form = UploadDocumentForm(user=request.user)
+    upload_form = UploadDocumentForm(user=request.user, parent=parent)
     if show_archived:
         parent = None
 
@@ -221,39 +240,45 @@ def documents(request):
         form_name = request.POST.get('form')
 
         if form_name == 'folder':
-            form = FolderForm(request.POST)
+            form = FolderForm(request.POST, user=request.user, parent=parent)
             if form.is_valid():
                 item = form.save(commit=False)
                 item.kind = DocumentItem.Kind.FOLDER
                 item.parent = parent
                 item.owner = request.user
+                if 'project' not in request.POST and parent:
+                    item.project = parent.project
                 item.save()
                 messages.success(request, 'Folder został utworzony.')
                 return documents_redirect(parent=parent)
         elif form_name == 'document':
-            form = TextDocumentForm(request.POST)
+            form = TextDocumentForm(request.POST, user=request.user, parent=parent)
             if form.is_valid():
                 item = form.save(commit=False)
                 item.kind = DocumentItem.Kind.DOCUMENT
                 item.parent = parent
                 item.owner = request.user
+                if 'project' not in request.POST and parent:
+                    item.project = parent.project
                 item.save()
                 messages.success(request, 'Dokument został utworzony.')
                 return documents_redirect(parent=parent, selected=item)
         elif form_name == 'upload':
-            upload_form = UploadDocumentForm(request.POST, request.FILES, user=request.user)
+            upload_form = UploadDocumentForm(request.POST, request.FILES, user=request.user, parent=parent)
             if upload_form.is_valid():
                 item = upload_form.save(commit=False)
-                item.kind = classify_upload(item.file)
+                item.kind = classify_upload(request.FILES.get('file') or item.file)
                 item.parent = parent
                 item.owner = request.user
+                if 'project' not in request.POST and parent:
+                    item.project = parent.project
                 if not item.name:
                     item.name = item.file.name
                 item.save()
                 messages.success(request, 'Plik został przesłany.')
                 return documents_redirect(parent=parent, selected=item)
             add_form_errors_to_messages(request, upload_form, 'Nie dodano pliku.')
-            upload_form = UploadDocumentForm(user=request.user)
+            upload_form = UploadDocumentForm(user=request.user, parent=parent)
         elif form_name == 'rename':
             item = visible_document(request.user, request.POST.get('item'))
             if not item.can_edit(request.user):
@@ -282,6 +307,30 @@ def documents(request):
                     selected=item,
                     archived=item.is_archived,
                 )
+        elif form_name == 'project':
+            item = visible_document(request.user, request.POST.get('item'))
+            if not item.can_assign_project(request.user):
+                return HttpResponseForbidden('Brak uprawnień do przypisania projektu.')
+            previous_project_id = item.project_id
+            form = DocumentProjectForm(request.POST, instance=item, user=request.user)
+            if form.is_valid():
+                item = form.save()
+                if item.kind == DocumentItem.Kind.FOLDER:
+                    sync_folder_project(item, previous_project_id)
+                messages.success(request, 'Przypisanie do projektu zostało zapisane.')
+                return documents_redirect(
+                    parent=None if item.is_archived else item.parent,
+                    selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
+                    manage=item if item.kind == DocumentItem.Kind.FOLDER else None,
+                    archived=item.is_archived,
+                )
+            add_form_errors_to_messages(request, form, 'Nie udało się przypisać projektu.')
+            return documents_redirect(
+                parent=None if item.is_archived else item.parent,
+                selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
+                manage=item if item.kind == DocumentItem.Kind.FOLDER else None,
+                archived=item.is_archived,
+            )
         elif form_name == 'access':
             item = visible_document(request.user, request.POST.get('item'))
             if not is_management(request.user):
@@ -363,9 +412,13 @@ def documents(request):
                 if item.kind == DocumentItem.Kind.FOLDER and is_descendant_folder(target, item):
                     return HttpResponseForbidden('Nie można przenieść folderu do niego samego ani jego podfolderu.')
                 item.parent = target
+                if item.project_id is None and target.project_id:
+                    item.project = target.project
             else:
                 item.parent = None
-            item.save(update_fields=['parent', 'updated_at'])
+            item.save(update_fields=['parent', 'project', 'updated_at'])
+            if item.kind == DocumentItem.Kind.FOLDER and item.project_id:
+                sync_folder_project(item, None)
             messages.success(request, 'Element został przeniesiony.')
             return documents_redirect(parent=None if item.is_archived else previous_parent, archived=item.is_archived)
         elif form_name == 'action':
@@ -412,12 +465,19 @@ def documents(request):
                 messages.success(request, 'Kopia została utworzona.')
                 return documents_redirect(parent=copy.parent, selected=copy)
 
-    items = DocumentItem.visible_to(request.user).filter(is_archived=show_archived)
+    visible_items = DocumentItem.visible_to(request.user)
+    document_stats = visible_items.aggregate(
+        active=Count('id', filter=Q(is_archived=False), distinct=True),
+        archived=Count('id', filter=Q(is_archived=True), distinct=True),
+        folders=Count('id', filter=Q(is_archived=False, kind=DocumentItem.Kind.FOLDER), distinct=True),
+        pinned=Count('id', filter=Q(user_pins__user=request.user), distinct=True),
+    )
+    items = visible_items.filter(is_archived=show_archived)
     if query:
         current_items = items.filter(Q(name__icontains=query) | Q(content__icontains=query))
     else:
         current_items = items.filter(parent=parent)
-    current_items = current_items.select_related('owner', 'parent').annotate(
+    current_items = current_items.select_related('owner', 'parent', 'project').annotate(
         children_count=Count('children'),
         is_pinned_by_user=Exists(DocumentPin.objects.filter(item_id=OuterRef('pk'), user=request.user)),
         kind_rank=Case(
@@ -437,21 +497,23 @@ def documents(request):
             item.search_folder = search_folder_path['folder']
             item.can_edit_current_user = item.can_edit(request.user)
             item.can_manage_current_user = item.can_manage(request.user)
+            item.can_assign_project_current_user = item.can_assign_project(request.user)
     else:
         current_items = list(current_items)
         for item in current_items:
             item.can_edit_current_user = item.can_edit(request.user)
             item.can_manage_current_user = item.can_manage(request.user)
+            item.can_assign_project_current_user = item.can_assign_project(request.user)
 
     selected = None
     if selected_id:
-        selected = DocumentItem.visible_to(request.user).select_related('owner', 'parent').filter(pk=selected_id).first()
+        selected = DocumentItem.visible_to(request.user).select_related('owner', 'parent', 'project').filter(pk=selected_id).first()
         if selected and selected.kind == DocumentItem.Kind.FOLDER:
             selected = None
 
     managed_item = None
     if manage_id:
-        managed_item = DocumentItem.visible_to(request.user).select_related('owner', 'parent').filter(pk=manage_id).first()
+        managed_item = DocumentItem.visible_to(request.user).select_related('owner', 'parent', 'project').filter(pk=manage_id).first()
     panel_item = selected or managed_item
 
     breadcrumbs = []
@@ -471,12 +533,13 @@ def documents(request):
         'panel_item': panel_item,
         'selected_is_pdf': bool(selected and selected.file and document_file_extension(selected) == 'pdf'),
         'selected_preview_text': file_preview_text(selected),
-        'folder_form': FolderForm(),
-        'document_form': TextDocumentForm(),
+        'folder_form': FolderForm(user=request.user, parent=parent),
+        'document_form': TextDocumentForm(user=request.user, parent=parent),
         'upload_form': upload_form,
         'max_upload_size_bytes': settings.DOCUMENTS_MAX_UPLOAD_SIZE_BYTES,
         'allowed_upload_extensions': sorted(settings.DOCUMENTS_ALLOWED_UPLOAD_EXTENSIONS),
         'rename_form': EditTextDocumentForm(instance=panel_item) if panel_item and panel_item.kind == DocumentItem.Kind.DOCUMENT else RenameDocumentForm(instance=panel_item) if panel_item else RenameDocumentForm(),
+        'project_form': DocumentProjectForm(instance=panel_item, user=request.user) if panel_item else DocumentProjectForm(user=request.user),
         'access_form': DocumentAccessForm(),
         'visibility_block_form': DocumentVisibilityBlockForm(),
         'accesses': panel_item.accesses.select_related('user') if panel_item else [],
@@ -484,7 +547,11 @@ def documents(request):
         'folders': DocumentItem.visible_to(request.user).filter(kind=DocumentItem.Kind.FOLDER, is_archived=False).exclude(pk=panel_item.pk if panel_item else None),
         'can_manage_selected': panel_item.can_manage(request.user) if panel_item else False,
         'can_edit_selected': panel_item.can_edit(request.user) if panel_item else False,
+        'can_assign_project_selected': panel_item.can_assign_project(request.user) if panel_item else False,
         'can_manage_access': bool(panel_item and is_management(request.user)),
+        'document_stats': document_stats,
+        'documents_role_label': request.user.profile.get_role_display(),
+        'documents_is_management': is_management(request.user),
     })
 
 

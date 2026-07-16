@@ -1,49 +1,40 @@
 {% extends "base.html" %}
 {% block title %}Projekty - Dcode Management{% endblock %}
 {% block heading %}Projekty{% endblock %}
-{% block eyebrow %}Zakres pracy{% endblock %}
+{% block eyebrow %}Portfolio pracy{% endblock %}
 {% block content %}
-<section class="projects-page">
-  <div class="panel projects-list-panel">
-    <div class="panel-head"><div><h2>Lista projektów</h2></div></div>
-    <div class="table-wrap">
-      <table class="projects-table">
-        <thead><tr><th>Nazwa</th><th>Klient</th><th>Status</th>{% if can_view_client_rates %}<th>Stawka podstawowa</th>{% endif %}<th>Godziny klienta</th><th>Akcje</th></tr></thead>
-        <tbody>
+<div class="projects-page projects-page-new">
+  <section class="projects-hero">
+    <div><span class="projects-kicker">{% if role == 'management' %}Portfolio firmy{% elif role == 'client' %}Twoje projekty{% else %}Twoja przestrzeń pracy{% endif %}</span><h2>{% if role == 'management' %}Projekty pod kontrolą.<br><em>Zespół w ruchu.</em>{% elif role == 'client' %}Wszystkie projekty.<br><em>Jeden czytelny obraz.</em>{% else %}Skup się na tym,<br><em>co jest teraz ważne.</em>{% endif %}</h2><p>{% if role == 'management' %}Zarządzaj klientami, zespołem i przepływem pracy z jednego miejsca.{% elif role == 'client' %}Śledź postęp realizacji i przechodź prosto do zadań w swoich projektach.{% else %}Otwórz zadania, sprawdź postęp i ustaw najważniejszy projekt jako domyślny.{% endif %}</p></div>
+    <div class="projects-hero-stats"><div><strong>{{ project_stats.all }}</strong><span>wszystkich</span></div><div><strong>{{ project_stats.active }}</strong><span>aktywnych</span></div><div><strong>{{ project_stats.done }}</strong><span>zakończonych</span></div></div>
+  </section>
+
+  <section class="projects-summary-strip">
+    <div><span class="project-status-dot active"></span><strong>{{ project_stats.active }}</strong><small>Aktywne</small></div>
+    <div><span class="project-status-dot paused"></span><strong>{{ project_stats.paused }}</strong><small>Wstrzymane</small></div>
+    <div><span class="project-status-dot done"></span><strong>{{ project_stats.done }}</strong><small>Zakończone</small></div>
+  </section>
+
+  <section class="projects-workspace {% if can_manage %}with-create-panel{% endif %}">
+    <div class="projects-portfolio">
+      <div class="projects-section-head"><div><span class="projects-kicker">Portfolio</span><h2>Lista projektów</h2></div><span>{{ project_stats.all }} pozycji</span></div>
+      <div class="projects-card-grid">
         {% for project in projects %}
-          <tr>
-            <td>{{ project.name }}</td>
-            <td>{% if project.client %}{{ project.client.get_full_name|default:project.client.username }}{% else %}-{% endif %}</td>
-            <td>{{ project.get_status_display }}</td>
-            {% if can_view_client_rates %}
-              <td>{% if project.client_hourly_rate %}{{ project.client_hourly_rate|floatformat:2 }} {{ project.client_rate_currency }}/h{% else %}-{% endif %}</td>
-            {% endif %}
-            <td>{{ project.visible_hours|floatformat:2 }}h</td>
-            <td><div class="project-actions">
-              <a class="ghost-btn small-btn" href="{% url 'project_detail' project.id %}">Szczegóły</a>
-              <a class="ghost-btn small-btn" href="{% url 'kanban_project' project.id %}">Zadania</a>
-              <form method="post" action="{% url 'set_default_tasks_project' project.id %}">
-                {% csrf_token %}
-                <button class="ghost-btn small-btn project-default-btn{% if default_tasks_project_id == project.id %} active{% endif %}" aria-label="Ustaw projekt {{ project.name }} jako domyślny dla zadań" {% if default_tasks_project_id == project.id %}disabled{% endif %}>
-                  <span>&#9733;</span> {% if default_tasks_project_id == project.id %}Domyślny{% else %}Ustaw domyślny{% endif %}
-                </button>
-              </form>
-            </div></td>
-          </tr>
-        {% empty %}<tr><td colspan="5">Brak projektów.</td></tr>{% endfor %}
-        </tbody>
-      </table>
+        <article class="project-card-new status-{{ project.status }}">
+          <div class="project-card-head"><span class="project-card-monogram">{{ project.name|slice:":1"|upper }}</span><span class="project-status-pill">{{ project.get_status_display }}</span></div>
+          <div class="project-card-copy"><h3>{{ project.name }}</h3><p>{% if project.client %}{{ project.client.get_full_name|default:project.client.username }}{% else %}Bez przypisanego klienta{% endif %}</p></div>
+          <div class="project-card-metrics">
+            <div><span>{% if can_manage %}Godziny klienta{% else %}Godziny{% endif %}</span><strong>{{ project.visible_hours|floatformat:2 }}h</strong></div>
+            {% if can_view_client_rates %}<div><span>Stawka</span><strong>{% if project.client_hourly_rate %}{{ project.client_hourly_rate|floatformat:2 }} {{ project.client_rate_currency }}/h{% else %}—{% endif %}</strong></div>{% endif %}
+          </div>
+          <div class="project-card-actions"><a class="ghost-btn small-btn" href="{% url 'project_detail' project.id %}">Szczegóły</a><a class="primary-btn small-btn" href="{% url 'kanban_project' project.id %}">Otwórz zadania</a></div>
+          <form method="post" action="{% url 'set_default_tasks_project' project.id %}" class="project-card-default" data-default-project-form data-project-name="{{ project.name }}">{% csrf_token %}<button aria-label="Ustaw projekt {{ project.name }} jako domyślny dla zadań" {% if default_tasks_project_id == project.id %}class="active" disabled{% endif %}><span>★</span> {% if default_tasks_project_id == project.id %}Domyślny{% else %}Ustaw jako domyślny{% endif %}</button></form>
+        </article>
+        {% empty %}<div class="projects-empty"><span>＋</span><h3>Brak projektów</h3><p>{% if can_manage %}Utwórz pierwszy projekt w panelu obok.{% else %}Nie masz jeszcze przypisanego projektu.{% endif %}</p></div>{% endfor %}
+      </div>
+      {% if page_obj.paginator.num_pages > 1 %}<nav class="pagination" aria-label="Strony projektów">{% if page_obj.has_previous %}<a class="ghost-btn small-btn" href="?page={{ page_obj.previous_page_number }}">Poprzednia</a>{% endif %}<span>Strona {{ page_obj.number }} z {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="ghost-btn small-btn" href="?page={{ page_obj.next_page_number }}">Następna</a>{% endif %}</nav>{% endif %}
     </div>
-    {% if page_obj.paginator.num_pages > 1 %}
-      <nav class="pagination" aria-label="Strony projektów">
-        {% if page_obj.has_previous %}<a class="ghost-btn small-btn" href="?page={{ page_obj.previous_page_number }}">Poprzednia</a>{% endif %}
-        <span>Strona {{ page_obj.number }} z {{ page_obj.paginator.num_pages }}</span>
-        {% if page_obj.has_next %}<a class="ghost-btn small-btn" href="?page={{ page_obj.next_page_number }}">Następna</a>{% endif %}
-      </nav>
-    {% endif %}
-  </div>
-  {% if can_manage %}
-    <form method="post" class="form-card compact projects-create-form">{% csrf_token %}<h2>Nowy projekt</h2>{{ form.as_p }}<button class="primary-btn full">Dodaj projekt</button></form>
-  {% endif %}
-</section>
+    {% if can_manage %}<aside class="projects-create-panel"><span class="projects-kicker">Nowy</span><h2>Utwórz projekt</h2><p>Dodaj podstawowe informacje. Tablica z domyślnymi kolumnami powstanie automatycznie.</p><form method="post" class="projects-create-form">{% csrf_token %}{{ form.as_p }}<button class="primary-btn full">Dodaj projekt</button></form></aside>{% endif %}
+  </section>
+</div>
 {% endblock %}
