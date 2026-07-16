@@ -1,7 +1,9 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models import Max, Sum
+from django.core.paginator import Paginator
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -13,10 +15,11 @@ from features.documents.forms import validate_document_upload, validate_user_fil
 from features.documents.models import DocumentAccess, DocumentItem
 from features.projects.selectors import visible_projects
 from features.tasks.forms import BoardColumnForm, BoardColumnSettingsForm, TaskEditForm, TaskForm, WorklogForm
-from features.tasks.models import Attachment, BoardColumn, Notification, TaskEditNote, TaskWorklog
+from features.tasks.models import Attachment, BoardColumn, Notification, Task, TaskEditNote, TaskWorklog
 from features.tasks.selectors import visible_tasks
 from features.tasks.services import (
     can_delete_task,
+    can_create_task_in_column,
     can_edit_task,
     can_move_task_to_column,
     can_move_to_column,
@@ -27,6 +30,7 @@ from features.tasks.services import (
     normalize_column_positions,
     task_effective_client_rate,
     task_label_badges,
+    visible_columns,
 )
 
 
@@ -41,41 +45,58 @@ def grant_task_document_access(document, task):
     user_ids = set(task.project.members.values_list('id', flat=True))
     if task.project.client_id:
         user_ids.add(task.project.client_id)
-    user_ids.discard(document.owner_id)
+    if document.owner_id:
+        user_ids.add(document.owner_id)
     for user_id in user_ids:
         DocumentAccess.objects.get_or_create(item=document, user_id=user_id, defaults={'can_edit': False, 'can_manage': False})
+
+
+def task_project_from_post(request, projects_qs, fallback_project):
+    posted_column_id = optional_pk(request.POST.get('column'))
+    if posted_column_id:
+        column = BoardColumn.objects.filter(pk=posted_column_id, project__in=projects_qs).select_related('project').first()
+        if column:
+            return column.project
+
+    posted_project_id = optional_pk(request.POST.get('project'))
+    if posted_project_id:
+        return get_object_or_404(projects_qs, pk=posted_project_id)
+
+    return fallback_project
 
 
 @login_required
 def kanban(request, project_id=None):
     projects_qs = visible_projects(request.user)
-    project = get_object_or_404(projects_qs, pk=project_id) if project_id else projects_qs.first()
+    if project_id:
+        project = get_object_or_404(projects_qs, pk=project_id)
+    else:
+        preferred_project_id = request.user.profile.default_tasks_project_id
+        project = projects_qs.filter(pk=preferred_project_id).first() if preferred_project_id else None
+        project = project or projects_qs.first()
     role = user_role(request.user)
     can_view_rates = is_management(request.user) or role == UserProfile.Role.CLIENT
     open_task_modal = False
     if not project:
         return render(request, 'features/kanban.html', {'project': None, 'projects': projects_qs, 'can_view_rates': can_view_rates})
+    if project_id is None and request.method == 'GET':
+        return redirect('kanban_project', project_id=project.id)
 
     selected_project = project
     if request.method == 'POST':
         if request.POST.get('form') == 'board_column':
-            if not is_management(request.user):
-                return HttpResponseForbidden('Brak uprawnień do dodania kolumny.')
-            column_form = BoardColumnForm(request.POST)
+            column_form = BoardColumnForm(request.POST, project=project)
             if column_form.is_valid():
                 column = column_form.save(commit=False)
                 column.project = project
                 max_position = project.columns.aggregate(max_position=Max('position'))['max_position']
                 column.position = 0 if max_position is None else max_position + 1
                 previous_column = project.columns.order_by('-position', '-id').first()
+                for field_name, value in default_permissions_for_position(column.position).items():
+                    setattr(column, field_name, value)
                 if previous_column:
-                    for field_name in BoardColumn.PERMISSION_FIELDS:
-                        setattr(column, field_name, getattr(previous_column, field_name))
                     for field_name in BoardColumn.NOTIFICATION_FIELDS:
                         setattr(column, field_name, getattr(previous_column, field_name))
-                else:
-                    for field_name, value in default_permissions_for_position(0).items():
-                        setattr(column, field_name, value)
                 column.save()
                 messages.success(request, 'Kolumna została dodana.')
                 return redirect('kanban_project', project_id=project.id)
@@ -87,8 +108,7 @@ def kanban(request, project_id=None):
                 fixed_project=project_id is not None,
             )
         else:
-            selected_project_id = project.id if project_id is not None else optional_pk(request.POST.get('project')) or project.id
-            selected_project = get_object_or_404(projects_qs, pk=selected_project_id)
+            selected_project = project if project_id is not None else task_project_from_post(request, projects_qs, project)
             form = TaskForm(
                 request.POST,
                 user=request.user,
@@ -96,13 +116,17 @@ def kanban(request, project_id=None):
                 projects_queryset=projects_qs,
                 fixed_project=project_id is not None,
             )
-            column_form = BoardColumnForm()
+            column_form = BoardColumnForm(project=selected_project)
             if form.is_valid():
                 task = form.save(commit=False)
                 task.project = selected_project
                 if 'column' not in form.fields:
                     posted_column_id = optional_pk(request.POST.get('column'))
-                    task.column = selected_project.columns.filter(pk=posted_column_id).first() or selected_project.columns.order_by('position', 'id').first()
+                    create_columns = visible_columns(request.user, selected_project)
+                    if not is_management(request.user):
+                        allowed_ids = [column.id for column in create_columns if can_create_task_in_column(request.user, selected_project, column)]
+                        create_columns = create_columns.filter(id__in=allowed_ids)
+                    task.column = create_columns.filter(pk=posted_column_id).first() or create_columns.order_by('position', 'id').first()
                 if task.column_id is None:
                     form.add_error(None, 'Projekt nie ma jeszcze zadnej kolumny.')
                     project = selected_project
@@ -139,9 +163,9 @@ def kanban(request, project_id=None):
             projects_queryset=projects_qs,
             fixed_project=project_id is not None,
         )
-        column_form = BoardColumnForm()
+        column_form = BoardColumnForm(project=project)
 
-    columns = project.columns.prefetch_related(
+    columns = visible_columns(request.user, project).prefetch_related(
         'tasks__assignee',
         'tasks__assignees',
         'tasks__worklogs',
@@ -152,8 +176,13 @@ def kanban(request, project_id=None):
     )
     for column in columns:
         column.can_accept_tasks = can_move_to_column(request.user, project, column)
+        column.can_create_tasks = can_create_task_in_column(request.user, project, column)
         for task in column.tasks.all():
             task.can_edit = can_edit_task(request.user, task)
+            task.can_move = task.can_edit and any(
+                can_move_task_to_column(request.user, task, target_column)
+                for target_column in columns
+            )
             task.label_badges = task_label_badges(task)
             task.visible_label_badges = task.label_badges[:2]
             task.hidden_label_badges_count = max(len(task.label_badges) - len(task.visible_label_badges), 0)
@@ -168,7 +197,8 @@ def kanban(request, project_id=None):
         'project_label_rates': project.label_rates.all(),
         'can_view_rates': can_view_rates,
         'open_task_modal': open_task_modal,
-        'can_manage_board': is_management(request.user),
+        'can_manage_board': True,
+        'can_manage_column_settings': is_management(request.user),
         'can_move_tasks': any(column.can_accept_tasks for column in columns),
         'is_client_view': role == UserProfile.Role.CLIENT,
         'available_documents': DocumentItem.visible_to(request.user).filter(is_archived=False).exclude(kind=DocumentItem.Kind.FOLDER).order_by('kind', 'name')[:120],
@@ -206,9 +236,37 @@ def move_task(request, task_id):
     return JsonResponse({'ok': True, 'column': column.name})
 
 
+@login_required
+@require_POST
+def update_task_card(request, task_id):
+    task = get_object_or_404(visible_tasks(request.user), pk=task_id)
+    if not can_edit_task(request.user, task):
+        return HttpResponseForbidden('Brak uprawnien do zmiany karty zadania.')
+
+    action = request.POST.get('action')
+    if action == 'toggle_star':
+        task.is_starred = not task.is_starred
+        task.save(update_fields=['is_starred', 'updated_at'])
+    elif action == 'set_color':
+        color = request.POST.get('color', Task.CardColor.DEFAULT)
+        if color not in Task.CardColor.values:
+            return JsonResponse({'ok': False, 'error': 'Nieprawidlowy kolor.'}, status=400)
+        task.card_color = color
+        task.save(update_fields=['card_color', 'updated_at'])
+    else:
+        return JsonResponse({'ok': False, 'error': 'Nieprawidlowa akcja.'}, status=400)
+
+    return JsonResponse({
+        'ok': True,
+        'is_starred': task.is_starred,
+        'card_color': task.card_color,
+    })
+
+
+@login_required
 def update_column(request, column_id):
     if not is_management(request.user):
-        return HttpResponseForbidden('Brak uprawnień do edycji kolumny.')
+        return HttpResponseForbidden('Brak uprawnień do edycji ustawień kolumny.')
 
     column = get_object_or_404(BoardColumn, pk=column_id, project__in=visible_projects(request.user))
     if request.method == 'POST':
@@ -232,9 +290,6 @@ def update_column(request, column_id):
 @login_required
 @require_POST
 def delete_column(request, column_id):
-    if not is_management(request.user):
-        return HttpResponseForbidden('Brak uprawnień do usunięcia kolumny.')
-
     column = get_object_or_404(BoardColumn, pk=column_id, project__in=visible_projects(request.user))
     project = column.project
     if project.columns.count() <= 1:
@@ -330,6 +385,7 @@ def link_task_document(request, task_id):
         document=document,
         defaults={'name': document.name},
     )
+    grant_task_document_access(document, task)
     messages.success(request, 'Dokument zostal powiazany z zadaniem.')
     return redirect('kanban_project', project_id=task.project_id)
 
@@ -506,10 +562,14 @@ def toggle_worklog_visibility(request, worklog_id):
 
 @login_required
 def notifications(request):
-    items = request.user.notifications.all()[:100]
+    notifications_qs = request.user.notifications.all()
+    paginator = Paginator(notifications_qs, settings.NOTIFICATIONS_PER_PAGE)
+    page_obj = paginator.get_page(request.GET.get('page'))
     unread_count = request.user.notifications.filter(is_read=False).count()
     return render(request, 'features/notifications.html', {
-        'notifications': items,
+        'page_obj': page_obj,
+        'notifications': page_obj.object_list,
+        'total_count': paginator.count,
         'unread_count': unread_count,
     })
 

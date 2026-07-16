@@ -6,7 +6,7 @@
   {% if unread_count %}
     <form method="post" action="{% url 'mark_all_notifications_read' %}">
       {% csrf_token %}
-      <input type="hidden" name="next" value="{{ request.path }}">
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
       <button class="primary-btn">Oznacz wszystkie jako przeczytane</button>
     </form>
   {% endif %}
@@ -18,7 +18,7 @@
       <h2>Ostatnie powiadomienia</h2>
       <p>{% if unread_count %}Masz {{ unread_count }} nieprzeczytane.{% else %}Wszystko jest przeczytane.{% endif %}</p>
     </div>
-    <span class="notifications-count">{{ notifications|length }} ostatnich</span>
+    <span class="notifications-count">Strona {{ page_obj.number }} z {{ page_obj.paginator.num_pages }} · {{ total_count }} razem</span>
   </div>
 
   <div class="notification-list">
@@ -53,7 +53,7 @@
         {% if not notification.is_read %}
           <form method="post" action="{% url 'mark_notification_read' notification.id %}">
             {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.path }}">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <button class="ghost-btn small-btn notification-read-btn" title="Oznacz jako przeczytane" aria-label="Oznacz jako przeczytane">&#10003;</button>
           </form>
         {% else %}
@@ -64,5 +64,30 @@
       <p class="empty">Nie masz jeszcze powiadomień.</p>
     {% endfor %}
   </div>
+  {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="pagination" aria-label="Strony powiadomień">
+      {% if page_obj.has_previous %}
+        <a class="ghost-btn small-btn" href="?page={{ page_obj.previous_page_number }}">Poprzednia</a>
+      {% else %}
+        <span class="ghost-btn small-btn disabled">Poprzednia</span>
+      {% endif %}
+
+      <div class="pagination-pages">
+        {% for page_number in page_obj.paginator.page_range %}
+          {% if page_number == page_obj.number %}
+            <span class="pagination-page active">{{ page_number }}</span>
+          {% elif page_number >= page_obj.number|add:"-2" and page_number <= page_obj.number|add:"2" %}
+            <a class="pagination-page" href="?page={{ page_number }}">{{ page_number }}</a>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      {% if page_obj.has_next %}
+        <a class="ghost-btn small-btn" href="?page={{ page_obj.next_page_number }}">Następna</a>
+      {% else %}
+        <span class="ghost-btn small-btn disabled">Następna</span>
+      {% endif %}
+    </nav>
+  {% endif %}
 </section>
 {% endblock %}

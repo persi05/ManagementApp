@@ -22,11 +22,28 @@
     }
   }
 
+  function placeCardByStar(dropzone, card) {
+    const cards = Array.from(dropzone.querySelectorAll('.kanban-card')).filter((item) => item !== card);
+    const firstRegular = cards.find((item) => !item.classList.contains('is-starred'));
+    dropzone.insertBefore(card, firstRegular || null);
+  }
+
+  async function updateCardSettings(card, values) {
+    const response = await fetch(card.dataset.cardSettingsUrl, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
+      credentials: 'same-origin',
+      body: new URLSearchParams(values),
+    });
+    if (!response.ok) throw new Error('Nie udalo sie zapisac ustawien karty.');
+    return response.json();
+  }
+
   async function moveCard(card, targetColumn) {
     const previousDropzone = card.parentElement;
     const previousColumn = previousDropzone?.closest('.kanban-column');
     const dropzone = targetColumn.querySelector('.kanban-dropzone');
-    dropzone.appendChild(card);
+    placeCardByStar(dropzone, card);
     refreshColumn(previousColumn);
     refreshColumn(targetColumn);
 
@@ -51,6 +68,42 @@
   const addTaskPanel = document.querySelector('#new-task-panel');
   const taskForm = document.querySelector('[data-task-form]');
   let activeModal = null;
+
+  if (board) {
+    let panStartX = 0;
+    let panStartScrollLeft = 0;
+    let panPointerId = null;
+    let hasPanned = false;
+
+    board.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || event.target.closest('button, a, input, select, textarea, label, .kanban-card')) return;
+      panPointerId = event.pointerId;
+      panStartX = event.clientX;
+      panStartScrollLeft = board.scrollLeft;
+      hasPanned = false;
+      board.setPointerCapture(event.pointerId);
+      board.classList.add('is-panning');
+    });
+
+    board.addEventListener('pointermove', (event) => {
+      if (panPointerId !== event.pointerId) return;
+      const distance = event.clientX - panStartX;
+      if (Math.abs(distance) > 3) hasPanned = true;
+      if (!hasPanned) return;
+      event.preventDefault();
+      board.scrollLeft = panStartScrollLeft - distance;
+    });
+
+    function stopBoardPan(event) {
+      if (panPointerId !== event.pointerId) return;
+      if (board.hasPointerCapture(event.pointerId)) board.releasePointerCapture(event.pointerId);
+      panPointerId = null;
+      board.classList.remove('is-panning');
+    }
+
+    board.addEventListener('pointerup', stopBoardPan);
+    board.addEventListener('pointercancel', stopBoardPan);
+  }
 
   document.querySelectorAll('form').forEach((form) => {
     form.addEventListener('submit', () => {
@@ -95,10 +148,19 @@
     field.value = columnId;
   }
 
+  function setTaskProject(projectId) {
+    if (!taskForm || !projectId) return;
+    const field = taskForm.querySelector('[name="project"]');
+    if (field) {
+      field.value = projectId;
+    }
+  }
+
   addTaskToggles.forEach((toggle) => {
     toggle.addEventListener('click', () => {
       addTaskToggles.forEach((item) => item.setAttribute('aria-expanded', 'false'));
       toggle.setAttribute('aria-expanded', 'true');
+      setTaskProject(toggle.dataset.taskProject);
       setTaskColumn(toggle.dataset.taskColumn);
       openModal(addTaskPanel);
     });
@@ -152,6 +214,53 @@
       event.dataTransfer.setData('text/plain', card.dataset.task);
     });
     card.addEventListener('dragend', () => card.classList.remove('dragging'));
+
+    const starButton = card.querySelector('[data-toggle-star]');
+    const colorToggle = card.querySelector('[data-toggle-colors]');
+    const colorMenu = card.querySelector('[data-color-menu]');
+
+    starButton?.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      starButton.disabled = true;
+      try {
+        const result = await updateCardSettings(card, { action: 'toggle_star' });
+        card.classList.toggle('is-starred', result.is_starred);
+        starButton.classList.toggle('active', result.is_starred);
+        starButton.setAttribute('aria-pressed', String(result.is_starred));
+        starButton.setAttribute('aria-label', result.is_starred ? 'Usun wyroznienie' : 'Wyroznij zadanie');
+        placeCardByStar(card.parentElement, card);
+      } finally {
+        starButton.disabled = false;
+      }
+    });
+
+    colorToggle?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const willOpen = colorMenu.classList.contains('is-hidden');
+      document.querySelectorAll('[data-color-menu]').forEach((menu) => menu.classList.add('is-hidden'));
+      document.querySelectorAll('[data-toggle-colors]').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+      colorMenu.classList.toggle('is-hidden', !willOpen);
+      colorToggle.setAttribute('aria-expanded', String(willOpen));
+    });
+
+    colorMenu?.querySelectorAll('[data-card-color]').forEach((swatch) => {
+      swatch.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        const result = await updateCardSettings(card, { action: 'set_color', color: swatch.dataset.cardColor });
+        Array.from(card.classList)
+          .filter((className) => className.startsWith('card-color-'))
+          .forEach((className) => card.classList.remove(className));
+        card.classList.add(`card-color-${result.card_color}`);
+        colorMenu.classList.add('is-hidden');
+        colorToggle.setAttribute('aria-expanded', 'false');
+      });
+    });
+  });
+
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('.card-quick-actions')) return;
+    document.querySelectorAll('[data-color-menu]').forEach((menu) => menu.classList.add('is-hidden'));
+    document.querySelectorAll('[data-toggle-colors]').forEach((button) => button.setAttribute('aria-expanded', 'false'));
   });
 
   document.querySelectorAll('.kanban-column').forEach((column) => {
@@ -251,13 +360,15 @@
       const label = normalizeLabel(newInput?.value || '');
       if (!label) return;
       if (!availableBox.querySelector(`[data-label-value="${CSS.escape(label)}"]`) && !selectedBox.querySelector(`[data-label-value="${CSS.escape(label)}"]`)) {
-        availableBox.appendChild(createItem(label, 'available'));
+        selectedBox.appendChild(createItem(label, 'selected'));
       }
       if (newInput) {
         newInput.value = '';
         newInput.focus();
       }
+      ensureEmptyState(selectedBox);
       ensureEmptyState(availableBox);
+      syncHidden();
     });
 
     newInput?.addEventListener('keydown', (event) => {
@@ -304,6 +415,14 @@
       Array.from(select.options).forEach((option) => {
         option.selected = selectedValues.has(option.value);
       });
+      Array.from(picker?.options || []).forEach((option) => {
+        if (!option.value) return;
+        option.hidden = selectedValues.has(option.value);
+        option.disabled = selectedValues.has(option.value);
+      });
+      if (picker?.selectedOptions?.[0]?.disabled) {
+        picker.value = '';
+      }
     }
 
     function addAssignee(value, label) {

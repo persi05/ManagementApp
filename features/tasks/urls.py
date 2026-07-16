@@ -6,6 +6,7 @@ urlpatterns = [
     path('boards/', views.kanban, name='kanban'),
     path('boards/<int:project_id>/', views.kanban, name='kanban_project'),
     path('tasks/<int:task_id>/move/', views.move_task, name='move_task'),
+    path('tasks/<int:task_id>/card/', views.update_task_card, name='update_task_card'),
     path('tasks/<int:task_id>/notes/', views.add_task_note, name='add_task_note'),
     path('tasks/<int:task_id>/attachments/', views.add_task_attachment, name='add_task_attachment'),
     path('tasks/<int:task_id>/documents/', views.link_task_document, name='link_task_document'),

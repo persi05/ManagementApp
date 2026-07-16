@@ -7,9 +7,8 @@ from .models import employee_time_entry_edit_deadline
 class TimeEntryForm(forms.ModelForm):
     class Meta:
         model = TimeEntry
-        fields = ('project', 'start', 'end', 'comment')
+        fields = ('start', 'end', 'comment')
         labels = {
-            'project': 'Projekt',
             'start': 'Rozpoczęcie pracy',
             'end': 'Zakończenie pracy',
             'comment': 'Komentarz',

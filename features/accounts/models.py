@@ -12,6 +12,13 @@ class UserProfile(models.Model):
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.EMPLOYEE)
     bank_account = models.CharField(max_length=64, blank=True)
     is_blocked = models.BooleanField(default=False)
+    default_tasks_project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='default_for_profiles',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

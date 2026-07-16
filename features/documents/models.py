@@ -39,16 +39,23 @@ class DocumentItem(models.Model):
 
     @classmethod
     def visible_to(cls, user):
+        qs = cls.objects.all()
+        if not user.is_superuser:
+            qs = qs.exclude(Q(visibility_blocks__user=user) | Q(parent__visibility_blocks__user=user))
         if is_management(user):
-            return cls.objects.all()
+            return qs
         role = user_role(user)
-        return cls.objects.filter(
+        return qs.filter(
             Q(owner=user)
             | Q(accesses__user=user)
             | Q(accesses__role=role)
             | Q(parent__accesses__user=user)
             | Q(parent__accesses__role=role)
             | Q(parent__owner=user)
+            | Q(task_attachments__task__project__members=user)
+            | Q(task_attachments__task__project__client=user)
+            | Q(task_attachments__task__assignee=user)
+            | Q(task_attachments__task__assignees=user)
         ).distinct()
 
     @property
@@ -88,14 +95,24 @@ class DocumentItem(models.Model):
         return local_date.strftime('%Y-%m-%d')
 
     def can_manage(self, user):
-        if is_management(user) or self.owner_id == user.id:
+        if is_management(user):
             return True
-        return self.accesses.filter(Q(user=user) | Q(role=user_role(user)), can_manage=True).exists()
+        user_access = self.accesses.filter(user=user).first()
+        if user_access is not None:
+            return user_access.can_manage
+        if self.owner_id == user.id:
+            return True
+        return self.accesses.filter(role=user_role(user), can_manage=True).exists()
 
     def can_edit(self, user):
-        if self.can_manage(user):
+        if is_management(user):
             return True
-        return self.accesses.filter(Q(user=user) | Q(role=user_role(user)), can_edit=True).exists()
+        user_access = self.accesses.filter(user=user).first()
+        if user_access is not None:
+            return user_access.can_edit
+        if self.owner_id == user.id:
+            return True
+        return self.accesses.filter(role=user_role(user), can_edit=True).exists()
 
     def delete(self, *args, **kwargs):
         file_name = self.file.name if self.file else ''
@@ -119,8 +136,33 @@ class DocumentAccess(models.Model):
                 condition=Q(user__isnull=False) | ~Q(role=''),
                 name='documents_access_user_or_role',
             ),
+            models.UniqueConstraint(
+                fields=('item', 'user'),
+                condition=Q(user__isnull=False),
+                name='unique_document_access_user',
+            ),
+            models.UniqueConstraint(
+                fields=('item', 'role'),
+                condition=Q(user__isnull=True) & ~Q(role=''),
+                name='unique_document_access_role',
+            ),
         ]
 
     def __str__(self):
         target = self.user.get_username() if self.user_id else self.get_role_display()
         return f'{self.item} -> {target}'
+
+
+class DocumentVisibilityBlock(models.Model):
+    item = models.ForeignKey(DocumentItem, on_delete=models.CASCADE, related_name='visibility_blocks')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='document_visibility_blocks')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['user__username']
+        constraints = [
+            models.UniqueConstraint(fields=['item', 'user'], name='unique_document_visibility_block'),
+        ]
+
+    def __str__(self):
+        return f'{self.item} hidden from {self.user.get_username()}'

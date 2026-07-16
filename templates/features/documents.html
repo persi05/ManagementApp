@@ -125,19 +125,24 @@
             <summary aria-label="Akcje"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></summary>
             <div>
               <a href="{% url 'open_document' item.id %}"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg></span> Otwórz</a>
-              <a href="{% url 'documents' %}?{% if parent and not show_archived %}folder={{ parent.id }}&{% endif %}{% if show_archived %}archived=1&{% endif %}{% if item.kind == 'folder' %}manage={{ item.id }}{% else %}selected={{ item.id }}{% endif %}#rename"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10Z"/><path d="m14 7 3 3"/></svg></span> Zmień nazwę</a>
-              <a href="{% url 'documents' %}?{% if parent and not show_archived %}folder={{ parent.id }}&{% endif %}{% if show_archived %}archived=1&{% endif %}{% if item.kind == 'folder' %}manage={{ item.id }}{% else %}selected={{ item.id }}{% endif %}#move"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M5 12h13"/><path d="m13 6 6 6-6 6"/></svg></span> Przenieś</a>
+              {% if item.can_edit_current_user %}
+                <a href="{% url 'documents' %}?{% if parent and not show_archived %}folder={{ parent.id }}&{% endif %}{% if show_archived %}archived=1&{% endif %}{% if item.kind == 'folder' %}manage={{ item.id }}{% else %}selected={{ item.id }}{% endif %}#rename"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10Z"/><path d="m14 7 3 3"/></svg></span> Zmień nazwę</a>
+              {% endif %}
+              {% if item.can_manage_current_user %}
+                <a href="{% url 'documents' %}?{% if parent and not show_archived %}folder={{ parent.id }}&{% endif %}{% if show_archived %}archived=1&{% endif %}{% if item.kind == 'folder' %}manage={{ item.id }}{% else %}selected={{ item.id }}{% endif %}#move"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M5 12h13"/><path d="m13 6 6 6-6 6"/></svg></span> Przenieś</a>
+              {% endif %}
               {% if item.kind == 'folder' %}
                 <a href="{% url 'documents' %}?{% if parent and not show_archived %}folder={{ parent.id }}&{% endif %}{% if show_archived %}archived=1&{% endif %}manage={{ item.id }}#access"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-8 0v2"/><circle cx="12" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg></span> Dostęp</a>
               {% endif %}
-              <form method="post">{% csrf_token %}<input type="hidden" name="form" value="action"><input type="hidden" name="item" value="{{ item.id }}"><input type="hidden" name="action" value="copy"><button><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M8 8h11v11H8Z"/><path d="M5 16H4a1 1 0 0 1-1-1V5a2 2 0 0 1 2-2h10a1 1 0 0 1 1 1v1"/></svg></span> Kopiuj</button></form>
               <a href="{% url 'download_document' item.id %}"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></span> Pobierz</a>
-              {% if item.is_archived %}
-                <form method="post">{% csrf_token %}<input type="hidden" name="form" value="action"><input type="hidden" name="item" value="{{ item.id }}"><input type="hidden" name="action" value="unarchive"><button><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7v6h6"/><path d="M20 17a8 8 0 0 0-13.7-5.7L4 13"/></svg></span> Przywróć</button></form>
-              {% else %}
-                <form method="post">{% csrf_token %}<input type="hidden" name="form" value="action"><input type="hidden" name="item" value="{{ item.id }}"><input type="hidden" name="action" value="archive"><button><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M6 7v12h12V7"/><path d="M9 11h6"/></svg></span> Archiwizuj</button></form>
+              {% if item.can_manage_current_user %}
+                {% if item.is_archived %}
+                  <form method="post">{% csrf_token %}<input type="hidden" name="form" value="action"><input type="hidden" name="item" value="{{ item.id }}"><input type="hidden" name="action" value="unarchive"><button><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7v6h6"/><path d="M20 17a8 8 0 0 0-13.7-5.7L4 13"/></svg></span> Przywróć</button></form>
+                {% else %}
+                  <form method="post">{% csrf_token %}<input type="hidden" name="form" value="action"><input type="hidden" name="item" value="{{ item.id }}"><input type="hidden" name="action" value="archive"><button><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M6 7v12h12V7"/><path d="M9 11h6"/></svg></span> Archiwizuj</button></form>
+                {% endif %}
+                <form method="post">{% csrf_token %}<input type="hidden" name="form" value="action"><input type="hidden" name="item" value="{{ item.id }}"><input type="hidden" name="action" value="delete"><button class="danger-text"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg></span> Usuń</button></form>
               {% endif %}
-              <form method="post">{% csrf_token %}<input type="hidden" name="form" value="action"><input type="hidden" name="item" value="{{ item.id }}"><input type="hidden" name="action" value="delete"><button class="danger-text"><span class="menu-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg></span> Usuń</button></form>
             </div>
           </details>
         </article>
@@ -190,10 +195,10 @@
       {% if can_edit_selected %}
         <form method="post" class="documents-inline-form" id="rename">
           {% csrf_token %}
-          <input type="hidden" name="form" value="rename">
+          <input type="hidden" name="form" value="{% if panel_item.kind == 'document' %}edit_document{% else %}rename{% endif %}">
           <input type="hidden" name="item" value="{{ panel_item.id }}">
           {{ rename_form.as_p }}
-          <button class="ghost-btn small-btn">Zmień nazwę</button>
+          <button class="ghost-btn small-btn">{% if panel_item.kind == 'document' %}Zapisz dokument{% else %}Zmień nazwę{% endif %}</button>
         </form>
       {% endif %}
       {% if can_manage_selected %}
@@ -226,7 +231,7 @@
           <div class="access-list">
             {% for access in accesses %}
               <span>
-                {% if access.user %}{{ access.user.username }}{% else %}{{ access.get_role_display }}{% endif %}{% if access.can_manage %} / zarządzanie{% elif access.can_edit %} / edycja{% endif %}
+                {% if access.user %}{{ access.user.username }}{% else %}{{ access.get_role_display }}{% endif %}{% if access.can_manage and access.can_edit %} / zarządzanie + edycja{% elif access.can_manage %} / zarządzanie{% elif access.can_edit %} / edycja{% endif %}
                 <form method="post">
                   {% csrf_token %}
                   <input type="hidden" name="form" value="remove_access">
@@ -236,6 +241,29 @@
               </span>
             {% empty %}
               <small>Brak dodatkowych dostępów.</small>
+            {% endfor %}
+          </div>
+          <h3>Niewidoczne dla</h3>
+          <form method="post" class="documents-inline-form">
+            {% csrf_token %}
+            <input type="hidden" name="form" value="visibility_block">
+            <input type="hidden" name="item" value="{{ panel_item.id }}">
+            {{ visibility_block_form.as_p }}
+            <button class="ghost-btn small-btn">Zablokuj widoczność</button>
+          </form>
+          <div class="access-list">
+            {% for block in visibility_blocks %}
+              <span>
+                {{ block.user.get_full_name|default:block.user.username }}
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="form" value="remove_visibility_block">
+                  <input type="hidden" name="visibility_block" value="{{ block.id }}">
+                  <button aria-label="Usuń blokadę widoczności">×</button>
+                </form>
+              </span>
+            {% empty %}
+              <small>Brak blokad widoczności.</small>
             {% endfor %}
           </div>
         </section>

@@ -3,15 +3,18 @@
 {% block heading %}{% if selected_project_obj %}Raport projektu{% else %}Raporty projektów{% endif %}{% endblock %}
 {% block eyebrow %}{% if selected_project_obj %}{{ selected_project_obj.name }}{% else %}Zestawienie projektów{% endif %}{% endblock %}
 {% block top_actions %}
+  <button class="ghost-btn" type="button" data-report-settings-toggle>Edytuj widok</button>
+  {% if not is_employee_report %}
   <a class="ghost-btn" href="{% url 'export_csv' %}?date_from={{ date_from }}&date_to={{ date_to }}&visibility={{ report_visibility }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}">CSV</a>
   <a class="primary-btn" href="{% url 'export_pdf' %}?date_from={{ date_from }}&date_to={{ date_to }}&visibility={{ report_visibility }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}" target="_blank">PDF / druk</a>
+  {% endif %}
 {% endblock %}
 {% block content %}
 <section class="panel report-filter-panel {% if is_client_report %}client-filter-panel{% endif %}">
   <div class="panel-head">
     <div>
-      <h2>{% if report_visibility == 'management' %}Zakres raportu managementu{% elif selected_project_obj %}Zakres raportu projektu{% elif is_client_report %}Zakres raportu{% else %}Zakres raportu klienta{% endif %}</h2>
-      <p>{% if report_visibility == 'management' %}Raport pokazuje wszystkie wpisy zadań. Dolna tabela zawiera również pozycje ukryte przed klientem.{% elif is_client_report %}Wybierz okres i projekt. Raport pokazuje tylko prace udostępnione klientowi.{% else %}Raport podlicza tylko wpisy widoczne dla klienta.{% endif %}</p>
+      <h2>{% if is_employee_report %}Twój raport pracy{% elif report_visibility == 'management' %}Zakres raportu managementu{% elif selected_project_obj %}Zakres raportu projektu{% elif is_client_report %}Zakres raportu{% else %}Zakres raportu klienta{% endif %}</h2>
+      <p>{% if is_employee_report %}Wybierz okres i opcjonalnie projekt. Zobaczysz własny czas pracy oraz godziny zapisane przy zakończonych zadaniach.{% elif report_visibility == 'management' %}Raport pokazuje wpisy wyłącznie z zadań zakończonych. Dolna tabela zawiera również pozycje ukryte przed klientem.{% elif is_client_report %}Wybierz okres i projekt. Raport pokazuje udostępnione prace z zakończonych zadań.{% else %}Raport podlicza widoczne wpisy wyłącznie z zadań zakończonych.{% endif %}</p>
     </div>
   </div>
   <form class="filter-bar" data-report-filter-form>
@@ -48,6 +51,14 @@
   </form>
 </section>
 
+<section class="dashboard-settings report-settings" data-report-settings hidden>
+  <div><strong>Widoczne sekcje</strong><small>Ustawienie zapisuje się na tym urządzeniu.</small></div>
+  <label><input type="checkbox" data-report-section-toggle value="summary" checked> Podsumowanie</label>
+  {% if not is_employee_report %}<label><input type="checkbox" data-report-section-toggle value="projects" checked> Projekty</label>{% endif %}
+  <label><input type="checkbox" data-report-section-toggle value="entries" checked> Wpisy</label>
+  <button class="ghost-btn small-btn" type="button" data-report-settings-reset>Reset</button>
+</section>
+
 {% if can_manage %}
 <div class="report-visibility-switch">
   <a class="{% if report_visibility == 'client' %}active{% endif %}" href="{% url 'reports' %}?visibility=client&date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_employee %}&employee={{ selected_employee }}{% endif %}">
@@ -59,8 +70,15 @@
 </div>
 {% endif %}
 
-{% if is_client_report %}
-<section class="client-report-hero">
+{% if is_employee_report %}
+<section class="metrics-grid report-metrics" data-report-section="summary">
+  <article class="metric"><span>Okres</span><strong class="metric-small">{{ period_label }}</strong><small>wybrany zakres raportu</small></article>
+  <article class="metric"><span>Czas pracy</span><strong>{{ employee_work_hours|floatformat:2 }}h</strong><small>ewidencja czasu pracy</small></article>
+  <article class="metric"><span>Czas przy zadaniach</span><strong>{{ employee_task_hours|floatformat:2 }}h</strong><small>tylko zadania zakończone</small></article>
+  <article class="metric"><span>Wynagrodzenie</span><strong>{{ employee_payroll|floatformat:2 }} PLN</strong><small>według stawek historycznych</small></article>
+</section>
+{% elif is_client_report %}
+<section class="client-report-hero" data-report-section="summary">
   <div>
     <span>Raport klienta</span>
     <strong>{{ period_label }}</strong>
@@ -72,7 +90,7 @@
     <div><dt>Kwota</dt><dd>{% if total_amount != None %}{{ total_amount|floatformat:2 }} {{ report_currency }}{% else %}-{% endif %}</dd></div>
   </dl>
 </section>
-<section class="client-report-cards">
+<section class="client-report-cards" data-report-section="projects">
   {% for row in by_project %}
     <article class="client-report-card">
       <div>
@@ -92,20 +110,20 @@
   {% endfor %}
 </section>
 {% else %}
-<section class="metrics-grid report-metrics">
-  <article class="metric"><span>{% if report_visibility == 'management' %}Zakres managementu{% else %}Zakres klienta{% endif %}</span><strong class="metric-small">{{ period_label }}</strong><small>{% if report_visibility == 'management' %}wszystkie wpisy zadań{% else %}tylko widoczne dla klienta{% endif %}</small></article>
+<section class="metrics-grid report-metrics" data-report-section="summary">
+  <article class="metric"><span>{% if report_visibility == 'management' %}Zakres managementu{% else %}Zakres klienta{% endif %}</span><strong class="metric-small">{{ period_label }}</strong><small>tylko zadania zakończone</small></article>
   <article class="metric"><span>{% if selected_project_obj %}Projekt{% else %}Projekty{% endif %}</span><strong class="{% if selected_project_obj %}metric-small{% endif %}">{% if selected_project_obj %}{{ selected_project_obj.name }}{% else %}{{ by_project|length }}{% endif %}</strong><small>{% if selected_project_obj %}wybrany projekt{% else %}z godzinami w zakresie{% endif %}</small></article>
-  <article class="metric"><span>{% if is_client_visibility_report %}Godziny widoczne dla klienta{% else %}Godziny łączne{% endif %}</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>{% if is_client_visibility_report %}podliczane tylko z wpisów klienta{% else %}wszystkie worklogi zadań{% endif %}</small></article>
+  <article class="metric"><span>{% if is_client_visibility_report %}Godziny widoczne dla klienta{% else %}Godziny łączne{% endif %}</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>z zakończonych zadań</small></article>
   <article class="metric"><span>Godziny klienta</span><strong>{{ total_visible_hours|floatformat:2 }}h</strong><small>wpisy widoczne dla klienta</small></article>
   <article class="metric"><span>{% if is_client_visibility_report %}Kwota klienta{% else %}Kwota wg stawek{% endif %}</span><strong>{% if total_amount != None %}{{ total_amount|floatformat:2 }} {{ report_currency }}{% else %}-{% endif %}</strong><small>według stawek projektu i etykiet</small></article>
   <article class="metric"><span>Pracownicy</span><strong>{{ by_user|length }}</strong><small>z wpisami w zakresie</small></article>
 </section>
 {% endif %}
 
-{% if not is_client_report %}
-<section class="workspace-grid">
+{% if can_manage %}
+<section class="workspace-grid" data-report-section="projects">
   <div class="panel">
-    <div class="panel-head"><div><h2>{% if selected_project_obj %}Podsumowanie projektu{% else %}Zestawienie projektów{% endif %}</h2><p>{% if report_visibility == 'management' %}Raport podlicza wszystkie wpisy, a kwoty widać także dla pozycji ukrytych przed klientem.{% elif is_client_visibility_report %}Raport podlicza tylko godziny widoczne dla klienta.{% elif selected_project_obj %}Godziny, widoczność klienta i kwota dla wybranego projektu.{% else %}Godziny wpisane do zadań, z możliwością filtrowania po kliencie i projekcie.{% endif %}</p></div></div>
+    <div class="panel-head"><div><h2>{% if selected_project_obj %}Podsumowanie projektu{% else %}Zestawienie projektów{% endif %}</h2><p>Podsumowanie obejmuje wyłącznie zadania znajdujące się w kolumnach oznaczonych jako zakończone.</p></div></div>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Projekt</th>{% if not is_client_report %}<th>Klient</th>{% endif %}<th>Godziny łączne</th><th>Godziny klienta</th><th>Kwota klienta</th><th>Wpisy</th></tr></thead>
@@ -148,35 +166,103 @@
 </section>
 {% endif %}
 
-<section class="panel {% if is_client_report %}client-worklog-panel{% endif %}">
-  <div class="panel-head"><div><h2>{% if is_client_report %}Wykonane prace{% else %}Wpisy zadań{% endif %}</h2><p>{% if is_client_report %}Lista udostępnionych wpisów bez danych pracowników.{% elif report_visibility == 'management' %}Ostatnie 100 wpisów widocznych dla managementu. Kwoty pokazujemy również dla wpisów ukrytych dla klienta.{% else %}Ostatnie 100 wpisów widocznych dla klienta.{% endif %}</p></div></div>
+<section class="panel {% if is_client_report %}client-worklog-panel{% endif %}" data-report-section="entries">
+  <div class="panel-head"><div><h2>{% if is_employee_report %}Twoje wpisy zadań{% elif is_client_report %}Wykonane prace{% else %}Wpisy zadań{% endif %}</h2><p>{% if is_employee_report %}Godziny zapisane przez Ciebie przy zadaniach znajdujących się w kolumnie zakończone.{% elif is_client_report %}Lista udostępnionych wpisów bez danych pracowników.{% elif report_visibility == 'management' %}Ostatnie 100 wpisów widocznych dla managementu. Kwoty pokazujemy również dla wpisów ukrytych dla klienta.{% else %}Ostatnie 100 wpisów widocznych dla klienta.{% endif %}</p></div></div>
   <div class="table-wrap">
     <table class="{% if is_client_report %}client-worklog-table{% endif %}">
-      <thead><tr><th>Data</th>{% if not is_client_report %}<th>Pracownik</th>{% endif %}<th>Projekt</th><th>Zadanie</th><th>Godziny</th><th>Stawka</th><th>Kwota</th>{% if not is_client_report %}<th>Klient</th>{% endif %}</tr></thead>
+      {% if is_employee_report %}
+        <thead><tr><th>Data</th><th>Projekt</th><th>Zadanie</th><th>Godziny</th><th>Komentarz</th></tr></thead>
+      {% else %}
+        <thead><tr><th>Data</th>{% if not is_client_report %}<th>Pracownik</th>{% endif %}<th>Projekt</th><th>Zadanie</th><th>Godziny</th><th>Stawka</th><th>Kwota</th><th>Komentarz</th>{% if not is_client_report %}<th>Klient</th>{% endif %}</tr></thead>
+      {% endif %}
       <tbody>
         {% for worklog in client_worklogs %}
           <tr>
             <td>{{ worklog.date }}</td>
-            {% if not is_client_report %}<td>{% if worklog.user.get_full_name %}{{ worklog.user.get_full_name }}{% else %}{{ worklog.user.username }}{% endif %}</td>{% endif %}
+            {% if not is_client_report and not is_employee_report %}<td>{% if worklog.user.get_full_name %}{{ worklog.user.get_full_name }}{% else %}{{ worklog.user.username }}{% endif %}</td>{% endif %}
             <td>{{ worklog.task.project.name }}</td>
             <td>{{ worklog.task.title }}</td>
             <td>{{ worklog.hours|floatformat:2 }}</td>
-            <td>{% if worklog.billing_rate != None %}{{ worklog.billing_rate|floatformat:2 }} {{ worklog.billing_currency }}/h{% if worklog.billing_label %}<br><small>{{ worklog.billing_label }}</small>{% endif %}{% else %}-{% endif %}</td>
-            <td>{% if worklog.billing_amount != None %}{{ worklog.billing_amount|floatformat:2 }} {{ worklog.billing_currency }}{% else %}-{% endif %}</td>
-            {% if not is_client_report %}<td>{% if worklog.visible_to_client %}widzi{% else %}ukryte{% endif %}</td>{% endif %}
+            {% if not is_employee_report %}
+              <td>{% if worklog.billing_rate != None %}{{ worklog.billing_rate|floatformat:2 }} {{ worklog.billing_currency }}/h{% if worklog.billing_label %}<br><small>{{ worklog.billing_label }}</small>{% endif %}{% else %}-{% endif %}</td>
+              <td>{% if worklog.billing_amount != None %}{{ worklog.billing_amount|floatformat:2 }} {{ worklog.billing_currency }}{% else %}-{% endif %}</td>
+            {% endif %}
+            <td>
+              {% if worklog.comment %}
+                <button type="button" class="ghost-btn small-btn report-comment-button" data-report-comment-target="report-comment-{{ worklog.id }}">Zobacz komentarz</button>
+                <div id="report-comment-{{ worklog.id }}" class="report-comment-source" hidden>{{ worklog.comment }}</div>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            {% if not is_client_report and not is_employee_report %}<td>{% if worklog.visible_to_client %}widzi{% else %}ukryte{% endif %}</td>{% endif %}
           </tr>
         {% empty %}
-          <tr><td colspan="{% if is_client_report %}6{% else %}8{% endif %}">Brak wpisów.</td></tr>
+          <tr><td colspan="{% if is_employee_report %}5{% elif is_client_report %}7{% else %}9{% endif %}">Brak wpisów.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </section>
+
+<div class="report-comment-modal is-hidden" data-report-comment-modal role="dialog" aria-modal="true" aria-labelledby="report-comment-title">
+  <div class="report-comment-backdrop" data-report-comment-close></div>
+  <section class="report-comment-card">
+    <button type="button" class="ghost-btn tiny-btn report-comment-close" data-report-comment-close aria-label="Zamknij">x</button>
+    <h2 id="report-comment-title">Komentarz</h2>
+    <p data-report-comment-content></p>
+  </section>
+</div>
 <script>
+  const reportSettings = document.querySelector('[data-report-settings]');
+  const reportSectionToggles = Array.from(document.querySelectorAll('[data-report-section-toggle]'));
+  const reportSections = Array.from(document.querySelectorAll('[data-report-section]'));
+  const reportStorageKey = 'report-sections:{{ request.user.id }}';
+  const applyReportSections = (state) => {
+    reportSections.forEach((section) => { section.hidden = state[section.dataset.reportSection] === false; });
+    reportSectionToggles.forEach((toggle) => { toggle.checked = state[toggle.value] !== false; });
+  };
+  let reportSectionState = {};
+  try { reportSectionState = JSON.parse(localStorage.getItem(reportStorageKey) || '{}'); } catch { reportSectionState = {}; }
+  applyReportSections(reportSectionState);
+  document.querySelector('[data-report-settings-toggle]')?.addEventListener('click', () => {
+    reportSettings.hidden = !reportSettings.hidden;
+  });
+  reportSectionToggles.forEach((toggle) => toggle.addEventListener('change', () => {
+    reportSectionState = { ...reportSectionState, [toggle.value]: toggle.checked };
+    localStorage.setItem(reportStorageKey, JSON.stringify(reportSectionState));
+    applyReportSections(reportSectionState);
+  }));
+  document.querySelector('[data-report-settings-reset]')?.addEventListener('click', () => {
+    reportSectionState = {};
+    localStorage.removeItem(reportStorageKey);
+    applyReportSections(reportSectionState);
+  });
+
   document.querySelectorAll('[data-report-filter-form] [data-auto-submit-filter]').forEach((field) => {
     field.addEventListener('change', () => {
       field.form?.requestSubmit();
     });
+  });
+  const reportCommentModal = document.querySelector('[data-report-comment-modal]');
+  const reportCommentContent = reportCommentModal?.querySelector('[data-report-comment-content]');
+  document.querySelectorAll('[data-report-comment-target]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const source = document.getElementById(button.dataset.reportCommentTarget);
+      if (!reportCommentModal || !reportCommentContent || !source) return;
+      reportCommentContent.textContent = source.textContent || '';
+      reportCommentModal.classList.remove('is-hidden');
+    });
+  });
+  document.querySelectorAll('[data-report-comment-close]').forEach((button) => {
+    button.addEventListener('click', () => {
+      reportCommentModal?.classList.add('is-hidden');
+    });
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      reportCommentModal?.classList.add('is-hidden');
+    }
   });
 </script>
 {% endblock %}

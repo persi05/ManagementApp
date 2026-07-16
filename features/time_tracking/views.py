@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import datetime
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -8,10 +9,10 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from features.accounts.models import is_management
+from features.accounts.models import is_management, user_role
 from features.accounts.permissions import optional_pk, worker_required
 from features.projects.selectors import visible_projects
-from features.reports.services import month_bounds
+from features.reports.services import month_bounds, payroll_amount
 from features.tasks.selectors import visible_tasks
 from features.time_tracking.forms import TimeEntryForm
 from features.time_tracking.models import TimeEntry, WorkSession, employee_time_entry_edit_deadline
@@ -80,9 +81,35 @@ def time_entries(request):
         return forbidden
 
     start_date, next_month, start_dt, end_dt = month_bounds(request)
+    if request.method == 'POST' and request.POST.get('form') == 'quick_time_entry':
+        today = timezone.localdate()
+        start_time = request.POST.get('quick_start') or '08:00'
+        end_time = request.POST.get('quick_end') or '16:00'
+        try:
+            start = timezone.make_aware(datetime.combine(today, datetime.strptime(start_time, '%H:%M').time()))
+            end = timezone.make_aware(datetime.combine(today, datetime.strptime(end_time, '%H:%M').time()))
+        except ValueError:
+            messages.error(request, 'Podaj poprawne godziny pracy.')
+            return redirect('time_entries')
+        if end <= start:
+            messages.error(request, 'Godzina zakończenia musi być późniejsza niż rozpoczęcia.')
+            return redirect('time_entries')
+        TimeEntry.objects.create(
+            user=request.user,
+            project=None,
+            start=start,
+            end=end,
+            source=TimeEntry.Source.MANUAL,
+            editable_until=employee_time_entry_edit_deadline(start),
+            edited_by=request.user,
+            edited_at=timezone.now(),
+            comment=request.POST.get('comment', '').strip(),
+        )
+        messages.success(request, 'Dzisiejszy czas pracy został zapisany.')
+        return redirect('time_entries')
+
     if request.method == 'POST':
         form = TimeEntryForm(request.POST)
-        form.fields['project'].queryset = visible_projects(request.user)
         if form.is_valid():
             entry = form.save(commit=False)
             entry.user = request.user
@@ -93,8 +120,7 @@ def time_entries(request):
             messages.success(request, 'Wpis czasu został zapisany.')
             return redirect('time_entries')
     else:
-        form = TimeEntryForm()
-        form.fields['project'].queryset = visible_projects(request.user)
+        form = TimeEntryForm(initial={'start': timezone.localtime().replace(second=0, microsecond=0)})
 
     qs = TimeEntry.objects.select_related('project', 'task', 'user').filter(user=request.user, start__gte=start_dt, start__lt=end_dt)
     entries = list(qs)
@@ -105,7 +131,11 @@ def time_entries(request):
         'entries': entries,
         'form': form,
         'month': start_date.strftime('%Y-%m'),
+        'today': timezone.localdate(),
         'total_hours': total_hours,
+        'total_earned': payroll_amount(request.user, entries, start_date, next_month),
+        'payroll_currency': request.user.hourly_rates.order_by('-valid_from').values_list('currency', flat=True).first() or 'PLN',
+        'role': user_role(request.user),
     })
 
 
@@ -124,7 +154,6 @@ def edit_time_entry(request, entry_id):
 
     if request.method == 'POST':
         form = TimeEntryForm(request.POST, instance=entry)
-        form.fields['project'].queryset = visible_projects(request.user)
         if form.is_valid():
             updated_entry = form.save(commit=False)
             updated_entry.edited_by = request.user
@@ -134,7 +163,6 @@ def edit_time_entry(request, entry_id):
             return redirect('time_entries')
     else:
         form = TimeEntryForm(instance=entry)
-        form.fields['project'].queryset = visible_projects(request.user)
 
     return render(request, 'features/time_entry_edit.html', {'entry': entry, 'form': form})
 

@@ -195,6 +195,47 @@
   font-weight: 700;
 }
 
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.pagination-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pagination-page {
+  min-width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.pagination-page.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.pagination .disabled {
+  opacity: .5;
+  pointer-events: none;
+}
+
 @media (max-width: 620px) {
   .notifications-head {
     align-items: flex-start;
@@ -208,5 +249,10 @@
   .read-pill {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .pagination {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

@@ -11,7 +11,7 @@ from django.urls import reverse
 
 from features.accounts.models import UserProfile
 
-from .models import DocumentAccess, DocumentItem
+from .models import DocumentAccess, DocumentItem, DocumentVisibilityBlock
 
 
 class DocumentTests(TestCase):
@@ -73,6 +73,188 @@ class DocumentTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Oferta dla klienta')
+
+    def test_visibility_block_overrides_role_access(self):
+        owner = User.objects.create_user(username='owner', password='pass')
+        client = User.objects.create_user(username='client', password='pass')
+        owner.profile.role = UserProfile.Role.EMPLOYEE
+        owner.profile.save()
+        client.profile.role = UserProfile.Role.CLIENT
+        client.profile.save()
+        document = DocumentItem.objects.create(
+            owner=owner,
+            name='Ukryta oferta',
+            kind=DocumentItem.Kind.DOCUMENT,
+            content='Niewidoczne',
+        )
+        DocumentAccess.objects.create(item=document, role=UserProfile.Role.CLIENT)
+        DocumentVisibilityBlock.objects.create(item=document, user=client)
+
+        self.client.force_login(client)
+        response = self.client.get(reverse('documents'))
+        download_response = self.client.get(reverse('download_document', args=[document.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Ukryta oferta')
+        self.assertEqual(download_response.status_code, 404)
+
+    def test_manage_access_does_not_allow_rename_without_edit_access(self):
+        owner = User.objects.create_user(username='owner', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        owner.profile.role = UserProfile.Role.EMPLOYEE
+        owner.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        document = DocumentItem.objects.create(owner=owner, name='Stara nazwa', kind=DocumentItem.Kind.DOCUMENT)
+        DocumentAccess.objects.create(item=document, user=employee, can_manage=True, can_edit=False)
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('documents'), {
+            'form': 'rename',
+            'item': document.id,
+            'name': 'Nowa nazwa',
+        })
+
+        document.refresh_from_db()
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(document.name, 'Stara nazwa')
+
+    def test_user_access_without_permissions_overrides_role_edit_and_manage(self):
+        owner = User.objects.create_user(username='owner', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        owner.profile.role = UserProfile.Role.MANAGEMENT
+        owner.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        folder = DocumentItem.objects.create(owner=owner, name='Folder', kind=DocumentItem.Kind.FOLDER)
+        document = DocumentItem.objects.create(owner=owner, name='Stara nazwa', kind=DocumentItem.Kind.DOCUMENT)
+        DocumentAccess.objects.create(item=document, role=UserProfile.Role.EMPLOYEE, can_edit=True, can_manage=True)
+        DocumentAccess.objects.create(item=document, user=employee, can_edit=False, can_manage=False)
+        DocumentAccess.objects.create(item=folder, user=employee)
+
+        self.client.force_login(employee)
+        page = self.client.get(reverse('documents'))
+        rename_response = self.client.post(reverse('documents'), {
+            'form': 'rename',
+            'item': document.id,
+            'name': 'Nowa nazwa',
+        })
+        move_response = self.client.post(reverse('documents'), {
+            'form': 'move',
+            'item': document.id,
+            'target_parent': folder.id,
+        })
+
+        document.refresh_from_db()
+        self.assertEqual(rename_response.status_code, 403)
+        self.assertEqual(move_response.status_code, 403)
+        self.assertEqual(document.name, 'Stara nazwa')
+        self.assertIsNone(document.parent)
+        self.assertNotContains(page, '#rename')
+        self.assertNotContains(page, '#move')
+
+    def test_project_member_can_see_task_attachment_without_edit_or_manage(self):
+        owner = User.objects.create_user(username='owner', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        owner.profile.role = UserProfile.Role.EMPLOYEE
+        owner.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        from features.projects.models import Project, ProjectAssignment
+        from features.tasks.models import Attachment, BoardColumn, Task
+
+        project = Project.objects.create(name='Projekt')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        column = BoardColumn.objects.create(project=project, name='Start', position=0)
+        task = Task.objects.create(project=project, column=column, title='Zadanie')
+        document = DocumentItem.objects.create(owner=owner, name='Brief', kind=DocumentItem.Kind.DOCUMENT, content='Opis')
+        Attachment.objects.create(task=task, document=document, name='Brief')
+
+        self.client.force_login(employee)
+        response = self.client.get(reverse('documents'))
+
+        self.assertContains(response, 'Brief')
+        self.assertFalse(document.can_edit(employee))
+        self.assertFalse(document.can_manage(employee))
+
+    def test_edit_access_allows_text_document_content_change(self):
+        owner = User.objects.create_user(username='owner', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        owner.profile.role = UserProfile.Role.EMPLOYEE
+        owner.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        document = DocumentItem.objects.create(owner=owner, name='Dokument', kind=DocumentItem.Kind.DOCUMENT, content='Stara treść')
+        DocumentAccess.objects.create(item=document, user=employee, can_edit=True, can_manage=False)
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('documents'), {
+            'form': 'edit_document',
+            'item': document.id,
+            'name': 'Nowy dokument',
+            'content': 'Nowa treść',
+        })
+
+        document.refresh_from_db()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(document.name, 'Nowy dokument')
+        self.assertEqual(document.content, 'Nowa treść')
+
+    def test_copy_action_is_disabled(self):
+        user = User.objects.create_user(username='owner', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+        document = DocumentItem.objects.create(owner=user, name='Dokument', kind=DocumentItem.Kind.DOCUMENT, content='Treść')
+
+        self.client.force_login(user)
+        response = self.client.post(reverse('documents'), {
+            'form': 'action',
+            'item': document.id,
+            'action': 'copy',
+        })
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(DocumentItem.objects.filter(name__startswith='Kopia').count(), 0)
+
+    def test_access_list_shows_manage_and_edit_when_both_are_enabled(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        document = DocumentItem.objects.create(owner=manager, name='Procedura', kind=DocumentItem.Kind.DOCUMENT)
+        DocumentAccess.objects.create(item=document, user=employee, can_manage=True, can_edit=True)
+
+        self.client.force_login(manager)
+        response = self.client.get(reverse('documents'), {'selected': document.id})
+
+        self.assertContains(response, 'employee / zarządzanie + edycja')
+
+    def test_access_post_merges_existing_user_permissions(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        employee = User.objects.create_user(username='employee', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        document = DocumentItem.objects.create(owner=manager, name='Procedura', kind=DocumentItem.Kind.DOCUMENT)
+        DocumentAccess.objects.create(item=document, user=employee, can_edit=True, can_manage=False)
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('documents'), {
+            'form': 'access',
+            'item': document.id,
+            'user': employee.id,
+            'role': '',
+            'can_manage': 'on',
+        })
+
+        access = DocumentAccess.objects.get(item=document, user=employee)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(access.can_edit)
+        self.assertTrue(access.can_manage)
+        self.assertEqual(DocumentAccess.objects.filter(item=document, user=employee).count(), 1)
 
     def test_uploaded_file_can_be_downloaded(self):
         user = User.objects.create_user(username='owner', password='pass')

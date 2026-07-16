@@ -12,18 +12,20 @@
     <div class="panel-head">
       <div>
         <h2>Historia</h2>
-        <p>Ten czas służy do rozliczania pracownika i nie jest czasem raportowanym klientowi przy zadaniach.</p>
+        {% if role == 'management' %}<p>Ten czas służy do rozliczania pracownika i nie jest czasem raportowanym klientowi przy zadaniach.</p>{% endif %}
       </div>
-      <p class="panel-summary"><strong>Suma godzin:</strong> {{ total_hours|floatformat:2 }}h</p>
+      <div class="time-history-tools">
+        <p class="panel-summary"><strong>Suma godzin:</strong> {{ total_hours|floatformat:2 }}h <span><strong>Łącznie zarobione:</strong> {{ total_earned|floatformat:2 }} {{ payroll_currency }}</span></p>
+        <form class="filter-bar time-month-filter">
+          <input type="month" name="month" value="{{ month }}">
+          <button class="ghost-btn">Filtruj</button>
+        </form>
+      </div>
     </div>
-    <form class="filter-bar">
-      <input type="month" name="month" value="{{ month }}">
-      <button class="ghost-btn">Filtruj</button>
-    </form>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Data</th><th>Od</th><th>Do</th><th>Godziny</th><th>Projekt</th><th>Źródło</th><th></th></tr>
+          <tr><th>Data</th><th>Od</th><th>Do</th><th>Godziny</th><th>Źródło</th><th></th></tr>
         </thead>
         <tbody>
           {% for entry in entries %}
@@ -32,12 +34,11 @@
               <td>{{ entry.start|time:"H:i" }}</td>
               <td>{{ entry.end|time:"H:i" }}</td>
               <td>{{ entry.hours|floatformat:2 }}</td>
-              <td>{{ entry.project.name|default:"-" }}</td>
               <td>{{ entry.get_source_display }}</td>
               <td>{% if entry.can_edit %}<a class="ghost-btn small-btn" href="{% url 'edit_time_entry' entry.id %}">Edytuj</a>{% endif %}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="7">Brak wpisów.</td></tr>
+            <tr><td colspan="6">Brak wpisów.</td></tr>
           {% endfor %}
         </tbody>
       </table>

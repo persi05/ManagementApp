@@ -189,6 +189,26 @@ class ProjectVisibilityTests(TestCase):
             [self.client_project, self.employee_project, self.hidden_project],
         )
 
+    def test_projects_page_is_paginated_by_fifty(self):
+        Project.objects.bulk_create([Project(name=f'Project {index:02}') for index in range(48)])
+        self.client.force_login(self.manager)
+
+        first_page = self.client.get(reverse('projects'))
+        second_page = self.client.get(reverse('projects'), {'page': 2})
+
+        self.assertEqual(len(first_page.context['projects']), 50)
+        self.assertEqual(len(second_page.context['projects']), 1)
+
+    def test_active_projects_widget_includes_project_after_a_task_is_done(self):
+        done_column = BoardColumn.objects.create(project=self.hidden_project, name='Zakończone', is_done_column=True)
+        Task.objects.create(project=self.hidden_project, column=done_column, title='Finished task')
+        self.client.force_login(self.manager)
+
+        response = self.client.get(reverse('dashboard'))
+
+        projects = [row['project'] for row in response.context['project_rows']]
+        self.assertEqual(projects, [self.hidden_project])
+
     def test_client_dashboard_hides_work_status_widget(self):
         self.client.force_login(self.client_user)
         response = self.client.get(reverse('dashboard'))
@@ -511,7 +531,23 @@ class TimeAccountingTests(TestCase):
         self.assertContains(time_response, 'Czas zadań projektowych')
         self.assertEqual(worklog_response.status_code, 200)
         self.assertContains(worklog_response, 'Czas zadań projektowych')
-        self.assertContains(worklog_response, 'nie wchodzi do wynagrodzenia')
+        self.assertNotContains(worklog_response, 'nie wchodzi do wynagrodzenia')
+        self.assertNotContains(time_response, 'name="project"')
+
+    def test_employee_report_contains_only_employee_summary_and_columns(self):
+        user = User.objects.create_user(username='report-employee', password='pass')
+        user.profile.role = UserProfile.Role.EMPLOYEE
+        user.profile.save()
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('reports'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Twój raport pracy')
+        self.assertContains(response, 'Czas pracy')
+        self.assertContains(response, 'Czas przy zadaniach')
+        self.assertNotContains(response, '<th>Pracownik</th>', html=True)
+        self.assertNotContains(response, 'Podział pracowników')
 
 
 class ExportPdfTests(TestCase):
@@ -547,7 +583,7 @@ class ExportPdfTests(TestCase):
         project = Project.objects.create(name='Client project', client=client)
         ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
         ProjectAssignment.objects.create(project=project, user=employee, project_role=ProjectAssignment.ProjectRole.EMPLOYEE)
-        column = BoardColumn.objects.create(project=project, name='Done')
+        column = BoardColumn.objects.create(project=project, name='Done', is_done_column=True)
         task = Task.objects.create(project=project, column=column, title='Visible task')
         TaskWorklog.objects.create(task=task, user=employee, hours='3.50', visible_to_client=True)
 
@@ -565,7 +601,7 @@ class ExportPdfTests(TestCase):
         employee.profile.role = UserProfile.Role.EMPLOYEE
         employee.profile.save()
         project = Project.objects.create(name='Client project', client_hourly_rate=Decimal('100.00'))
-        column = BoardColumn.objects.create(project=project, name='Done')
+        column = BoardColumn.objects.create(project=project, name='Done', is_done_column=True)
         task = Task.objects.create(project=project, column=column, title='Priced task', labels='backend')
         ProjectLabelRate.objects.create(project=project, label='backend', hourly_rate=Decimal('220.00'))
         TaskWorklog.objects.create(task=task, user=employee, date=timezone.localdate(), hours=Decimal('2.00'), visible_to_client=True)
@@ -587,7 +623,7 @@ class ExportPdfTests(TestCase):
         manager.profile.role = UserProfile.Role.MANAGEMENT
         manager.profile.save()
         project = Project.objects.create(name='Client project')
-        column = BoardColumn.objects.create(project=project, name='Done')
+        column = BoardColumn.objects.create(project=project, name='Done', is_done_column=True)
         task = Task.objects.create(project=project, column=column, title='Task')
         TaskWorklog.objects.create(task=task, user=manager, date=timezone.localdate(), hours=Decimal('1.00'))
 
@@ -970,6 +1006,50 @@ class ProjectAssignmentFormTests(TestCase):
 
 
 class KanbanRenderingTests(TestCase):
+    def test_new_columns_default_to_full_permissions_for_every_role(self):
+        project = Project.objects.create(name='Project')
+        column = BoardColumn.objects.create(project=project, name='Lista', position=4)
+
+        self.assertTrue(all(getattr(column, field_name) for field_name in BoardColumn.PERMISSION_FIELDS))
+
+    def test_manager_can_star_and_color_task_card(self):
+        manager = User.objects.create_user(username='manager', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        column = BoardColumn.objects.create(project=project, name='Lista')
+        regular = Task.objects.create(project=project, column=column, title='Regular')
+        starred = Task.objects.create(project=project, column=column, title='Starred')
+
+        self.client.force_login(manager)
+        star_response = self.client.post(reverse('update_task_card', args=[starred.id]), {'action': 'toggle_star'})
+        color_response = self.client.post(reverse('update_task_card', args=[starred.id]), {'action': 'set_color', 'color': 'blue'})
+
+        starred.refresh_from_db()
+        self.assertEqual(star_response.status_code, 200)
+        self.assertEqual(color_response.status_code, 200)
+        self.assertTrue(starred.is_starred)
+        self.assertEqual(starred.card_color, Task.CardColor.BLUE)
+        self.assertEqual(list(column.tasks.values_list('id', flat=True)), [starred.id, regular.id])
+
+    def test_user_without_edit_permission_cannot_change_task_card(self):
+        employee = User.objects.create_user(username='employee', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        column = BoardColumn.objects.create(project=project, name='Lista')
+        column.employee_can_edit_tasks = False
+        column.save(update_fields=['employee_can_edit_tasks'])
+        task = Task.objects.create(project=project, column=column, title='Task')
+
+        self.client.force_login(employee)
+        response = self.client.post(reverse('update_task_card', args=[task.id]), {'action': 'toggle_star'})
+
+        self.assertEqual(response.status_code, 403)
+        task.refresh_from_db()
+        self.assertFalse(task.is_starred)
+
     def test_task_without_assignee_renders_as_unassigned(self):
         manager = User.objects.create_user(username='manager', password='pass')
         manager.profile.role = UserProfile.Role.MANAGEMENT
@@ -1026,7 +1106,7 @@ class KanbanRenderingTests(TestCase):
         task = Task.objects.get(title='Task without explicit project')
         self.assertEqual(task.project, project)
 
-    def test_employee_cannot_move_task_to_done(self):
+    def test_employee_can_move_task_to_done_by_default(self):
         employee = User.objects.create_user(username='employee', password='pass')
         employee.profile.role = UserProfile.Role.EMPLOYEE
         employee.profile.save()
@@ -1039,11 +1119,11 @@ class KanbanRenderingTests(TestCase):
         self.client.force_login(employee)
         response = self.client.post(reverse('move_task', args=[task.id]), {'column': done.id})
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
         task.refresh_from_db()
-        self.assertEqual(task.column, todo)
+        self.assertEqual(task.column, done)
 
-    def test_employee_cannot_choose_done_column_in_task_form(self):
+    def test_employee_can_choose_done_column_in_task_form_by_default(self):
         employee = User.objects.create_user(username='employee', password='pass')
         employee.profile.role = UserProfile.Role.EMPLOYEE
         employee.profile.save()
@@ -1064,9 +1144,8 @@ class KanbanRenderingTests(TestCase):
             'priority': 'medium',
         })
 
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(Task.objects.filter(title='Task for employee').exists())
-        self.assertContains(response, 'Wybierz poprawną wartość')
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Task.objects.filter(title='Task for employee', column=done).exists())
 
     def test_lead_can_move_task_to_done(self):
         lead = User.objects.create_user(username='lead', password='pass')
@@ -1085,7 +1164,7 @@ class KanbanRenderingTests(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.column, done)
 
-    def test_client_cannot_move_task_between_columns(self):
+    def test_client_can_move_task_between_columns_by_default(self):
         client = User.objects.create_user(username='client', password='pass')
         client.profile.role = UserProfile.Role.CLIENT
         client.profile.save()
@@ -1098,9 +1177,50 @@ class KanbanRenderingTests(TestCase):
         self.client.force_login(client)
         response = self.client.post(reverse('move_task', args=[task.id]), {'column': done.id})
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
         task.refresh_from_db()
-        self.assertEqual(task.column, todo)
+        self.assertEqual(task.column, done)
+
+    def test_project_employee_without_edit_permission_cannot_rename_or_move_task(self):
+        employee = User.objects.create_user(username='employee-no-edit', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Permission project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        source = BoardColumn.objects.create(
+            project=project,
+            name='Bez edycji',
+            position=0,
+            employee_can_view_column=True,
+            employee_can_edit_tasks=False,
+            employee_can_move_to=False,
+            lead_can_move_to=True,
+        )
+        target = BoardColumn.objects.create(
+            project=project,
+            name='Docelowa',
+            position=1,
+            employee_can_view_column=True,
+            employee_can_move_to=True,
+            lead_can_move_to=True,
+        )
+        task = Task.objects.create(project=project, column=source, title='Stara nazwa')
+
+        self.client.force_login(employee)
+        edit_response = self.client.post(reverse('edit_task', args=[task.id]), {
+            'title': 'Nowa nazwa',
+            'description': '',
+            'due_date': '',
+            'priority': 'medium',
+            'change_note': '',
+        })
+        move_response = self.client.post(reverse('move_task', args=[task.id]), {'column': target.id})
+
+        task.refresh_from_db()
+        self.assertEqual(edit_response.status_code, 403)
+        self.assertEqual(move_response.status_code, 403)
+        self.assertEqual(task.title, 'Stara nazwa')
+        self.assertEqual(task.column, source)
 
     def test_client_can_edit_only_todo_tasks_and_leave_note(self):
         client = User.objects.create_user(username='client', password='pass')
@@ -1170,7 +1290,7 @@ class KanbanRenderingTests(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.title, 'Todo updated')
 
-    def test_employee_non_owner_can_add_note_but_cannot_change_task_fields(self):
+    def test_employee_non_owner_can_edit_task_fields_by_default(self):
         owner = User.objects.create_user(username='owner', password='pass')
         employee = User.objects.create_user(username='employee', password='pass')
         owner.profile.role = UserProfile.Role.EMPLOYEE
@@ -1194,15 +1314,15 @@ class KanbanRenderingTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         task.refresh_from_db()
-        self.assertEqual(task.title, 'Initial title')
-        self.assertEqual(task.priority, 'medium')
+        self.assertEqual(task.title, 'Changed by non owner')
+        self.assertEqual(task.priority, 'high')
         self.assertTrue(TaskEditNote.objects.filter(task=task, user=employee, content='Tylko notatka').exists())
 
         edit_page = self.client.get(reverse('edit_task', args=[task.id]))
-        self.assertContains(edit_page, 'readonly-field')
-        self.assertContains(edit_page, 'Initial title')
+        self.assertNotContains(edit_page, 'readonly-field')
+        self.assertContains(edit_page, 'Changed by non owner')
 
-    def test_employee_cannot_edit_review_task(self):
+    def test_employee_can_edit_review_task_by_default(self):
         employee = User.objects.create_user(username='employee', password='pass')
         employee.profile.role = UserProfile.Role.EMPLOYEE
         employee.profile.save()
@@ -1214,7 +1334,7 @@ class KanbanRenderingTests(TestCase):
         self.client.force_login(employee)
         response = self.client.get(reverse('edit_task', args=[task.id]))
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
 
     def test_lead_can_edit_review_task_and_manager_can_delete_done_task(self):
         lead = User.objects.create_user(username='lead', password='pass')
@@ -1249,7 +1369,7 @@ class KanbanRenderingTests(TestCase):
         self.assertEqual(delete_response.status_code, 302)
         self.assertFalse(Task.objects.filter(pk=done_task.pk).exists())
 
-    def test_non_management_can_delete_only_own_task(self):
+    def test_employee_can_delete_project_tasks_by_default(self):
         employee = User.objects.create_user(username='employee', password='pass')
         other = User.objects.create_user(username='other', password='pass')
         employee.profile.role = UserProfile.Role.EMPLOYEE
@@ -1267,12 +1387,12 @@ class KanbanRenderingTests(TestCase):
         forbidden = self.client.post(reverse('delete_task', args=[other_task.id]))
         allowed = self.client.post(reverse('delete_task', args=[own_task.id]))
 
-        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(forbidden.status_code, 302)
         self.assertEqual(allowed.status_code, 302)
-        self.assertTrue(Task.objects.filter(pk=other_task.pk).exists())
+        self.assertFalse(Task.objects.filter(pk=other_task.pk).exists())
         self.assertFalse(Task.objects.filter(pk=own_task.pk).exists())
 
-    def test_client_can_delete_only_own_todo_task(self):
+    def test_client_can_delete_project_tasks_by_default(self):
         client = User.objects.create_user(username='client', password='pass')
         other_client = User.objects.create_user(username='other_client', password='pass')
         client.profile.role = UserProfile.Role.CLIENT
@@ -1290,9 +1410,9 @@ class KanbanRenderingTests(TestCase):
         forbidden = self.client.post(reverse('delete_task', args=[other_task.id]))
         allowed = self.client.post(reverse('delete_task', args=[own_task.id]))
 
-        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(forbidden.status_code, 302)
         self.assertEqual(allowed.status_code, 302)
-        self.assertTrue(Task.objects.filter(pk=other_task.pk).exists())
+        self.assertFalse(Task.objects.filter(pk=other_task.pk).exists())
         self.assertFalse(Task.objects.filter(pk=own_task.pk).exists())
 
     def test_management_can_add_board_column(self):
@@ -1309,7 +1429,89 @@ class KanbanRenderingTests(TestCase):
         })
 
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(BoardColumn.objects.filter(project=project, name='Blocked').exists())
+        created_column = BoardColumn.objects.get(project=project, name='Blocked')
+        self.assertTrue(all(getattr(created_column, field_name) for field_name in BoardColumn.PERMISSION_FIELDS))
+
+    def test_employee_can_see_and_add_the_last_board_column(self):
+        employee = User.objects.create_user(username='employee-board-column', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        BoardColumn.objects.create(project=project, name='Pierwsza', position=0)
+
+        self.client.force_login(employee)
+        page = self.client.get(reverse('kanban_project', args=[project.id]))
+        response = self.client.post(reverse('kanban_project', args=[project.id]), {
+            'form': 'board_column',
+            'name': 'Kolejna',
+        })
+
+        self.assertContains(page, 'Dodaj kolejną kolumnę')
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(BoardColumn.objects.filter(project=project, name='Kolejna').exists())
+
+    def test_user_can_choose_default_project_for_tasks(self):
+        employee = User.objects.create_user(username='employee-default-project', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        first_project = Project.objects.create(name='A project')
+        preferred_project = Project.objects.create(name='B project')
+        ProjectAssignment.objects.create(project=first_project, user=employee)
+        ProjectAssignment.objects.create(project=preferred_project, user=employee)
+
+        self.client.force_login(employee)
+        set_response = self.client.post(reverse('set_default_tasks_project', args=[preferred_project.id]))
+        projects_page = self.client.get(reverse('projects'))
+        board_response = self.client.get(reverse('kanban'))
+
+        self.assertEqual(set_response.status_code, 302)
+        employee.profile.refresh_from_db()
+        self.assertEqual(employee.profile.default_tasks_project, preferred_project)
+        self.assertContains(projects_page, 'Domyślny')
+        self.assertRedirects(board_response, reverse('kanban_project', args=[preferred_project.id]))
+
+    def test_only_management_can_open_column_permission_settings(self):
+        employee = User.objects.create_user(username='employee-column-settings', password='pass')
+        employee.profile.role = UserProfile.Role.EMPLOYEE
+        employee.profile.save()
+        project = Project.objects.create(name='Project')
+        ProjectAssignment.objects.create(project=project, user=employee)
+        column = BoardColumn.objects.create(project=project, name='Kolumna', position=0)
+
+        self.client.force_login(employee)
+        board = self.client.get(reverse('kanban_project', args=[project.id]))
+        response = self.client.post(reverse('update_column', args=[column.id]), {
+            'name': 'Zmieniona',
+            'client_can_edit_tasks': '',
+        })
+
+        self.assertNotContains(board, f'edit-column-{column.id}')
+        self.assertEqual(response.status_code, 403)
+        column.refresh_from_db()
+        self.assertEqual(column.name, 'Kolumna')
+        self.assertTrue(column.client_can_edit_tasks)
+
+    def test_project_can_have_only_one_done_column(self):
+        manager = User.objects.create_user(username='manager-one-done', password='pass')
+        manager.profile.role = UserProfile.Role.MANAGEMENT
+        manager.profile.save()
+        project = Project.objects.create(name='Project')
+        first = BoardColumn.objects.create(project=project, name='Gotowe', position=0, is_done_column=True)
+        second = BoardColumn.objects.create(project=project, name='Inna', position=1)
+
+        self.client.force_login(manager)
+        response = self.client.post(reverse('update_column', args=[second.id]), {
+            'name': 'Inna',
+            'is_done_column': 'on',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Tylko jedna kolumna w projekcie może być oznaczona jako zakończona.')
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertTrue(first.is_done_column)
+        self.assertFalse(second.is_done_column)
 
     def test_management_can_update_board_column_settings(self):
         manager = User.objects.create_user(username='manager', password='pass')
@@ -1405,8 +1607,10 @@ class KanbanRenderingTests(TestCase):
         self.client.force_login(manager)
         self.client.post(reverse('update_column', args=[custom.id]), {
             'name': 'QA',
+            'employee_can_view_column': 'on',
             'employee_can_move_to': 'on',
             'employee_can_edit_tasks': 'on',
+            'lead_can_view_column': 'on',
             'lead_can_move_to': 'on',
             'lead_can_edit_tasks': 'on',
         })
@@ -1501,7 +1705,7 @@ class KanbanRenderingTests(TestCase):
         self.assertContains(board, 'pilne')
         self.assertContains(board, 'backend')
 
-    def test_assigned_employee_can_edit_labels_but_client_cannot_see_label_field(self):
+    def test_employee_and_client_can_edit_labels_by_default(self):
         employee = User.objects.create_user(username='employee', password='pass')
         client = User.objects.create_user(username='client', password='pass')
         employee.profile.role = UserProfile.Role.EMPLOYEE
@@ -1533,7 +1737,7 @@ class KanbanRenderingTests(TestCase):
         self.client.force_login(client)
         edit_page = self.client.get(reverse('edit_task', args=[client_task.id]))
 
-        self.assertNotContains(edit_page, 'Etykiety')
+        self.assertContains(edit_page, 'data-label-transfer')
 
     def test_creating_assigned_task_sends_notification_to_assignee(self):
         manager = User.objects.create_user(username='manager', password='pass')
@@ -1781,7 +1985,7 @@ class KanbanRenderingTests(TestCase):
         employee.profile.save()
         project = Project.objects.create(name='Client project', client=client)
         ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
-        column = BoardColumn.objects.create(project=project, name='Done', position=0)
+        column = BoardColumn.objects.create(project=project, name='Done', position=0, is_done_column=True)
         task = Task.objects.create(project=project, column=column, title='Visible task')
         TaskWorklog.objects.create(task=task, user=employee, date=timezone.localdate(), hours=Decimal('2.00'), visible_to_client=True)
 
@@ -1804,7 +2008,7 @@ class KanbanRenderingTests(TestCase):
         employee.profile.save()
         project = Project.objects.create(name='Client project', client=client, client_hourly_rate=Decimal('100.00'))
         ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
-        column = BoardColumn.objects.create(project=project, name='Done', position=0)
+        column = BoardColumn.objects.create(project=project, name='Done', position=0, is_done_column=True)
         task = Task.objects.create(project=project, column=column, title='Priced task', labels='backend, frontend')
         ProjectLabelRate.objects.create(project=project, label='backend', hourly_rate=Decimal('220.00'))
         ProjectLabelRate.objects.create(project=project, label='frontend', hourly_rate=Decimal('190.00'))
@@ -1827,7 +2031,7 @@ class KanbanRenderingTests(TestCase):
         employee.profile.save()
         project = Project.objects.create(name='Client project', client=client, client_hourly_rate=Decimal('150.00'))
         ProjectAssignment.objects.create(project=project, user=client, project_role=ProjectAssignment.ProjectRole.CLIENT)
-        column = BoardColumn.objects.create(project=project, name='Done', position=0)
+        column = BoardColumn.objects.create(project=project, name='Done', position=0, is_done_column=True)
         task = Task.objects.create(project=project, column=column, title='Default priced task', labels='support')
         TaskWorklog.objects.create(task=task, user=employee, date=timezone.localdate(), hours=Decimal('3.00'), visible_to_client=True)
 
@@ -2013,6 +2217,24 @@ class KanbanRenderingTests(TestCase):
         self.assertTrue(DocumentItem.objects.filter(name='Spec', owner=employee).exists())
         self.assertIn(attachment.document, DocumentItem.visible_to(employee))
         self.assertNotIn(attachment.document, DocumentItem.visible_to(outsider))
+        self.assertFalse(attachment.document.can_edit(employee))
+        self.assertFalse(attachment.document.can_manage(employee))
+
+        rename_response = self.client.post(reverse('documents'), {
+            'form': 'rename',
+            'item': attachment.document.id,
+            'name': 'Changed spec',
+        })
+        move_response = self.client.post(reverse('documents'), {
+            'form': 'move',
+            'item': attachment.document.id,
+            'target_parent': '',
+        })
+
+        attachment.document.refresh_from_db()
+        self.assertEqual(rename_response.status_code, 403)
+        self.assertEqual(move_response.status_code, 403)
+        self.assertEqual(attachment.document.name, 'Spec')
 
     def test_kanban_preview_rejects_disallowed_attachment_extension(self):
         employee = User.objects.create_user(username='employee', password='pass')
@@ -2048,6 +2270,9 @@ class KanbanRenderingTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Attachment.objects.filter(task=task, document=document, name='Brief').exists())
+        document.refresh_from_db()
+        self.assertFalse(document.can_edit(employee))
+        self.assertFalse(document.can_manage(employee))
 
     def test_management_report_defaults_to_client_visible_scope(self):
         manager = User.objects.create_user(username='manager', password='pass')
@@ -2060,7 +2285,7 @@ class KanbanRenderingTests(TestCase):
         client.profile.role = UserProfile.Role.CLIENT
         client.profile.save()
         project = Project.objects.create(name='Client project', client=client, client_hourly_rate=Decimal('100.00'))
-        column = BoardColumn.objects.create(project=project, name='Done', position=0)
+        column = BoardColumn.objects.create(project=project, name='Done', position=0, is_done_column=True)
         priced_task = Task.objects.create(project=project, column=column, title='Priced task', labels='backend')
         hidden_task = Task.objects.create(project=project, column=column, title='Hidden task')
         ProjectLabelRate.objects.create(project=project, label='backend', hourly_rate=Decimal('220.00'))
@@ -2092,7 +2317,7 @@ class KanbanRenderingTests(TestCase):
         client.profile.role = UserProfile.Role.CLIENT
         client.profile.save()
         project = Project.objects.create(name='Client project', client=client, client_hourly_rate=Decimal('100.00'))
-        column = BoardColumn.objects.create(project=project, name='Done', position=0)
+        column = BoardColumn.objects.create(project=project, name='Done', position=0, is_done_column=True)
         priced_task = Task.objects.create(project=project, column=column, title='Priced task', labels='backend')
         hidden_task = Task.objects.create(project=project, column=column, title='Hidden task')
         ProjectLabelRate.objects.create(project=project, label='backend', hourly_rate=Decimal('220.00'))
@@ -2118,7 +2343,7 @@ class KanbanRenderingTests(TestCase):
         manager.profile.role = UserProfile.Role.MANAGEMENT
         manager.profile.save()
         project = Project.objects.create(name='Solo project')
-        column = BoardColumn.objects.create(project=project, name='Done', position=0)
+        column = BoardColumn.objects.create(project=project, name='Done', position=0, is_done_column=True)
         task = Task.objects.create(project=project, column=column, title='Task')
         TaskWorklog.objects.create(task=task, user=manager, date=timezone.localdate(), hours=Decimal('1.00'))
 

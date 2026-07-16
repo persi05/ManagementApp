@@ -70,32 +70,42 @@ def dashboard(request):
             client_selected_project_row = client_project_rows[0]
         if client_selected_project_row:
             client_project_tasks = tasks.filter(project=client_selected_project_row['project'])[:8]
-    notifications = request.user.notifications.filter(is_read=False)[:5]
+    notifications = list(request.user.notifications.filter(is_read=False)[:9])
     current_rate = request.user.hourly_rates.order_by('-valid_from').first()
     payroll = None if is_management(request.user) or user_role(request.user) == UserProfile.Role.CLIENT else payroll_amount(request.user, entries, start_date, next_month)
     team_hours = sum(row['hours'] for row in employee_summaries) if employee_summaries else Decimal('0')
     today = timezone.localdate()
-    today_tasks = tasks.filter(due_date=today).select_related('project', 'column')[:4]
-    upcoming_deadlines = tasks.filter(due_date__gte=today).select_related('project', 'column').order_by('due_date', '-priority')[:5]
-    recent_documents = DocumentItem.visible_to(request.user).filter(is_archived=False).exclude(kind=DocumentItem.Kind.FOLDER).select_related('owner').order_by('-updated_at')[:5]
+    today_tasks = list(tasks.filter(due_date=today).select_related('project', 'column')[:9])
+    upcoming_deadlines = list(tasks.filter(due_date__gte=today).select_related('project', 'column').order_by('due_date', '-priority')[:9])
+    recent_documents = list(DocumentItem.visible_to(request.user).filter(is_archived=False).exclude(kind=DocumentItem.Kind.FOLDER).select_related('owner').order_by('-updated_at')[:9])
     project_rows = []
-    for project in projects[:6]:
+    for project in projects:
         project_task_count = tasks.filter(project=project).count()
         project_done_count = tasks.filter(project=project, column__is_done_column=True).count()
+        if not project_done_count:
+            continue
         project_rows.append({
             'project': project,
             'task_count': project_task_count,
             'done_count': project_done_count,
             'progress': int((project_done_count / project_task_count) * 100) if project_task_count else 0,
         })
+        if len(project_rows) == 9:
+            break
 
     context = {
         'projects': projects[:6],
         'tasks': tasks[:8],
+        'tasks_extra_count': max(0, min(tasks.count(), 8) - 3),
+        'projects_extra_count': max(0, min(projects.count(), 6) - 3),
         'today_tasks': today_tasks,
+        'today_tasks_extra_count': max(0, len(today_tasks) - 3),
         'upcoming_deadlines': upcoming_deadlines,
+        'upcoming_deadlines_extra_count': max(0, len(upcoming_deadlines) - 3),
         'recent_documents': recent_documents,
+        'recent_documents_extra_count': max(0, len(recent_documents) - 3),
         'project_rows': project_rows,
+        'project_rows_extra_count': max(0, len(project_rows) - 3),
         'active_session': active_session,
         'active_session_seconds': active_session_seconds,
         'active_session_display': format_timer_seconds(active_session_seconds),
@@ -104,9 +114,11 @@ def dashboard(request):
         'client_project_rows': client_project_rows,
         'client_selected_project_row': client_selected_project_row,
         'client_project_tasks': client_project_tasks,
+        'client_project_tasks_extra_count': max(0, len(client_project_tasks) - 3),
         'client_task_count': sum(row['task_count'] for row in client_project_rows),
         'client_done_count': sum(row['done_count'] for row in client_project_rows),
         'notifications': notifications,
+        'notifications_extra_count': max(0, len(notifications) - 3),
         'current_rate': current_rate,
         'payroll': payroll,
         'employee_summaries': employee_summaries,

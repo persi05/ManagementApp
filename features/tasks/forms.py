@@ -4,10 +4,10 @@ from django.utils.html import conditional_escape, format_html, format_html_join
 from django.utils.safestring import mark_safe
 
 from features.accounts.models import UserProfile, is_management, user_role
-from features.projects.models import ProjectLabelRate
+from features.projects.models import ProjectAssignment, ProjectLabelRate
 
 from .models import BoardColumn, Task, TaskWorklog
-from .services import can_edit_task_fields, can_edit_task_labels, can_move_to_column
+from .services import can_create_task_in_column, can_edit_task_fields
 
 
 def parse_labels(value):
@@ -40,7 +40,7 @@ class LabelTransferWidget(forms.Widget):
             '{}'
             '<div class="label-transfer" data-label-transfer>'
             '<div class="label-transfer-panel">'
-            '<span>Aktualne etykiety:</span>'
+            '<span>Aktualne etykiety</span>'
             '<div class="label-transfer-box" data-label-selected>{}</div>'
             '</div>'
             '<div class="label-transfer-controls">'
@@ -48,11 +48,11 @@ class LabelTransferWidget(forms.Widget):
             '<button type="button" class="ghost-btn tiny-btn" data-label-move="right" aria-label="Usuń etykiety">Usuń <span>&rarr;</span></button>'
             '</div>'
             '<div class="label-transfer-panel">'
-            '<span>Dostępne etykiety:</span>'
+            '<span>Dostępne etykiety</span>'
             '<div class="label-transfer-box" data-label-available>{}</div>'
             '</div>'
             '<div class="label-transfer-new">'
-            '<span>Dodaj nową etykietę:</span>'
+            '<span>Dodaj nową etykietę</span>'
             '<input type="text" data-label-new placeholder="Nowa etykieta">'
             '<button type="button" class="ghost-btn tiny-btn" data-label-add>Dodaj</button>'
             '</div>'
@@ -84,9 +84,10 @@ class AssigneeTransferWidget(forms.SelectMultiple):
         for option_value, option_label in choices:
             option_value = str(option_value)
             option_label = str(option_label)
-            picker_options.append(format_html('<option value="{}">{}</option>', option_value, option_label))
             if option_value in selected_values:
                 selected_items.append((option_value, option_label))
+            else:
+                picker_options.append(format_html('<option value="{}">{}</option>', option_value, option_label))
         self.choices = choices
         select = super().render(name, value, attrs, renderer)
         return format_html(
@@ -119,6 +120,12 @@ def setup_label_widget(form, project):
     form.fields['labels'].widget = LabelTransferWidget([rate.label for rate in rates])
     form.fields['labels'].label = ''
     return rates
+
+
+def can_manage_task_labels(user, project):
+    if user is None or project is None:
+        return False
+    return user.is_authenticated
 
 
 def normalize_assignee_data(args):
@@ -180,17 +187,24 @@ class TaskForm(forms.ModelForm):
         if project is not None and 'column' in self.fields:
             column_qs = BoardColumn.objects.filter(project=project)
             if user is not None and not is_management(user):
-                allowed_ids = [column.id for column in column_qs if can_move_to_column(user, project, column)]
+                allowed_ids = [column.id for column in column_qs if can_create_task_in_column(user, project, column)]
                 column_qs = column_qs.filter(id__in=allowed_ids)
             self.fields['column'].queryset = column_qs
             self.fields['column'].initial = column_qs.order_by('position', 'id').first()
+            if fixed_project:
+                self.fields['column'].widget = forms.HiddenInput()
 
         if user is not None and not is_management(user):
             self.fields.pop('assignees', None)
+
+        if user is not None and not can_manage_task_labels(user, project):
             self.fields.pop('labels', None)
 
         if user is not None and user_role(user) == UserProfile.Role.CLIENT:
             self.fields.pop('column', None)
+
+        for field_name, field in self.fields.items():
+            field.widget.attrs['data-task-field'] = field_name
 
         self._setup_label_suggestions()
         field_order = ['title', 'due_date', 'priority']
@@ -230,7 +244,25 @@ class TaskForm(forms.ModelForm):
         return task
 
 
-class BoardColumnForm(forms.ModelForm):
+class DoneColumnValidationMixin:
+    def __init__(self, *args, project=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        instance_project = self.instance.project if getattr(self.instance, 'project_id', None) else None
+        self.column_project = project or instance_project
+
+    def clean_is_done_column(self):
+        is_done_column = self.cleaned_data.get('is_done_column', False)
+        if not is_done_column or self.column_project is None:
+            return is_done_column
+        existing = BoardColumn.objects.filter(project=self.column_project, is_done_column=True)
+        if self.instance.pk:
+            existing = existing.exclude(pk=self.instance.pk)
+        if existing.exists():
+            raise forms.ValidationError('Tylko jedna kolumna w projekcie może być oznaczona jako zakończona.')
+        return is_done_column
+
+
+class BoardColumnForm(DoneColumnValidationMixin, forms.ModelForm):
     class Meta:
         model = BoardColumn
         fields = ('name', 'is_done_column')
@@ -240,18 +272,24 @@ class BoardColumnForm(forms.ModelForm):
         }
 
 
-class BoardColumnSettingsForm(forms.ModelForm):
+class BoardColumnSettingsForm(DoneColumnValidationMixin, forms.ModelForm):
     class Meta:
         model = BoardColumn
         fields = (
             'name',
             'is_done_column',
+            'client_can_view_column',
+            'client_can_create_tasks',
             'client_can_move_to',
             'client_can_edit_tasks',
             'client_can_delete_tasks',
+            'employee_can_view_column',
+            'employee_can_create_tasks',
             'employee_can_move_to',
             'employee_can_edit_tasks',
             'employee_can_delete_tasks',
+            'lead_can_view_column',
+            'lead_can_create_tasks',
             'lead_can_move_to',
             'lead_can_edit_tasks',
             'lead_can_delete_tasks',
@@ -263,12 +301,18 @@ class BoardColumnSettingsForm(forms.ModelForm):
         labels = {
             'name': 'Nazwa kolumny',
             'is_done_column': 'Tu trafiają zadania zakończone',
+            'client_can_view_column': 'Klient: widoczność kolumny',
+            'client_can_create_tasks': 'Klient: tworzenie zadań',
             'client_can_move_to': 'Klient: przenoszenie',
             'client_can_edit_tasks': 'Klient: edycja',
             'client_can_delete_tasks': 'Klient: usuwanie',
+            'employee_can_view_column': 'Pracownik: widoczność kolumny',
+            'employee_can_create_tasks': 'Pracownik: tworzenie zadań',
             'employee_can_move_to': 'Pracownik: przenoszenie',
             'employee_can_edit_tasks': 'Pracownik: edycja',
             'employee_can_delete_tasks': 'Pracownik: usuwanie',
+            'lead_can_view_column': 'Lead: widoczność kolumny',
+            'lead_can_create_tasks': 'Lead: tworzenie zadań',
             'lead_can_move_to': 'Lead: przenoszenie',
             'lead_can_edit_tasks': 'Lead: edycja',
             'lead_can_delete_tasks': 'Lead: usuwanie',
@@ -334,7 +378,8 @@ class TaskEditForm(forms.ModelForm):
 
         if user is not None and not is_management(user):
             self.fields.pop('assignees', None)
-        if user is not None and self.instance.pk and not can_edit_task_labels(user, self.instance):
+        task_project = self.project or getattr(self.instance, 'project', None)
+        if user is not None and not can_manage_task_labels(user, task_project):
             self.fields.pop('labels', None)
         if user is not None and self.instance.pk and not can_edit_task_fields(user, self.instance):
             for field_name in ('title', 'due_date', 'priority', 'description'):

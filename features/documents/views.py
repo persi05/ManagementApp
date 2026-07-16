@@ -15,8 +15,8 @@ from django.views.decorators.http import require_POST
 
 from features.accounts.models import is_management
 
-from .forms import DocumentAccessForm, FolderForm, RenameDocumentForm, TextDocumentForm, UploadDocumentForm
-from .models import DocumentAccess, DocumentItem
+from .forms import DocumentAccessForm, DocumentVisibilityBlockForm, EditTextDocumentForm, FolderForm, RenameDocumentForm, TextDocumentForm, UploadDocumentForm
+from .models import DocumentAccess, DocumentItem, DocumentVisibilityBlock
 
 
 TEXT_PREVIEW_EXTENSIONS = {
@@ -267,16 +267,57 @@ def documents(request):
                     selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
                     archived=item.is_archived,
                 )
+        elif form_name == 'edit_document':
+            item = visible_document(request.user, request.POST.get('item'))
+            if item.kind != DocumentItem.Kind.DOCUMENT:
+                return HttpResponseForbidden('Ten typ pliku nie ma edycji treści.')
+            if not item.can_edit(request.user):
+                return HttpResponseForbidden('Brak uprawnień do edycji dokumentu.')
+            form = EditTextDocumentForm(request.POST, instance=item)
+            if form.is_valid():
+                form.save()
+                messages.success(request, 'Dokument został zapisany.')
+                return documents_redirect(
+                    parent=None if item.is_archived else item.parent,
+                    selected=item,
+                    archived=item.is_archived,
+                )
         elif form_name == 'access':
             item = visible_document(request.user, request.POST.get('item'))
             if not is_management(request.user):
                 return HttpResponseForbidden('Brak uprawnień do udostępniania.')
             form = DocumentAccessForm(request.POST)
             if form.is_valid():
-                access = form.save(commit=False)
-                access.item = item
-                access.save()
+                user = form.cleaned_data.get('user')
+                role = form.cleaned_data.get('role') or ''
+                access, created = DocumentAccess.objects.get_or_create(
+                    item=item,
+                    user=user,
+                    role=role,
+                    defaults={
+                        'can_edit': form.cleaned_data.get('can_edit', False),
+                        'can_manage': form.cleaned_data.get('can_manage', False),
+                    },
+                )
+                if not created:
+                    access.can_edit = access.can_edit or form.cleaned_data.get('can_edit', False)
+                    access.can_manage = access.can_manage or form.cleaned_data.get('can_manage', False)
+                    access.save(update_fields=['can_edit', 'can_manage'])
                 messages.success(request, 'Dostęp został dodany.')
+                return documents_redirect(
+                    parent=None if item.is_archived else item.parent,
+                    selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
+                    manage=item if item.kind == DocumentItem.Kind.FOLDER else None,
+                    archived=item.is_archived,
+                )
+        elif form_name == 'visibility_block':
+            item = visible_document(request.user, request.POST.get('item'))
+            if not is_management(request.user):
+                return HttpResponseForbidden('Brak uprawnień do blokowania widoczności.')
+            form = DocumentVisibilityBlockForm(request.POST)
+            if form.is_valid():
+                DocumentVisibilityBlock.objects.get_or_create(item=item, user=form.cleaned_data['user'])
+                messages.success(request, 'Widoczność została zablokowana dla wybranego użytkownika.')
                 return documents_redirect(
                     parent=None if item.is_archived else item.parent,
                     selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
@@ -290,6 +331,19 @@ def documents(request):
             item = visible_document(request.user, access.item_id)
             access.delete()
             messages.success(request, 'Dostęp został usunięty.')
+            return documents_redirect(
+                parent=None if item.is_archived else item.parent,
+                selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
+                manage=item if item.kind == DocumentItem.Kind.FOLDER else None,
+                archived=item.is_archived,
+            )
+        elif form_name == 'remove_visibility_block':
+            if not is_management(request.user):
+                return HttpResponseForbidden('Brak uprawnień do edycji widoczności.')
+            block = get_object_or_404(DocumentVisibilityBlock, pk=request.POST.get('visibility_block'))
+            item = visible_document(request.user, block.item_id)
+            block.delete()
+            messages.success(request, 'Blokada widoczności została usunięta.')
             return documents_redirect(
                 parent=None if item.is_archived else item.parent,
                 selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
@@ -317,7 +371,9 @@ def documents(request):
         elif form_name == 'action':
             item = visible_document(request.user, request.POST.get('item'))
             action = request.POST.get('action')
-            if action in {'archive', 'unarchive', 'delete', 'pin', 'copy'} and not item.can_manage(request.user):
+            if action == 'copy':
+                return HttpResponseForbidden('Kopiowanie dokumentów jest wyłączone.')
+            if action in {'archive', 'unarchive', 'delete', 'pin'} and not item.can_manage(request.user):
                 return HttpResponseForbidden('Brak uprawnień do tej akcji.')
             if action == 'archive':
                 previous_parent = item.parent
@@ -377,6 +433,13 @@ def documents(request):
             search_folder_path = document_folder_path(item)
             item.search_folder_path = search_folder_path['label']
             item.search_folder = search_folder_path['folder']
+            item.can_edit_current_user = item.can_edit(request.user)
+            item.can_manage_current_user = item.can_manage(request.user)
+    else:
+        current_items = list(current_items)
+        for item in current_items:
+            item.can_edit_current_user = item.can_edit(request.user)
+            item.can_manage_current_user = item.can_manage(request.user)
 
     selected = None
     if selected_id:
@@ -411,9 +474,11 @@ def documents(request):
         'upload_form': upload_form,
         'max_upload_size_bytes': settings.DOCUMENTS_MAX_UPLOAD_SIZE_BYTES,
         'allowed_upload_extensions': sorted(settings.DOCUMENTS_ALLOWED_UPLOAD_EXTENSIONS),
-        'rename_form': RenameDocumentForm(instance=panel_item) if panel_item else RenameDocumentForm(),
+        'rename_form': EditTextDocumentForm(instance=panel_item) if panel_item and panel_item.kind == DocumentItem.Kind.DOCUMENT else RenameDocumentForm(instance=panel_item) if panel_item else RenameDocumentForm(),
         'access_form': DocumentAccessForm(),
+        'visibility_block_form': DocumentVisibilityBlockForm(),
         'accesses': panel_item.accesses.select_related('user') if panel_item else [],
+        'visibility_blocks': panel_item.visibility_blocks.select_related('user') if panel_item else [],
         'folders': DocumentItem.visible_to(request.user).filter(kind=DocumentItem.Kind.FOLDER, is_archived=False).exclude(pk=panel_item.pk if panel_item else None),
         'can_manage_selected': panel_item.can_manage(request.user) if panel_item else False,
         'can_edit_selected': panel_item.can_edit(request.user) if panel_item else False,

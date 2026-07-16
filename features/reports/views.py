@@ -27,8 +27,9 @@ def project_report_worklogs(request, start_date, end_date):
     if selected_project:
         projects = projects.filter(pk=selected_project)
 
-    worklogs = TaskWorklog.objects.select_related('task', 'task__project', 'task__project__client', 'user').filter(
+    worklogs = TaskWorklog.objects.select_related('task', 'task__column', 'task__project', 'task__project__client', 'user').filter(
         task__project__in=projects,
+        task__column__is_done_column=True,
         date__gte=start_date,
         date__lt=end_date,
     )
@@ -128,7 +129,7 @@ def employee_report_rows(worklogs):
 
 @login_required
 def reports(request):
-    start_date, end_exclusive, _start_dt, _end_dt, end_date = date_range_bounds(request)
+    start_date, end_exclusive, start_dt, end_dt, end_date = date_range_bounds(request)
     selected_project = request.GET.get('project') or ''
     selected_client = request.GET.get('client') or ''
     selected_employee = request.GET.get('employee') or ''
@@ -159,6 +160,14 @@ def reports(request):
         Q(client_projects__in=visible) | Q(projectassignment__project__in=visible, projectassignment__project_role='client'),
     ).distinct().order_by('last_name', 'first_name', 'username')
     employees = User.objects.filter(profile__role=UserProfile.Role.EMPLOYEE).order_by('last_name', 'first_name', 'username') if is_management(request.user) else User.objects.filter(pk=request.user.pk)
+    is_employee_report = user_role(request.user) == UserProfile.Role.EMPLOYEE
+    employee_entries = []
+    employee_work_hours = Decimal('0')
+    employee_payroll = None
+    if is_employee_report:
+        employee_entries = list(TimeEntry.objects.filter(user=request.user, start__gte=start_dt, start__lt=end_dt))
+        employee_work_hours = sum((entry.hours for entry in employee_entries), Decimal('0'))
+        employee_payroll = payroll_amount(request.user, employee_entries, start_date, end_exclusive)
 
     return render(request, 'features/reports.html', {
         'client_worklogs': client_worklogs,
@@ -180,6 +189,10 @@ def reports(request):
         'is_client_visibility_report': report_visibility == 'client',
         'can_manage': is_management(request.user),
         'is_client_report': user_role(request.user) == UserProfile.Role.CLIENT,
+        'is_employee_report': is_employee_report,
+        'employee_work_hours': employee_work_hours,
+        'employee_task_hours': sum(row['hours'] for row in project_rows),
+        'employee_payroll': employee_payroll,
         'total_hours': sum(row['hours'] for row in project_rows),
         'total_visible_hours': total_visible_hours,
         'total_amount': total_amount,
@@ -189,6 +202,8 @@ def reports(request):
 
 @login_required
 def export_csv(request):
+    if user_role(request.user) == UserProfile.Role.EMPLOYEE:
+        return HttpResponseForbidden('Brak uprawnien do eksportu raportu projektowego.')
     start_date, end_exclusive, _start_dt, _end_dt, end_date = date_range_bounds(request)
     worklogs, projects = project_report_worklogs(request, start_date, end_exclusive)
     rates_by_project = project_rate_map(projects)
@@ -236,6 +251,9 @@ def export_pdf(request):
             'payroll': payroll,
             'bank_account': getattr(getattr(employee, 'profile', None), 'bank_account', ''),
         })
+
+    if user_role(request.user) == UserProfile.Role.EMPLOYEE:
+        return HttpResponseForbidden('Brak uprawnien do eksportu raportu projektowego.')
 
     worklogs, projects = project_report_worklogs(request, start_date, end_exclusive)
     rates_by_project = project_rate_map(projects)
