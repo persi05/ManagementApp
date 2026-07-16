@@ -1,8 +1,9 @@
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from features.accounts.models import UserProfile, ensure_profile
@@ -16,6 +17,9 @@ class Command(BaseCommand):
     help = 'Tworzy dane demonstracyjne dla Dcode Management.'
 
     def handle(self, *args, **options):
+        if not settings.DEBUG:
+            raise CommandError('seed_demo can only be run when DJANGO_DEBUG=true.')
+
         manager = self.user('manager', 'Manager', 'Dcode', UserProfile.Role.MANAGEMENT, True)
         employee = self.user('pracownik', 'Anna', 'Nowak', UserProfile.Role.EMPLOYEE)
         employee2 = self.user('dev', 'Piotr', 'Kowalski', UserProfile.Role.EMPLOYEE)

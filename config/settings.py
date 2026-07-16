@@ -1,8 +1,17 @@
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def env_required(name):
+    value = os.getenv(name)
+    if value is None or value == '':
+        raise ImproperlyConfigured(f'Missing required environment variable: {name}')
+    return value
 
 
 def env_bool(name, default=False):
@@ -12,8 +21,24 @@ def env_bool(name, default=False):
     return value.lower() in {'1', 'true', 'yes', 'on'}
 
 
+def env_bool_required(name):
+    value = env_required(name).lower()
+    if value in {'1', 'true', 'yes', 'on'}:
+        return True
+    if value in {'0', 'false', 'no', 'off'}:
+        return False
+    raise ImproperlyConfigured(f'Environment variable {name} must be a boolean value.')
+
+
 def env_list(name, default=''):
     return [item.strip() for item in os.getenv(name, default).split(',') if item.strip()]
+
+
+def env_list_required(name):
+    values = [item.strip() for item in env_required(name).split(',') if item.strip()]
+    if not values:
+        raise ImproperlyConfigured(f'Environment variable {name} must contain at least one value.')
+    return values
 
 
 def env_int(name, default):
@@ -23,12 +48,12 @@ def env_int(name, default):
     return int(value)
 
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dev-only-change-me')
-DEBUG = env_bool('DJANGO_DEBUG', True)
-ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost,testserver')
-CSRF_TRUSTED_ORIGINS = env_list('DJANGO_CSRF_TRUSTED_ORIGINS')
-USE_X_FORWARDED_HOST = env_bool('DJANGO_USE_X_FORWARDED_HOST', False)
-if env_bool('DJANGO_SECURE_PROXY_SSL_HEADER', False):
+SECRET_KEY = env_required('DJANGO_SECRET_KEY')
+DEBUG = env_bool_required('DJANGO_DEBUG')
+ALLOWED_HOSTS = env_list_required('DJANGO_ALLOWED_HOSTS')
+CSRF_TRUSTED_ORIGINS = env_list_required('DJANGO_CSRF_TRUSTED_ORIGINS')
+USE_X_FORWARDED_HOST = env_bool_required('DJANGO_USE_X_FORWARDED_HOST')
+if env_bool_required('DJANGO_SECURE_PROXY_SSL_HEADER'):
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
@@ -85,23 +110,15 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 
-DATABASE_URL = os.getenv('DATABASE_URL')
-if DATABASE_URL:
-    import dj_database_url
+DATABASE_URL = env_required('DATABASE_URL')
+import dj_database_url
 
-    DATABASES = {
-        'default': dj_database_url.parse(
-            DATABASE_URL,
-            conn_max_age=int(os.getenv('DB_CONN_MAX_AGE', '60')),
-        )
-    }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+DATABASES = {
+    'default': dj_database_url.parse(
+        DATABASE_URL,
+        conn_max_age=int(os.getenv('DB_CONN_MAX_AGE', '60')),
+    )
+}
 
 
 CACHES = {
@@ -177,7 +194,7 @@ SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
-SECURE_SSL_REDIRECT = env_bool('DJANGO_SECURE_SSL_REDIRECT', not DEBUG)
+SECURE_SSL_REDIRECT = env_bool_required('DJANGO_SECURE_SSL_REDIRECT')
 
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
