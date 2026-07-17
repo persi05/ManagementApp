@@ -1,10 +1,10 @@
 # Software Requirements Specification
 
-## Dcode Management
+##  App Management
 
 | Pole | Wartość |
 | --- | --- |
-| Nazwa systemu | Dcode Management |
+| Nazwa systemu |  App Management |
 | Typ dokumentu | Software Requirements Specification |
 | Wersja dokumentu | 1.0 |
 | Data | 17.07.2026 |
@@ -39,7 +39,7 @@
 
 ## 1.1 Cel dokumentu
 
-Celem dokumentu jest opisanie wymagań systemowych, funkcjonalnych i niefunkcjonalnych aplikacji Dcode Management. Dokument ma służyć jako wspólna podstawa dla programistów, testerów, właściciela produktu oraz osób wdrażających system.
+Celem dokumentu jest opisanie wymagań systemowych, funkcjonalnych i niefunkcjonalnych aplikacji  App Management. Dokument ma służyć jako wspólna podstawa dla programistów, testerów, właściciela produktu oraz osób wdrażających system.
 
 Dokument opisuje aktualny docelowy zakres aplikacji, w tym:
 
@@ -55,7 +55,7 @@ Dokument opisuje aktualny docelowy zakres aplikacji, w tym:
 
 ## 1.2 Zakres systemu
 
-Dcode Management jest webową aplikacją do organizacji pracy małego lub średniego zespołu usługowego. System łączy funkcje zarządzania projektami, zadaniami, czasem pracy i rozliczeniami pracowników.
+ App Management jest webową aplikacją do organizacji pracy małego lub średniego zespołu usługowego. System łączy funkcje zarządzania projektami, zadaniami, czasem pracy i rozliczeniami pracowników.
 
 Głównym celem systemu jest umożliwienie:
 
@@ -91,7 +91,7 @@ Przypadki użycia są oznaczane prefiksem `UC`.
 
 ## 2.1 Perspektywa produktu
 
-Dcode Management jest samodzielną aplikacją webową opartą o Django. System działa jako klasyczna aplikacja serwerowa renderująca szablony HTML, z dodatkowymi skryptami JavaScript dla interaktywnych elementów interfejsu.
+ App Management jest samodzielną aplikacją webową opartą o Django. System działa jako klasyczna aplikacja serwerowa renderująca szablony HTML, z dodatkowymi skryptami JavaScript dla interaktywnych elementów interfejsu.
 
 System korzysta z:
 
