@@ -6,7 +6,9 @@
 <section class="metrics-grid">
   <article class="metric"><span>Zarejestrowani</span><strong>{{ registered_users|length }}</strong><small>wszyscy uzytkownicy</small></article>
   <article class="metric"><span>Czas lacznie</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>{{ period_label }}</small></article>
-  <article class="metric"><span>Wynagrodzenia</span><strong>{{ total_payroll }} PLN</strong><small>wedlug stawek</small></article>
+  <article class="metric"><span>Wynagrodzenia</span><strong>{{ total_payroll|floatformat:2 }} PLN</strong><small>przed obciążeniami</small></article>
+  <article class="metric"><span>Obciążenia</span><strong>{{ total_charges|floatformat:2 }} PLN</strong><small>saldo za okres</small></article>
+  <article class="metric charge-payout"><span>Do wypłaty</span><strong>{{ total_payout|floatformat:2 }} PLN</strong><small>wynagrodzenia minus obciążenia</small></article>
   <article class="metric"><span>Okres</span><strong class="metric-small">{{ period_label }}</strong><small>zakres rozliczenia</small></article>
 </section>
 

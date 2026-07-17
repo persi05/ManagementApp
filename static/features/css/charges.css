@@ -1,0 +1,227 @@
+.charges-page {
+  display: grid;
+  gap: 16px;
+  --charges-gap: 18px;
+}
+
+.charges-month-panel,
+.charges-filter-panel {
+  border-radius: 16px;
+}
+
+.charges-month-panel .panel-head {
+  align-items: center;
+}
+
+.charge-month-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.charge-month-form {
+  margin-bottom: 10px;
+}
+
+.charge-date-filter {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.charge-date-filter summary {
+  width: max-content;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.charge-date-filter .charges-filter-form {
+  margin-top: 10px;
+}
+
+.charges-filter-form,
+.charges-filter-form label {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.charges-filter-form label {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.charges-filter-form label span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.charges-filter-form select {
+  min-width: 220px;
+}
+
+.charge-period {
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.charge-payout {
+  border-color: #9ed4bb;
+  background: #edf8f2;
+}
+
+.charges-layout {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--charges-gap);
+  align-items: start;
+}
+
+.charges-metrics,
+.charges-workspace {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+
+.charges-metrics {
+  gap: 0;
+}
+
+.charges-workspace {
+  gap: 0;
+}
+
+.charges-workspace > .stack {
+  grid-column: 1 / 4;
+}
+
+.charge-form-card {
+  grid-column: 4 / 5;
+  position: sticky;
+  top: 82px;
+  max-width: none;
+}
+
+.charge-form-card h2 {
+  margin-top: 0;
+}
+
+.charge-form-card .form-intro,
+.charge-form-card .helptext {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.charge-form-card p {
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.charge-form-card label {
+  font-weight: 750;
+}
+
+.charge-cancel {
+  margin-top: 8px;
+}
+
+.charges-table {
+  table-layout: fixed;
+}
+
+.charges-table th,
+.charges-table td {
+  padding: 11px 12px;
+  vertical-align: middle;
+}
+
+.charges-table .charge-col-date {
+  width: 23%;
+}
+
+.charges-table .charge-col-name {
+  width: 17%;
+}
+
+.charges-table .charge-col-amount {
+  width: 16%;
+}
+
+.charges-table .charge-col-effect {
+  width: 16%;
+}
+
+.charges-table .charge-col-actions {
+  width: 28%;
+}
+
+.charges-table th:last-child,
+.charges-table td:last-child {
+  padding-left: 12px;
+}
+
+.table-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+
+.table-actions form {
+  display: inline-flex;
+}
+
+.table-actions .small-btn {
+  min-width: 64px;
+}
+
+.charge-locked {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+tfoot th {
+  color: var(--text);
+  background: var(--surface2);
+}
+
+@media (max-width: 900px) {
+  .charges-layout,
+  .charges-metrics,
+  .charges-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .charges-workspace > .stack,
+  .charge-form-card {
+    grid-column: auto;
+  }
+
+  .charge-form-card {
+    position: static;
+    grid-row: 1;
+  }
+
+  .charges-filter-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .charges-filter-form select {
+    min-width: 0;
+    width: 100%;
+  }
+}

@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 
 from features.accounts.models import UserProfile, is_management, user_role
+from features.employees.services import employee_charge_occurrences
 from features.projects.models import ProjectLabelRate
 from features.projects.selectors import visible_projects
 from features.reports.services import date_range_bounds, employee_month_summaries, payroll_amount
@@ -221,10 +222,16 @@ def reports(request):
     employee_entries = list(time_entries[:100]) if not is_client_report else []
     employee_work_hours = Decimal('0')
     employee_payroll = None
+    employee_charge_items = []
+    employee_charge_total = Decimal('0.00')
+    employee_payroll_after_charges = None
     if is_employee_report:
         all_employee_entries = list(time_entries)
         employee_work_hours = sum((entry.hours for entry in all_employee_entries), Decimal('0'))
         employee_payroll = payroll_amount(request.user, all_employee_entries, start_date, end_exclusive)
+        employee_charge_items = employee_charge_occurrences(request.user, start_date, end_exclusive)
+        employee_charge_total = sum((item['amount'] for item in employee_charge_items), Decimal('0.00'))
+        employee_payroll_after_charges = employee_payroll - employee_charge_total
     summary_employees = employees.filter(pk=selected_employee) if selected_employee else employees
     employee_summaries = employee_month_summaries(
         start_date,
@@ -235,6 +242,8 @@ def reports(request):
         entries=time_entries,
     ) if can_manage else []
     total_payroll = sum((row['payroll'] for row in employee_summaries), Decimal('0'))
+    total_charges = sum((row['charge_total'] for row in employee_summaries), Decimal('0'))
+    total_payout = sum((row['payroll_after_charges'] for row in employee_summaries), Decimal('0'))
     total_work_hours = sum((row['hours'] for row in employee_summaries), Decimal('0'))
 
     return render(request, 'features/reports.html', {
@@ -268,10 +277,15 @@ def reports(request):
         'employee_entries': employee_entries,
         'employee_summaries': employee_summaries,
         'total_payroll': total_payroll,
+        'total_charges': total_charges,
+        'total_payout': total_payout,
         'total_work_hours': total_work_hours,
         'employee_work_hours': employee_work_hours,
         'employee_task_hours': sum(row['hours'] for row in project_rows),
         'employee_payroll': employee_payroll,
+        'employee_charge_items': employee_charge_items,
+        'employee_charge_total': employee_charge_total,
+        'employee_payroll_after_charges': employee_payroll_after_charges,
         'total_hours': sum(row['hours'] for row in project_rows),
         'total_visible_hours': total_visible_hours,
         'total_amount': total_amount,
@@ -356,6 +370,8 @@ def export_pdf(request):
             'period_label': f'{start_date:%Y-%m-%d} - {end_date:%Y-%m-%d}',
             'total_hours': sum((row['hours'] for row in summaries), Decimal('0')),
             'total_payroll': sum((row['payroll'] for row in summaries), Decimal('0')),
+            'total_charges': sum((row['charge_total'] for row in summaries), Decimal('0')),
+            'total_payout': sum((row['payroll_after_charges'] for row in summaries), Decimal('0')),
         })
 
     if request.GET.get('user') or role == UserProfile.Role.EMPLOYEE:
@@ -369,12 +385,17 @@ def export_pdf(request):
             entries = entries.filter(project_id=request.GET['project'])
         entries = list(entries)
         payroll = payroll_amount(employee, entries, start_date, end_exclusive)
+        charge_items = employee_charge_occurrences(employee, start_date, end_exclusive)
+        charge_total = sum((item['amount'] for item in charge_items), Decimal('0.00'))
         return render(request, 'features/export_pdf.html', {
             'employee': employee,
             'entries': entries,
             'month': start_date.strftime('%Y-%m'),
             'period_label': f'{start_date:%Y-%m-%d} - {end_date:%Y-%m-%d}',
             'payroll': payroll,
+            'charge_items': charge_items,
+            'charge_total': charge_total,
+            'payroll_after_charges': payroll - charge_total,
             'bank_account': getattr(getattr(employee, 'profile', None), 'bank_account', ''),
         })
 
