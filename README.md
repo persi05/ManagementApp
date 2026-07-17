@@ -1,6 +1,6 @@
-# Dcode Management
+# App Management
 
-Dcode Management to aplikacja webowa do zarządzania pracą zespołu, projektami, zadaniami, czasem pracy, dokumentami oraz rozliczeniami pracowników. Projekt jest zbudowany w Django, korzysta z PostgreSQL i Redis, a lokalnie uruchamia się przez Docker Compose.
+App Management to aplikacja webowa do zarządzania pracą zespołu, projektami, zadaniami, czasem pracy, dokumentami oraz rozliczeniami pracowników. Projekt jest zbudowany w Django, korzysta z PostgreSQL i Redis, a lokalnie uruchamia się przez Docker Compose.
 
 ## Najważniejsze funkcjonalności
 
