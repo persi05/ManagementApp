@@ -691,15 +691,6 @@
     font-size: 24px;
   }
 }
-.project-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  width: 100%;
-}
-
 .time-history-tools {
   display: contents;
 }
@@ -785,17 +776,6 @@
 
 .project-strip .dashboard-more-btn {
   grid-column: 1 / -1;
-}
-
-.project-actions form { margin: 0; }
-
-.project-default-btn span { color: #bb8100; }
-
-.project-default-btn.active {
-  background: #fff3c6;
-  border-color: #dec46b;
-  color: #7b5700;
-  opacity: 1;
 }
 
 /* Workspace visual system */

@@ -21,13 +21,6 @@
   border-color: var(--accent);
 }
 
-.kanban-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  margin: -4px 0 12px;
-}
-
 .add-column-toggle {
   width: 38px;
   height: 38px;
@@ -165,18 +158,6 @@
   word-break: break-word;
   font-size: 13px;
   font-weight: 760;
-}
-
-.column-title-input {
-  width: 100%;
-  min-width: 0;
-  margin: 0;
-  padding: 4px 6px;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  background: #fff;
-  font: inherit;
-  font-weight: 800;
 }
 
 .column-actions {
@@ -544,17 +525,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.card-meta .rate-pill {
-  background: #e9f7ef;
-  color: var(--ok);
-}
-
-.rate-pill em {
-  margin-left: 4px;
-  font-style: normal;
-  color: #0f6d3f;
 }
 
 .kanban-card footer {

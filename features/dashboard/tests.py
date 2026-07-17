@@ -2338,13 +2338,17 @@ class KanbanRenderingTests(TestCase):
 
     def test_kanban_preview_can_add_task_attachment(self):
         employee = User.objects.create_user(username='employee', password='pass')
+        project_member = User.objects.create_user(username='project-member', password='pass')
         outsider = User.objects.create_user(username='outsider', password='pass')
         employee.profile.role = UserProfile.Role.EMPLOYEE
         employee.profile.save()
+        project_member.profile.role = UserProfile.Role.EMPLOYEE
+        project_member.profile.save()
         outsider.profile.role = UserProfile.Role.EMPLOYEE
         outsider.profile.save()
         project = Project.objects.create(name='Project')
         ProjectAssignment.objects.create(project=project, user=employee)
+        ProjectAssignment.objects.create(project=project, user=project_member)
         column = BoardColumn.objects.create(project=project, name='Start', position=0)
         task = Task.objects.create(project=project, column=column, title='Task with attachment', assignee=employee)
 
@@ -2363,7 +2367,9 @@ class KanbanRenderingTests(TestCase):
         self.assertTrue(attachment.document.file.name.endswith('.txt'))
         self.assertTrue(DocumentItem.objects.filter(name='Spec', owner=employee).exists())
         self.assertIn(attachment.document, DocumentItem.visible_to(employee))
+        self.assertIn(attachment.document, DocumentItem.visible_to(project_member))
         self.assertNotIn(attachment.document, DocumentItem.visible_to(outsider))
+        self.assertFalse(attachment.document.accesses.filter(user=project_member).exists())
         self.assertFalse(attachment.document.can_edit(employee))
         self.assertFalse(attachment.document.can_manage(employee))
 

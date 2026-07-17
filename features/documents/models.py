@@ -28,13 +28,12 @@ class DocumentItem(models.Model):
         blank=True,
         related_name='document_items',
     )
-    is_pinned = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-is_pinned', 'kind', 'name']
+        ordering = ['kind', 'name']
         indexes = [
             models.Index(fields=['parent', 'is_archived']),
             models.Index(fields=['owner', 'is_archived']),

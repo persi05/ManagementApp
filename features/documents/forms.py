@@ -34,6 +34,11 @@ def validate_user_file_limit(user):
         raise forms.ValidationError(f'Osiagnieto limit {settings.DOCUMENTS_MAX_FILES_PER_USER} plikow dla tego uzytkownika.')
 
 
+def classify_document_upload(uploaded_file):
+    content_type = getattr(uploaded_file, 'content_type', '') or ''
+    return DocumentItem.Kind.IMAGE if content_type.startswith('image/') else DocumentItem.Kind.FILE
+
+
 class DocumentProjectFieldMixin:
     def __init__(self, *args, user=None, parent=None, **kwargs):
         super().__init__(*args, **kwargs)
