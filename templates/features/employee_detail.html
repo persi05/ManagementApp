@@ -7,14 +7,15 @@
   <a class="primary-btn" href="{% url 'export_pdf' %}?date_from={{ date_from }}&date_to={{ date_to }}&user={{ employee.id }}" target="_blank">PDF</a>
 {% endblock %}
 {% block content %}
-<section class="metrics-grid">
-  <article class="metric"><span>Rola</span><strong>{{ employee.profile.get_role_display }}</strong><small>{% if employee.profile.is_blocked %}konto zablokowane{% else %}konto aktywne{% endif %}</small></article>
-  <article class="metric"><span>Wynagrodzenie</span><strong>{{ payroll }} PLN</strong><small>wedlug historii stawek</small></article>
-  <article class="metric"><span>Konto</span><strong class="metric-small">{{ employee.profile.bank_account|default:"-" }}</strong><small>dane do przelewu</small></article>
-  <article class="metric"><span>Godziny</span><strong>{{ hours|floatformat:2 }}h</strong><small>{{ entries|length }} wpisow</small></article>
+<section class="metrics-grid employee-detail-metrics">
+  <article class="metric"><span>Wynagrodzenie</span><strong>{{ payroll|floatformat:2 }} PLN</strong><small>przed obciążeniami</small></article>
+  <article class="metric"><span>Obciążenia</span><strong>{{ charge_total|floatformat:2 }} PLN</strong><small>saldo za wybrany okres</small></article>
+  <article class="metric charge-payout"><span>Do wypłaty</span><strong>{{ payroll_after_charges|floatformat:2 }} PLN</strong><small>wynagrodzenie minus obciążenia</small></article>
+  <article class="metric"><span>Godziny</span><strong>{{ hours|floatformat:2 }}h</strong><small>{{ entries|length }} wpisów</small></article>
 </section>
 
 <section class="content-split">
+  <div class="stack">
   <div class="panel">
     <div class="panel-head">
       <div><h2>Wpisy czasu</h2><p>Historia pracy za wybrany okres: {{ period_label }}.</p></div>
@@ -45,6 +46,24 @@
     </div>
   </div>
 
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Obciążenia</h2><p>Pozycje naliczone w okresie {{ period_label }}.</p></div>
+      {% if employee.profile.role == 'employee' %}<a class="ghost-btn small-btn" href="{% url 'charges' %}?employee={{ employee.id }}">Zarządzaj</a>{% endif %}
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Rodzaj</th><th>Kwota</th></tr></thead>
+        <tbody>
+          {% for item in charge_items %}<tr><td>{{ item.occurred_at|date:"d.m.Y H:i" }}</td><td>{{ item.charge.name }}</td><td><strong>{{ item.amount|floatformat:2 }} PLN</strong></td></tr>
+          {% empty %}<tr><td colspan="3">Brak obciążeń w tym okresie.</td></tr>{% endfor %}
+        </tbody>
+        <tfoot><tr><th colspan="2">Saldo obciążeń</th><th>{{ charge_total|floatformat:2 }} PLN</th></tr></tfoot>
+      </table>
+    </div>
+  </div>
+  </div>
+
   <div class="stack">
     <form method="post" class="form-card compact">
       {% csrf_token %}
@@ -69,6 +88,17 @@
       {{ rate_form.as_p }}
       <button class="primary-btn full">Dodaj stawke</button>
     </form>
+
+    {% if employee.profile.role == 'employee' %}
+    <form method="post" class="form-card compact">
+      {% csrf_token %}
+      <input type="hidden" name="form" value="charge">
+      {% if charge_form.instance.pk %}<input type="hidden" name="charge_id" value="{{ charge_form.instance.pk }}">{% endif %}
+      <h2>Dodaj obciążenie</h2>
+      {{ charge_form.as_p }}
+      <button class="primary-btn full">Dodaj obciążenie</button>
+    </form>
+    {% endif %}
 
     <div class="panel">
       <div class="panel-head"><div><h2>Historia stawek</h2></div></div>

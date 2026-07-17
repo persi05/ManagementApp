@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from features.accounts.models import UserProfile
 
-from .models import HourlyRate
+from .models import EmployeeCharge, HourlyRate
 
 
 class UserRoleForm(forms.ModelForm):
@@ -97,6 +97,44 @@ class HourlyRateForm(forms.ModelForm):
 
         if valid_from and valid_to and valid_to < valid_from:
             self.add_error('valid_to', 'Data końca nie może być wcześniejsza niż data początku.')
+
+        return cleaned
+
+
+class EmployeeChargeForm(forms.ModelForm):
+    starts_at = forms.DateTimeField(
+        required=False,
+        input_formats=['%Y-%m-%dT%H:%M'],
+        widget=forms.DateTimeInput(format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}),
+    )
+
+    class Meta:
+        model = EmployeeCharge
+        fields = ('name', 'amount', 'starts_at')
+        labels = {
+            'name': 'Rodzaj obciążenia',
+            'amount': 'Kwota',
+            'starts_at': 'Data i godzina',
+        }
+        help_texts = {
+            'amount': 'Kwota dodatnia pomniejsza wypłatę, a ujemna ją zwiększa.',
+            'starts_at': 'Opcjonalnie. Jeśli pozostawisz puste, zostanie użyta aktualna data i godzina.',
+        }
+        widgets = {
+            'amount': forms.NumberInput(attrs={'step': '0.01'}),
+        }
+
+    def clean(self):
+        cleaned = super().clean()
+        amount = cleaned.get('amount')
+        starts_at = cleaned.get('starts_at')
+
+        if amount == 0:
+            self.add_error('amount', 'Kwota obciążenia nie może wynosić 0,00 zł.')
+
+        if not starts_at:
+            starts_at = timezone.now()
+            cleaned['starts_at'] = starts_at
 
         return cleaned
 

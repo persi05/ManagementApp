@@ -12,6 +12,7 @@
   <script defer src="{% static 'features/js/kanban.js' %}?v=20260716-submit-state-fixes"></script>
   <script defer src="{% static 'features/js/timer.js' %}?v=20260716-1"></script>
   <script defer src="{% static 'features/js/calendar.js' %}?v=20260714-calendar-assignees"></script>
+  <script defer src="{% static 'features/js/charges.js' %}?v=20260717-employee-filter"></script>
 </head>
 <body>
   <div class="shell">
@@ -34,6 +35,7 @@
             <span class="nav-section">Praca</span>
             <a class="{% if current == 'time_entries' or current == 'edit_time_entry' %}active{% endif %}" href="{% url 'time_entries' %}">Mój czas pracy</a>
             <a class="{% if current == 'worklogs' or current == 'edit_worklog' %}active{% endif %}" href="{% url 'worklogs' %}">Czas zadań projektowych</a>
+            <a class="{% if current == 'charges' %}active{% endif %}" href="{% url 'charges' %}">Obciążenia</a>
           {% endif %}
           <span class="nav-section">System</span>
           <a class="{% if current == 'reports' %}active{% endif %}" href="{% url 'reports' %}">Raporty</a>

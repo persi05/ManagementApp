@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from features.accounts.models import UserProfile
 from features.employees.models import HourlyRate
+from features.employees.services import employee_charge_occurrences
 from features.time_tracking.models import TimeEntry
 
 
@@ -87,10 +88,15 @@ def employee_month_summaries(start_date, end_date, start_dt, end_dt, employees=N
         employee_entries = list(entries.filter(user=employee).select_related('project', 'task'))
         minutes = sum(entry.duration_minutes for entry in employee_entries)
         payroll = payroll_amount(employee, employee_entries, start_date, end_date)
+        charge_items = employee_charge_occurrences(employee, start_date, end_date)
+        charge_total = sum((item['amount'] for item in charge_items), Decimal('0.00'))
         rows.append({
             'user': employee,
             'hours': Decimal(minutes) / Decimal(60),
             'payroll': payroll,
+            'charge_items': charge_items,
+            'charge_total': charge_total,
+            'payroll_after_charges': payroll - charge_total,
             'bank_account': getattr(employee.profile, 'bank_account', ''),
             'current_rate': employee.hourly_rates.order_by('-valid_from').first(),
             'entries_count': len(employee_entries),

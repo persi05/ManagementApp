@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Obciążenia - Dcode Management{% endblock %}
+{% block heading %}Obciążenia{% endblock %}
+{% block eyebrow %}{% if can_manage %}Rozliczenia pracowników{% else %}Moje rozliczenia{% endif %}{% endblock %}
+{% block content %}
+<div class="charges-page">
+  <section class="panel charges-month-panel">
+    <div class="panel-head">
+      <div>
+        <h2>{{ month_label }}</h2>
+        <p>Kwota dodatnia pomniejsza wypłatę, a ujemna ją zwiększa.</p>
+      </div>
+      <nav class="charge-month-nav" aria-label="Miesiąc rozliczenia">
+        <a class="ghost-btn small-btn" href="?month={{ previous_month }}{% if can_manage and employee %}&employee={{ employee.id }}{% endif %}" aria-label="Poprzedni miesiąc">←</a>
+        <strong class="charge-period">{{ period_label }}</strong>
+        <a class="ghost-btn small-btn" href="?month={{ next_month }}{% if can_manage and employee %}&employee={{ employee.id }}{% endif %}" aria-label="Następny miesiąc">→</a>
+      </nav>
+    </div>
+    <form class="filter-bar charges-filter-form charge-month-form" method="get">
+      {% if can_manage %}
+        <label><span>Pracownik</span><select name="employee">{% for person in employees %}<option value="{{ person.id }}" {% if selected_employee == person.id|stringformat:"s" %}selected{% endif %}>{{ person.get_full_name|default:person.username }}</option>{% endfor %}</select></label>
+      {% endif %}
+      <label><span>Miesiąc</span><input type="month" name="month" value="{{ month }}"></label>
+      <button class="ghost-btn">Zastosuj</button>
+    </form>
+    <details class="charge-date-filter">
+      <summary>Filtr po dokładnych datach</summary>
+      <form class="filter-bar charges-filter-form" method="get">
+        {% if can_manage and employee %}<input type="hidden" name="employee" value="{{ employee.id }}">{% endif %}
+        <input type="hidden" name="month" value="{{ month }}">
+        <label><span>Od</span><input type="date" name="date_from" value="{{ date_from }}"></label>
+        <label><span>Do</span><input type="date" name="date_to" value="{{ date_to }}"></label>
+        <button class="ghost-btn">Filtruj</button>
+      </form>
+    </details>
+  </section>
+
+  {% if employee %}
+    <div class="charges-layout">
+    <section class="charges-metrics">
+      <article class="metric"><span>Wynagrodzenie</span><strong>{{ payroll|floatformat:2 }} PLN</strong><small>przed obciążeniami</small></article>
+      <article class="metric"><span>Saldo obciążeń</span><strong>{{ charge_total|floatformat:2 }} PLN</strong><small>dodatnie pomniejsza wypłatę</small></article>
+      <article class="metric charge-payout"><span>Do wypłaty</span><strong>{{ payroll_after_charges|floatformat:2 }} PLN</strong><small>wynagrodzenie minus obciążenia</small></article>
+      <article class="metric"><span>Pozycje w okresie</span><strong>{{ charge_items|length }}</strong><small>{{ employee.get_full_name|default:employee.username }}</small></article>
+    </section>
+
+    <section class="content-split charges-workspace">
+      <div class="stack">
+        <div class="panel">
+          <div class="panel-head"><div><h2>Obciążenia w wybranym okresie</h2><p>Ręczne wpisy rozliczane razem z wypłatą za wybrany miesiąc.</p></div></div>
+          <div class="table-wrap">
+            <table class="charges-table">
+              <colgroup>
+                <col class="charge-col-date">
+                <col class="charge-col-name">
+                <col class="charge-col-amount">
+                <col class="charge-col-effect">
+                <col class="charge-col-actions">
+              </colgroup>
+              <thead><tr><th>Data</th><th>Rodzaj</th><th>Kwota</th><th>Wpływ</th><th>Akcje</th></tr></thead>
+              <tbody>
+                {% for item in charge_items %}
+                  <tr>
+                    <td>{{ item.occurred_at|date:"d.m.Y H:i" }}</td>
+                    <td><strong>{{ item.charge.name }}</strong></td>
+                    <td>{{ item.amount|floatformat:2 }} PLN</td>
+                    <td>{% if item.amount > 0 %}pomniejsza{% elif item.amount < 0 %}zwiększa{% else %}bez zmian{% endif %}</td>
+                    <td>
+                      <div class="table-actions">
+                        {% if item.can_change %}
+                          <a class="ghost-btn small-btn" href="{% url 'charges' %}?month={{ month }}{% if can_manage %}&employee={{ employee.id }}{% endif %}&edit={{ item.charge.id }}">Edytuj</a>
+                          <form method="post" action="{% url 'delete_charge' item.charge.id %}" onsubmit="return confirm('Usunąć to obciążenie?');">
+                            {% csrf_token %}
+                            <input type="hidden" name="month" value="{{ month }}">
+                            <button class="danger-btn small-btn">Usuń</button>
+                          </form>
+                        {% else %}
+                          <span class="charge-locked">zamknięte</span>
+                        {% endif %}
+                      </div>
+                    </td>
+                  </tr>
+                {% empty %}<tr><td colspan="5">Brak obciążeń w tym okresie.</td></tr>{% endfor %}
+              </tbody>
+              <tfoot><tr><th colspan="2">Saldo</th><th colspan="3">{{ charge_total|floatformat:2 }} PLN</th></tr></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <form method="post" class="form-card compact charge-form-card">
+        {% csrf_token %}
+        {% if can_manage %}<input type="hidden" name="employee" value="{{ employee.id }}">{% endif %}
+        <input type="hidden" name="month" value="{{ month }}">
+        {% if charge_form.instance.pk %}<input type="hidden" name="charge_id" value="{{ charge_form.instance.pk }}">{% endif %}
+        <h2>{% if charge_form.instance.pk %}Edytuj obciążenie{% else %}Dodaj obciążenie{% endif %}</h2>
+        {{ charge_form.as_p }}
+        <button class="primary-btn full">{% if charge_form.instance.pk %}Zapisz zmiany{% else %}Dodaj obciążenie{% endif %}</button>
+        {% if charge_form.instance.pk %}<a class="ghost-btn full charge-cancel" href="{% url 'charges' %}?month={{ month }}{% if can_manage %}&employee={{ employee.id }}{% endif %}">Anuluj edycję</a>{% endif %}
+      </form>
+    </section>
+    </div>
+  {% else %}
+    <section class="panel"><h2>Brak pracowników</h2><p>Dodanie obciążenia będzie możliwe po utworzeniu konta pracownika.</p></section>
+  {% endif %}
+</div>
+{% endblock %}

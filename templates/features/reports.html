@@ -48,7 +48,7 @@
   <section class="dashboard-settings report-settings" data-report-settings hidden>
     <div><strong>Widoczne sekcje</strong><small>Ustawienie zapisuje się na tym urządzeniu.</small></div>
     <label><input type="checkbox" data-report-section-toggle value="summary" checked> Podsumowanie</label>
-    {% if can_manage %}<label><input type="checkbox" data-report-section-toggle value="payroll" checked> Rozliczenia</label>{% endif %}
+    {% if can_manage or is_employee_report %}<label><input type="checkbox" data-report-section-toggle value="payroll" checked> Rozliczenia</label>{% endif %}
     <label><input type="checkbox" data-report-section-toggle value="projects" checked> Projekty</label>
     {% if not is_client_report %}<label><input type="checkbox" data-report-section-toggle value="time" checked> Ewidencja</label>{% endif %}
     <label><input type="checkbox" data-report-section-toggle value="entries" checked> Worklogi</label>
@@ -59,7 +59,9 @@
     {% if is_employee_report %}
       <article class="report-metric accent"><span>Czas pracy</span><strong>{{ employee_work_hours|floatformat:2 }}h</strong><small>timer i wpisy ręczne</small></article>
       <article class="report-metric"><span>Czas przy zadaniach</span><strong>{{ employee_task_hours|floatformat:2 }}h</strong><small>worklogi projektowe</small></article>
-      <article class="report-metric"><span>Wynagrodzenie</span><strong>{{ employee_payroll|floatformat:2 }} PLN</strong><small>stawki historyczne</small></article>
+      <article class="report-metric"><span>Wynagrodzenie</span><strong>{{ employee_payroll|floatformat:2 }} PLN</strong><small>przed obciążeniami</small></article>
+      <article class="report-metric"><span>Obciążenia</span><strong>{{ employee_charge_total|floatformat:2 }} PLN</strong><small>dodatnie pomniejsza wypłatę</small></article>
+      <article class="report-metric"><span>Do wypłaty</span><strong>{{ employee_payroll_after_charges|floatformat:2 }} PLN</strong><small>wynagrodzenie minus obciążenia</small></article>
       <article class="report-metric"><span>Wpisy projektowe</span><strong>{{ worklog_count }}</strong><small>w wybranym zakresie</small></article>
     {% elif is_client_report %}
       <article class="report-metric accent"><span>Łączny czas</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>prace w wybranym okresie</small></article>
@@ -70,16 +72,27 @@
       <article class="report-metric accent"><span>Godziny w ewidencji</span><strong>{{ total_work_hours|floatformat:2 }}h</strong><small>podstawa rozliczeń</small></article>
       <article class="report-metric"><span>{% if report_visibility == 'management' %}Godziny łączne{% else %}Godziny widoczne dla klienta{% endif %}</span><strong>{{ total_hours|floatformat:2 }}h</strong><small>{% if report_visibility == 'client' %}wszystkie udostępnione prace{% else %}wszystkie worklogi{% endif %}</small></article>
       <article class="report-metric"><span>Wynagrodzenia</span><strong>{{ total_payroll|floatformat:2 }} PLN</strong><small>według stawek historycznych</small></article>
+      <article class="report-metric"><span>Obciążenia</span><strong>{{ total_charges|floatformat:2 }} PLN</strong><small>saldo wybranego zespołu</small></article>
+      <article class="report-metric"><span>Do wypłaty</span><strong>{{ total_payout|floatformat:2 }} PLN</strong><small>wynagrodzenia minus obciążenia</small></article>
       <article class="report-metric"><span>Kwota wg stawek</span><strong class="metric-word">{% for total in billing_totals %}{{ total.amount|floatformat:2 }} {{ total.currency }}{% if not forloop.last %}<br>{% endif %}{% empty %}Brak pełnych stawek{% endfor %}</strong><small>stawki klientów i etykiet</small></article>
     {% endif %}
   </section>
 
   {% if can_manage %}
   <section class="panel report-section" data-report-section="payroll">
-    <div class="panel-head"><div><span class="section-kicker">Poufne</span><h2>Rozliczenia pracowników</h2><p>Kwoty są wyliczane z ewidencji czasu i stawki obowiązującej w dniu wpisu.</p></div><span class="report-count">{{ employee_summaries|length }} osób</span></div>
-    <div class="report-table-wrap"><table class="report-table"><thead><tr><th>Pracownik</th><th>Godziny</th><th>Wpisy</th><th>Aktualna stawka</th><th>Do wypłaty</th><th>Konto</th><th></th></tr></thead><tbody>
-      {% for row in employee_summaries %}<tr><td><strong>{{ row.user.get_full_name|default:row.user.username }}</strong></td><td>{{ row.hours|floatformat:2 }}h</td><td>{{ row.entries_count }}</td><td>{% if row.current_rate %}{{ row.current_rate.amount|floatformat:2 }} {{ row.current_rate.currency }}/h{% else %}<span class="report-muted">brak</span>{% endif %}</td><td><strong>{{ row.payroll|floatformat:2 }} PLN</strong></td><td class="account-number">{{ row.bank_account|default:"brak danych" }}</td><td><a class="ghost-btn small-btn" target="_blank" href="{% url 'export_pdf' %}?user={{ row.user.id }}&date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}">PDF</a></td></tr>{% empty %}<tr><td colspan="7"><div class="report-empty">Brak pracowników w tym zakresie.</div></td></tr>{% endfor %}
+    <div class="panel-head"><div><span class="section-kicker">Poufne</span><h2>Rozliczenia pracowników</h2><p>Finalna wypłata to wynagrodzenie z ewidencji czasu pomniejszone o saldo obciążeń.</p></div><span class="report-count">{{ employee_summaries|length }} osób</span></div>
+    <div class="report-table-wrap"><table class="report-table"><thead><tr><th>Pracownik</th><th>Godziny</th><th>Wpisy</th><th>Aktualna stawka</th><th>Wynagrodzenie</th><th>Obciążenia</th><th>Do wypłaty</th><th>Konto</th><th></th></tr></thead><tbody>
+      {% for row in employee_summaries %}<tr><td><strong>{{ row.user.get_full_name|default:row.user.username }}</strong></td><td>{{ row.hours|floatformat:2 }}h</td><td>{{ row.entries_count }}</td><td>{% if row.current_rate %}{{ row.current_rate.amount|floatformat:2 }} {{ row.current_rate.currency }}/h{% else %}<span class="report-muted">brak</span>{% endif %}</td><td>{{ row.payroll|floatformat:2 }} PLN</td><td>{{ row.charge_total|floatformat:2 }} PLN</td><td><strong>{{ row.payroll_after_charges|floatformat:2 }} PLN</strong></td><td class="account-number">{{ row.bank_account|default:"brak danych" }}</td><td><a class="ghost-btn small-btn" target="_blank" href="{% url 'export_pdf' %}?user={{ row.user.id }}&date_from={{ date_from }}&date_to={{ date_to }}{% if selected_project %}&project={{ selected_project }}{% endif %}">PDF</a></td></tr>{% empty %}<tr><td colspan="9"><div class="report-empty">Brak pracowników w tym zakresie.</div></td></tr>{% endfor %}
     </tbody></table></div>
+  </section>
+  {% endif %}
+
+  {% if is_employee_report %}
+  <section class="panel report-section" data-report-section="payroll">
+    <div class="panel-head"><div><span class="section-kicker">Rozliczenie</span><h2>Obciążenia w okresie</h2><p>Kwoty dodatnie pomniejszają wypłatę, a ujemne ją zwiększają.</p></div><span class="report-count">{{ employee_charge_items|length }} pozycji</span></div>
+    <div class="report-table-wrap"><table class="report-table"><thead><tr><th>Data</th><th>Rodzaj</th><th>Kwota</th></tr></thead><tbody>
+      {% for item in employee_charge_items %}<tr><td>{{ item.occurred_at|date:"d.m.Y H:i" }}</td><td><strong>{{ item.charge.name }}</strong></td><td>{{ item.amount|floatformat:2 }} PLN</td></tr>{% empty %}<tr><td colspan="3"><div class="report-empty">Brak obciążeń w tym okresie.</div></td></tr>{% endfor %}
+    </tbody><tfoot><tr><th colspan="2">Saldo obciążeń</th><th>{{ employee_charge_total|floatformat:2 }} PLN</th></tr></tfoot></table></div>
   </section>
   {% endif %}
 
