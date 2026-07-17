@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST
 
 from features.accounts.models import UserProfile, is_management, user_role
 from features.accounts.permissions import optional_pk, worker_required
-from features.documents.forms import validate_document_upload, validate_user_file_limit
+from features.documents.forms import classify_document_upload, validate_document_upload, validate_user_file_limit
 from features.documents.models import DocumentAccess, DocumentItem
 from features.projects.selectors import visible_projects
 from features.tasks.forms import BoardColumnForm, BoardColumnSettingsForm, TaskEditForm, TaskForm, WorklogForm
@@ -26,7 +26,6 @@ from features.tasks.services import (
     default_permissions_for_position,
     notify_project_clients,
     notify_task_assignees,
-    notify_user,
     normalize_column_positions,
     task_effective_client_rate,
     task_label_badges,
@@ -34,21 +33,13 @@ from features.tasks.services import (
 )
 
 
-def classify_task_upload(uploaded_file):
-    content_type = getattr(uploaded_file, 'content_type', '') or ''
-    if content_type.startswith('image/'):
-        return DocumentItem.Kind.IMAGE
-    return DocumentItem.Kind.FILE
-
-
-def grant_task_document_access(document, task):
-    user_ids = set(task.project.members.values_list('id', flat=True))
-    if task.project.client_id:
-        user_ids.add(task.project.client_id)
+def make_task_document_read_only_for_owner(document):
     if document.owner_id:
-        user_ids.add(document.owner_id)
-    for user_id in user_ids:
-        DocumentAccess.objects.get_or_create(item=document, user_id=user_id, defaults={'can_edit': False, 'can_manage': False})
+        DocumentAccess.objects.get_or_create(
+            item=document,
+            user_id=document.owner_id,
+            defaults={'can_edit': False, 'can_manage': False},
+        )
 
 
 def task_project_from_post(request, projects_qs, fallback_project):
@@ -361,11 +352,11 @@ def add_task_attachment(request, task_id):
         document = DocumentItem.objects.create(
             owner=request.user,
             name=name or uploaded.name,
-            kind=classify_task_upload(uploaded),
+            kind=classify_document_upload(uploaded),
             file=uploaded,
             project=task.project,
         )
-        grant_task_document_access(document, task)
+        make_task_document_read_only_for_owner(document)
         Attachment.objects.create(task=task, name=document.name, document=document)
         messages.success(request, 'Zalacznik zostal dodany.')
     else:
@@ -389,7 +380,7 @@ def link_task_document(request, task_id):
         document=document,
         defaults={'name': document.name},
     )
-    grant_task_document_access(document, task)
+    make_task_document_read_only_for_owner(document)
     messages.success(request, 'Dokument zostal powiazany z zadaniem.')
     return redirect('kanban_project', project_id=task.project_id)
 
@@ -477,6 +468,8 @@ def worklogs(request):
         if forbidden:
             return forbidden
 
+    role = user_role(request.user)
+    can_manage = is_management(request.user)
     projects_qs = visible_projects(request.user)
     selected_project_id = optional_pk(request.POST.get('project') or request.GET.get('project'))
     selected_project = get_object_or_404(projects_qs, pk=selected_project_id) if selected_project_id else projects_qs.first()
@@ -500,12 +493,11 @@ def worklogs(request):
         form.fields['task'].queryset = task_qs
 
     qs = TaskWorklog.objects.select_related('task', 'task__project', 'user')
-    if is_management(request.user):
-        pass
-    elif user_role(request.user) == UserProfile.Role.CLIENT:
-        qs = qs.filter(task__project__in=visible_projects(request.user), visible_to_client=True)
-    else:
-        qs = qs.filter(user=request.user)
+    if not can_manage:
+        if role == UserProfile.Role.CLIENT:
+            qs = qs.filter(task__project__in=projects_qs, visible_to_client=True)
+        else:
+            qs = qs.filter(user=request.user)
     if selected_project:
         qs = qs.filter(task__project=selected_project)
     else:
@@ -514,11 +506,11 @@ def worklogs(request):
     worklog_items = list(qs[:100])
     for item in worklog_items:
         item.can_edit = item.can_be_edited_by(request.user)
-        item.can_toggle_visibility = is_management(request.user) or item.user_id == request.user.id
+        item.can_toggle_visibility = can_manage or item.user_id == request.user.id
     return render(request, 'features/worklogs.html', {
         'worklogs': worklog_items,
         'form': form,
-        'role': user_role(request.user),
+        'role': role,
         'projects': projects_qs,
         'selected_project': selected_project,
         'total_hours': total_hours,
@@ -532,9 +524,7 @@ def edit_worklog(request, worklog_id):
         return forbidden
 
     qs = TaskWorklog.objects.select_related('task', 'task__project', 'user')
-    if is_management(request.user):
-        pass
-    else:
+    if not is_management(request.user):
         qs = qs.filter(user=request.user)
     worklog = get_object_or_404(qs, pk=worklog_id)
     if not worklog.can_be_edited_by(request.user):

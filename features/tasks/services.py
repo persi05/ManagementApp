@@ -129,23 +129,10 @@ def can_edit_task_fields(user, task):
     return can_edit_task(user, task)
 
 
-def can_edit_task_labels(user, task):
-    if is_management(user):
-        return True
-    return user.is_authenticated and project_role_for(user, task.project) == ProjectAssignment.ProjectRole.LEAD
-
-
-def task_assignees(task):
-    assigned = list(task.assignees.all())
-    if assigned:
-        return assigned
-    return [task.assignee] if task.assignee_id else []
-
-
 def notify_task_assignees(task, title, content, kind='task', url='', actor=None, exclude_ids=None):
     exclude_ids = set(exclude_ids or [])
     notifications = []
-    for user in task_assignees(task):
+    for user in task.assignees_list:
         if user.id in exclude_ids:
             continue
         notification = notify_user(user, title, content, kind=kind, url=url, actor=actor)
@@ -199,16 +186,6 @@ def notify_project_clients(project, title, content, kind='client_task', url='', 
         if notification:
             notifications.append(notification)
     return notifications
-
-
-def is_first_project_column(task):
-    first_column = task.project.columns.order_by('position', 'id').first()
-    return bool(first_column and task.column_id == first_column.id)
-
-
-def is_last_project_column(project, column):
-    last_column = project.columns.order_by('-position', '-id').first()
-    return bool(last_column and column.id == last_column.id)
 
 
 def notification_exists_today(user, title, content, kind, url):

@@ -36,13 +36,6 @@
   place-items: center;
 }
 
-.brand-logo {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  object-fit: contain;
-}
-
 .nav {
   display: flex;
   flex-direction: column;
@@ -84,32 +77,6 @@
 
 .sidebar-footer {
   margin-top: auto;
-}
-
-.user-chip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.user-chip > span {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--accent);
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-}
-
-.user-chip strong,
-.user-chip small {
-  display: block;
-}
-
-.user-chip small {
-  color: var(--muted);
 }
 
 .main {
@@ -232,10 +199,6 @@
 .projects-page {
   display: grid;
   gap: 16px;
-}
-
-.projects-list-panel {
-  width: 100%;
 }
 
 .projects-create-form {

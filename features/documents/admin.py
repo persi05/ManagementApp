@@ -20,7 +20,7 @@ class DocumentPinInline(admin.TabularInline):
 
 @admin.register(DocumentItem)
 class DocumentItemAdmin(admin.ModelAdmin):
-    list_display = ('name', 'kind', 'owner', 'parent', 'is_pinned', 'is_archived', 'updated_at')
-    list_filter = ('kind', 'is_archived', 'is_pinned')
+    list_display = ('name', 'kind', 'owner', 'project', 'parent', 'is_archived', 'updated_at')
+    list_filter = ('kind', 'is_archived', 'project')
     search_fields = ('name', 'content')
     inlines = [DocumentAccessInline, DocumentVisibilityBlockInline, DocumentPinInline]

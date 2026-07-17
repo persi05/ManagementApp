@@ -11,11 +11,10 @@ from django.http import FileResponse, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import get_valid_filename
-from django.views.decorators.http import require_POST
 
 from features.accounts.models import is_management
 
-from .forms import DocumentAccessForm, DocumentProjectForm, DocumentVisibilityBlockForm, EditTextDocumentForm, FolderForm, RenameDocumentForm, TextDocumentForm, UploadDocumentForm
+from .forms import DocumentAccessForm, DocumentProjectForm, DocumentVisibilityBlockForm, EditTextDocumentForm, FolderForm, RenameDocumentForm, TextDocumentForm, UploadDocumentForm, classify_document_upload
 from .models import DocumentAccess, DocumentItem, DocumentPin, DocumentVisibilityBlock
 
 
@@ -80,11 +79,13 @@ def sync_folder_project(folder, previous_project_id):
     DocumentItem.objects.filter(pk__in=descendant_ids).filter(inherited_projects).update(project_id=folder.project_id)
 
 
-def classify_upload(uploaded_file):
-    content_type = getattr(uploaded_file, 'content_type', '') or ''
-    if content_type.startswith('image/'):
-        return DocumentItem.Kind.IMAGE
-    return DocumentItem.Kind.FILE
+def prepare_new_item(item, *, kind, request, parent):
+    item.kind = kind
+    item.parent = parent
+    item.owner = request.user
+    if 'project' not in request.POST and parent:
+        item.project = parent.project
+    return item
 
 
 def document_file_extension(item):
@@ -200,6 +201,16 @@ def documents_redirect(parent=None, selected=None, manage=None, archived=False):
     return redirect(f'{reverse("documents")}{suffix}')
 
 
+def documents_panel_redirect(item):
+    is_folder = item.kind == DocumentItem.Kind.FOLDER
+    return documents_redirect(
+        parent=None if item.is_archived else item.parent,
+        selected=None if is_folder else item,
+        manage=item if is_folder else None,
+        archived=item.is_archived,
+    )
+
+
 def add_form_errors_to_messages(request, form, fallback):
     errors = []
     for field_errors in form.errors.values():
@@ -242,24 +253,24 @@ def documents(request):
         if form_name == 'folder':
             form = FolderForm(request.POST, user=request.user, parent=parent)
             if form.is_valid():
-                item = form.save(commit=False)
-                item.kind = DocumentItem.Kind.FOLDER
-                item.parent = parent
-                item.owner = request.user
-                if 'project' not in request.POST and parent:
-                    item.project = parent.project
+                item = prepare_new_item(
+                    form.save(commit=False),
+                    kind=DocumentItem.Kind.FOLDER,
+                    request=request,
+                    parent=parent,
+                )
                 item.save()
                 messages.success(request, 'Folder został utworzony.')
                 return documents_redirect(parent=parent)
         elif form_name == 'document':
             form = TextDocumentForm(request.POST, user=request.user, parent=parent)
             if form.is_valid():
-                item = form.save(commit=False)
-                item.kind = DocumentItem.Kind.DOCUMENT
-                item.parent = parent
-                item.owner = request.user
-                if 'project' not in request.POST and parent:
-                    item.project = parent.project
+                item = prepare_new_item(
+                    form.save(commit=False),
+                    kind=DocumentItem.Kind.DOCUMENT,
+                    request=request,
+                    parent=parent,
+                )
                 item.save()
                 messages.success(request, 'Dokument został utworzony.')
                 return documents_redirect(parent=parent, selected=item)
@@ -267,11 +278,12 @@ def documents(request):
             upload_form = UploadDocumentForm(request.POST, request.FILES, user=request.user, parent=parent)
             if upload_form.is_valid():
                 item = upload_form.save(commit=False)
-                item.kind = classify_upload(request.FILES.get('file') or item.file)
-                item.parent = parent
-                item.owner = request.user
-                if 'project' not in request.POST and parent:
-                    item.project = parent.project
+                item = prepare_new_item(
+                    item,
+                    kind=classify_document_upload(request.FILES.get('file') or item.file),
+                    request=request,
+                    parent=parent,
+                )
                 if not item.name:
                     item.name = item.file.name
                 item.save()
@@ -318,19 +330,9 @@ def documents(request):
                 if item.kind == DocumentItem.Kind.FOLDER:
                     sync_folder_project(item, previous_project_id)
                 messages.success(request, 'Przypisanie do projektu zostało zapisane.')
-                return documents_redirect(
-                    parent=None if item.is_archived else item.parent,
-                    selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
-                    manage=item if item.kind == DocumentItem.Kind.FOLDER else None,
-                    archived=item.is_archived,
-                )
+                return documents_panel_redirect(item)
             add_form_errors_to_messages(request, form, 'Nie udało się przypisać projektu.')
-            return documents_redirect(
-                parent=None if item.is_archived else item.parent,
-                selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
-                manage=item if item.kind == DocumentItem.Kind.FOLDER else None,
-                archived=item.is_archived,
-            )
+            return documents_panel_redirect(item)
         elif form_name == 'access':
             item = visible_document(request.user, request.POST.get('item'))
             if not is_management(request.user):
@@ -353,12 +355,7 @@ def documents(request):
                     access.can_manage = access.can_manage or form.cleaned_data.get('can_manage', False)
                     access.save(update_fields=['can_edit', 'can_manage'])
                 messages.success(request, 'Dostęp został dodany.')
-                return documents_redirect(
-                    parent=None if item.is_archived else item.parent,
-                    selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
-                    manage=item if item.kind == DocumentItem.Kind.FOLDER else None,
-                    archived=item.is_archived,
-                )
+                return documents_panel_redirect(item)
         elif form_name == 'visibility_block':
             item = visible_document(request.user, request.POST.get('item'))
             if not is_management(request.user):
@@ -367,12 +364,7 @@ def documents(request):
             if form.is_valid():
                 DocumentVisibilityBlock.objects.get_or_create(item=item, user=form.cleaned_data['user'])
                 messages.success(request, 'Widoczność została zablokowana dla wybranego użytkownika.')
-                return documents_redirect(
-                    parent=None if item.is_archived else item.parent,
-                    selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
-                    manage=item if item.kind == DocumentItem.Kind.FOLDER else None,
-                    archived=item.is_archived,
-                )
+                return documents_panel_redirect(item)
         elif form_name == 'remove_access':
             if not is_management(request.user):
                 return HttpResponseForbidden('Brak uprawnień do edycji dostępu.')
@@ -380,12 +372,7 @@ def documents(request):
             item = visible_document(request.user, access.item_id)
             access.delete()
             messages.success(request, 'Dostęp został usunięty.')
-            return documents_redirect(
-                parent=None if item.is_archived else item.parent,
-                selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
-                manage=item if item.kind == DocumentItem.Kind.FOLDER else None,
-                archived=item.is_archived,
-            )
+            return documents_panel_redirect(item)
         elif form_name == 'remove_visibility_block':
             if not is_management(request.user):
                 return HttpResponseForbidden('Brak uprawnień do edycji widoczności.')
@@ -393,12 +380,7 @@ def documents(request):
             item = visible_document(request.user, block.item_id)
             block.delete()
             messages.success(request, 'Blokada widoczności została usunięta.')
-            return documents_redirect(
-                parent=None if item.is_archived else item.parent,
-                selected=None if item.kind == DocumentItem.Kind.FOLDER else item,
-                manage=item if item.kind == DocumentItem.Kind.FOLDER else None,
-                archived=item.is_archived,
-            )
+            return documents_panel_redirect(item)
         elif form_name == 'move':
             item = visible_document(request.user, request.POST.get('item'))
             if not item.can_manage(request.user):
@@ -453,18 +435,6 @@ def documents(request):
                     parent=None if item.is_archived else item.parent,
                     archived=item.is_archived,
                 )
-            if action == 'copy':
-                copy = DocumentItem.objects.create(
-                    name=f'Kopia {item.name}',
-                    kind=item.kind,
-                    parent=item.parent,
-                    file=item.file,
-                    content=item.content,
-                    owner=request.user,
-                )
-                messages.success(request, 'Kopia została utworzona.')
-                return documents_redirect(parent=copy.parent, selected=copy)
-
     visible_items = DocumentItem.visible_to(request.user)
     document_stats = visible_items.aggregate(
         active=Count('id', filter=Q(is_archived=False), distinct=True),

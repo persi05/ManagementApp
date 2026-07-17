@@ -1,10 +1,9 @@
 from django import forms
-from django.contrib.auth.models import User
 from django.utils.html import conditional_escape, format_html, format_html_join
 from django.utils.safestring import mark_safe
 
 from features.accounts.models import UserProfile, is_management, user_role
-from features.projects.models import ProjectAssignment, ProjectLabelRate
+from features.projects.models import ProjectLabelRate
 
 from .models import BoardColumn, Task, TaskWorklog
 from .services import can_create_task_in_column, can_edit_task_fields
